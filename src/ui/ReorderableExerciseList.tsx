@@ -1,5 +1,12 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, Pressable, Animated, PanResponder } from 'react-native';
+import React, { useRef, useState, useEffect, useCallback, memo } from 'react';
+import {
+  View,
+  StyleSheet,
+  Pressable,
+  Animated,
+  PanResponder,
+  Easing,
+} from 'react-native';
 import { GripVertical } from 'lucide-react-native';
 import { colors, fontFamilies, radii } from '../theme';
 import { Text } from './Text';
@@ -14,7 +21,7 @@ export interface ReorderableExerciseListProps {
   onDragEnd?: () => void;
 }
 
-// Altura fixa do card + espaço entre cards = distância real entre slots
+// Altura exata do card + espaço entre cards = distância exata entre slots
 const ITEM_HEIGHT = 74;
 const GAP = 10;
 const PITCH = ITEM_HEIGHT + GAP;
@@ -30,7 +37,7 @@ interface ExerciseRowProps {
   onPress: () => void;
 }
 
-const ExerciseRow: React.FC<ExerciseRowProps> = ({
+const ExerciseRowComponent: React.FC<ExerciseRowProps> = ({
   item,
   index,
   dragIndex,
@@ -43,51 +50,67 @@ const ExerciseRow: React.FC<ExerciseRowProps> = ({
   const isDraggingThis = dragIndex === index;
   const isAnyDragging = dragIndex !== null;
 
-  const dragY = useRef(new Animated.Value(0)).current; // só usado pelo card arrastado
-  const shiftY = useRef(new Animated.Value(0)).current; // deslocamento dos vizinhos
+  const dragY = useRef(new Animated.Value(0)).current;
+  const shiftY = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(1)).current;
 
   const propsRef = useRef({ index, dragIndex, overIndex, onStartDrag, onMoveDrag, onEndDrag });
   propsRef.current = { index, dragIndex, overIndex, onStartDrag, onMoveDrag, onEndDrag };
 
-  // Vizinhos deslizam para abrir espaço
+  // Animação suave de transição dos vizinhos sem oscilação ou piscada
   useEffect(() => {
     if (dragIndex === null || overIndex === null) {
+      Animated.timing(shiftY, {
+        toValue: 0,
+        duration: 140,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+      return;
+    }
+
+    if (index === dragIndex) {
       shiftY.setValue(0);
       return;
     }
-    if (index === dragIndex) return;
 
     let target = 0;
-    if (dragIndex < overIndex && index > dragIndex && index <= overIndex) target = -PITCH;
-    else if (dragIndex > overIndex && index >= overIndex && index < dragIndex) target = PITCH;
+    if (dragIndex < overIndex && index > dragIndex && index <= overIndex) {
+      target = -PITCH;
+    } else if (dragIndex > overIndex && index >= overIndex && index < dragIndex) {
+      target = PITCH;
+    }
 
-    Animated.spring(shiftY, {
+    Animated.timing(shiftY, {
       toValue: target,
+      duration: 150,
+      easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
-      tension: 220,
-      friction: 22,
     }).start();
   }, [dragIndex, overIndex, index, shiftY]);
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
       onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
       onPanResponderTerminationRequest: () => false,
 
       onPanResponderGrant: () => {
         dragY.setValue(0);
         propsRef.current.onStartDrag(propsRef.current.index);
-        Animated.spring(scale, { toValue: 1.03, useNativeDriver: true }).start();
+        Animated.timing(scale, {
+          toValue: 1.025,
+          duration: 100,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }).start();
       },
 
       onPanResponderMove: (_, g) => {
-        const { index: i, onMoveDrag: move } = propsRef.current;
-        // Limita o arrasto para não sair da lista (ajustado no pai)
         dragY.setValue(g.dy);
-        move(g.dy);
-        void i;
+        propsRef.current.onMoveDrag(g.dy);
       },
 
       onPanResponderRelease: () => finish(true),
@@ -100,13 +123,17 @@ const ExerciseRow: React.FC<ExerciseRowProps> = ({
     const finalSlot = commit && over !== null ? over : i;
 
     Animated.parallel([
-      Animated.spring(dragY, {
+      Animated.timing(dragY, {
         toValue: (finalSlot - i) * PITCH,
+        duration: 140,
+        easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
-        tension: 220,
-        friction: 22,
       }),
-      Animated.spring(scale, { toValue: 1, useNativeDriver: true }),
+      Animated.timing(scale, {
+        toValue: 1,
+        duration: 140,
+        useNativeDriver: true,
+      }),
     ]).start(() => {
       end(commit);
       dragY.setValue(0);
@@ -172,6 +199,9 @@ const ExerciseRow: React.FC<ExerciseRowProps> = ({
   );
 };
 
+// Memoização para evitar re-renderização e piscadas nos itens não afetados
+const ExerciseRow = memo(ExerciseRowComponent);
+
 export const ReorderableExerciseList: React.FC<ReorderableExerciseListProps> = ({
   exercises,
   onReorder,
@@ -223,12 +253,15 @@ export const ReorderableExerciseList: React.FC<ReorderableExerciseListProps> = (
         onReorder(updated.map((e, idx) => ({ ...e, position: idx })));
       }
 
-      dragRef.current = null;
-      overRef.current = null;
-      setDragIndex(null);
-      setOverIndex(null);
-      triggerHaptic('success');
-      onDragEnd?.();
+      // Sincroniza a limpeza de estado com o próximo frame de renderização evitando o snapback de 1 frame
+      requestAnimationFrame(() => {
+        dragRef.current = null;
+        overRef.current = null;
+        setDragIndex(null);
+        setOverIndex(null);
+        triggerHaptic('success');
+        onDragEnd?.();
+      });
     },
     [exercises, onReorder, onDragEnd]
   );
@@ -264,7 +297,7 @@ const styles = StyleSheet.create({
   },
   cardContainerDragging: {
     zIndex: 9999,
-    elevation: 12,
+    elevation: 6,
   },
   exerciseCard: {
     height: ITEM_HEIGHT,
@@ -274,8 +307,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: 'transparent', // Mantém largura da borda fixa para evitar reflow layout
   },
   exerciseCardPressed: {
     backgroundColor: '#35302C',
@@ -285,10 +318,10 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
     borderWidth: 1.5,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   exerciseCardLeft: {
     flexDirection: 'row',
