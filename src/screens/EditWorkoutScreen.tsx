@@ -17,8 +17,6 @@ import {
   Trash2,
   Check,
   Clock,
-  ArrowUp,
-  ArrowDown,
   GripVertical,
   X,
   CheckCircle,
@@ -30,6 +28,7 @@ import { Text } from '../ui/Text';
 import { ConfirmModal } from '../ui/ConfirmModal';
 import { Toast } from '../ui/Toast';
 import { ExerciseTargetSheet } from '../ui/ExerciseTargetSheet';
+import { ReorderableExerciseList } from '../ui/ReorderableExerciseList';
 import { triggerHaptic } from '../ui/haptics';
 import { estimarDuracao, formatarDuracao } from '../domain/duration';
 import {
@@ -79,6 +78,9 @@ export const EditWorkoutScreen: React.FC = () => {
   // Toast de Feedback
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+
+  // Estado de arrasto ativo (desabilita scroll do ScrollView para evitar conflito de gestos)
+  const [isDragging, setIsDragging] = useState(false);
 
   // Carrega dados da ficha
   const loadWorkout = useCallback(() => {
@@ -178,31 +180,6 @@ export const EditWorkoutScreen: React.FC = () => {
       triggerHaptic('light');
       navigation.goBack();
     }
-  };
-
-  // Reordenação de exercícios
-  const handleMoveUp = (index: number) => {
-    if (index <= 0) return;
-    triggerHaptic('selection');
-    setExercises((prev) => {
-      const updated = [...prev];
-      const temp = updated[index];
-      updated[index] = updated[index - 1];
-      updated[index - 1] = temp;
-      return updated;
-    });
-  };
-
-  const handleMoveDown = (index: number) => {
-    if (index >= exercises.length - 1) return;
-    triggerHaptic('selection');
-    setExercises((prev) => {
-      const updated = [...prev];
-      const temp = updated[index];
-      updated[index] = updated[index + 1];
-      updated[index + 1] = temp;
-      return updated;
-    });
   };
 
   // Remover exercício da lista
@@ -331,6 +308,7 @@ export const EditWorkoutScreen: React.FC = () => {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
+        scrollEnabled={!isDragging}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
@@ -432,92 +410,14 @@ export const EditWorkoutScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* LISTA DE EXERCÍCIOS REORDENÁVEIS */}
-          <View style={styles.exerciseList}>
-            {exercises.map((ex, index) => {
-              const formattedIndex = (index + 1).toString().padStart(2, '0');
-              const isFirst = index === 0;
-              const isLast = index === exercises.length - 1;
-
-              return (
-                <Pressable
-                  key={`${ex.exerciseId}_${index}`}
-                  onPress={() => handleOpenTargetSheet(index)}
-                  style={({ pressed }) => [
-                    styles.exerciseCard,
-                    pressed && styles.exerciseCardPressed,
-                  ]}
-                  accessible={true}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${ex.name}, ${ex.targetSets} séries de ${ex.repMin} a ${ex.repMax} repetições. Toque para editar metas.`}
-                >
-                  <View style={styles.exerciseCardLeft}>
-                    {/* Número ordinal */}
-                    <Text variant="displayMedium" style={styles.ordinalNumber}>
-                      {formattedIndex}
-                    </Text>
-
-                    {/* Informações do exercício */}
-                    <View style={styles.exerciseInfo}>
-                      <Text
-                        variant="bodyMedium"
-                        style={styles.exerciseNameText}
-                        numberOfLines={1}
-                      >
-                        {ex.name}
-                      </Text>
-                      <Text variant="bodySmall" style={styles.exerciseMetaText}>
-                        {ex.targetSets} séries · {ex.repMin}-{ex.repMax} reps · {ex.restS}s
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* Ações de Reordenação e Alça */}
-                  <View style={styles.exerciseCardRight}>
-                    <View style={styles.reorderArrowsContainer}>
-                      <Pressable
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          handleMoveUp(index);
-                        }}
-                        disabled={isFirst}
-                        style={[styles.arrowButton, isFirst && styles.arrowButtonDisabled]}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Mover ${ex.name} para cima`}
-                      >
-                        <ArrowUp
-                          size={14}
-                          color={isFirst ? colors.textMuted : colors.onSurfaceVariant}
-                          strokeWidth={2}
-                        />
-                      </Pressable>
-                      <Pressable
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          handleMoveDown(index);
-                        }}
-                        disabled={isLast}
-                        style={[styles.arrowButton, isLast && styles.arrowButtonDisabled]}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Mover ${ex.name} para baixo`}
-                      >
-                        <ArrowDown
-                          size={14}
-                          color={isLast ? colors.textMuted : colors.onSurfaceVariant}
-                          strokeWidth={2}
-                        />
-                      </Pressable>
-                    </View>
-
-                    {/* Alça visual de arrasto */}
-                    <View style={styles.dragHandleIcon}>
-                      <GripVertical size={18} color={colors.onSurfaceVariant} strokeWidth={1.8} />
-                    </View>
-                  </View>
-                </Pressable>
-              );
-            })}
-          </View>
+          {/* LISTA DE EXERCÍCIOS REORDENÁVEIS (ARRASTAR E SOLTAR NATIVO) */}
+          <ReorderableExerciseList
+            exercises={exercises}
+            onReorder={(reordered) => setExercises(reordered)}
+            onPressItem={(index) => handleOpenTargetSheet(index)}
+            onDragStart={() => setIsDragging(true)}
+            onDragEnd={() => setIsDragging(false)}
+          />
 
           {/* BOTÃO ADICIONAR EXERCÍCIO */}
           <Pressable
@@ -832,68 +732,6 @@ const styles = StyleSheet.create({
   reorderHintText: {
     fontSize: 12,
     color: colors.onSurfaceVariant,
-  },
-  exerciseList: {
-    gap: 8,
-  },
-  exerciseCard: {
-    backgroundColor: colors.surfaceContainerHigh, // #2D2925
-    borderRadius: 12,
-    padding: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  exerciseCardPressed: {
-    backgroundColor: '#35302C',
-  },
-  exerciseCardLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    flex: 1,
-    minWidth: 0,
-  },
-  ordinalNumber: {
-    fontFamily: fontFamilies.outfitBold,
-    fontSize: 18,
-    color: colors.primary,
-    width: 26,
-  },
-  exerciseInfo: {
-    flex: 1,
-    minWidth: 0,
-  },
-  exerciseNameText: {
-    fontFamily: fontFamilies.outfitSemiBold,
-    fontSize: 15,
-    color: colors.onSurface,
-    marginBottom: 2,
-  },
-  exerciseMetaText: {
-    fontSize: 12,
-    color: colors.onSurfaceVariant,
-  },
-  exerciseCardRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginLeft: 8,
-  },
-  reorderArrowsContainer: {
-    flexDirection: 'column',
-    gap: 2,
-  },
-  arrowButton: {
-    padding: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 4,
-  },
-  arrowButtonDisabled: {
-    opacity: 0.3,
-  },
-  dragHandleIcon: {
-    padding: 4,
   },
   addExerciseButton: {
     marginTop: 12,

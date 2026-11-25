@@ -129,6 +129,28 @@ describe('Tela 3.5 - Editar Treino (Regras de Domínio, Rascunho e Metas)', () =
       const reordered = moveDown(initialExercises, lastIndex);
       expect(reordered).toEqual(initialExercises);
     });
+
+    it('reordena exercícios por arrastar e soltar (drag and drop) de qualquer posição', () => {
+      const reorder = (list: ExerciseItem[], from: number, to: number) => {
+        const copy = [...list];
+        const [moved] = copy.splice(from, 1);
+        copy.splice(to, 0, moved);
+        return copy;
+      };
+
+      // Arrastar Desenvolvimento (index 2) para o topo (index 0)
+      const toTop = reorder(initialExercises, 2, 0);
+      expect(toTop[0].name).toBe('Desenvolvimento com Halteres');
+      expect(toTop[1].name).toBe('Supino Inclinado com Halteres');
+      expect(toTop[2].name).toBe('Supino Reto com Barra');
+      expect(toTop).toHaveLength(5);
+
+      // Arrastar Supino Inclinado (index 0) para o final (index 4)
+      const toBottom = reorder(initialExercises, 0, 4);
+      expect(toBottom[4].name).toBe('Supino Inclinado com Halteres');
+      expect(toBottom[0].name).toBe('Supino Reto com Barra');
+      expect(toBottom).toHaveLength(5);
+    });
   });
 
   describe('Sheet 3.6 - Edição de Metas do Exercício', () => {
