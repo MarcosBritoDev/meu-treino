@@ -12,6 +12,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
   Folders,
   Dumbbell,
+  ClipboardList,
   Plus,
   Settings,
   MoreVertical,
@@ -83,6 +84,7 @@ export const WorkoutsScreen: React.FC = () => {
   const [newGroupModalVisible, setNewGroupModalVisible] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupDesc, setNewGroupDesc] = useState('');
+  const [isCreatingPPL, setIsCreatingPPL] = useState(false);
 
   const [newWorkoutModalVisible, setNewWorkoutModalVisible] = useState(false);
   const [newWorkoutName, setNewWorkoutName] = useState('');
@@ -182,16 +184,21 @@ export const WorkoutsScreen: React.FC = () => {
     }
   };
 
-  // Aplica o preset PPL padrão
+  // Aplica o preset PPL padrão (idempotente)
   const handleSeedDefaultPPL = () => {
+    if (isCreatingPPL) return;
+    setIsCreatingPPL(true);
     try {
-      seedDefaultPPLGroup();
+      const groupId = seedDefaultPPLGroup();
       triggerHaptic('success');
       loadData();
       setToastMessage('Modelo PPL padrão criado com sucesso');
       setToastVisible(true);
+      navigation.navigate('GroupDetail', { groupId });
     } catch (err) {
       console.warn('Erro ao criar modelo PPL:', err);
+    } finally {
+      setIsCreatingPPL(false);
     }
   };
 
@@ -345,32 +352,46 @@ export const WorkoutsScreen: React.FC = () => {
       >
         {/* Dois cartões de resumo com contadores reais */}
         <View style={styles.metricsRow}>
-          {/* Card 1: Grupos de treino */}
+          {/* Card 1: Grupos de treino / Grupos ativos */}
           <View style={styles.metricCard}>
             <View style={styles.metricIconBox}>
               <Folders size={20} color={colors.primary} strokeWidth={1.75} />
             </View>
             <View style={styles.metricInfo}>
-              <Text variant="displayMedium" style={styles.metricNumber}>
-                {data.totalGroups}
-              </Text>
+              <View style={styles.metricValueRow}>
+                <Text variant="displayMedium" style={styles.metricNumber}>
+                  {data.totalGroups}
+                </Text>
+                <Text variant="bodySmall" color="secondary" style={styles.metricUnit}>
+                  {data.totalGroups === 0 ? 'grupos' : data.totalGroups === 1 ? 'grupo' : 'grupos'}
+                </Text>
+              </View>
               <Text variant="labelSmall" color="secondary" numberOfLines={1}>
-                Grupos de treino
+                {data.totalGroups === 0 ? 'Grupos ativos' : 'Grupos de treino'}
               </Text>
             </View>
           </View>
 
-          {/* Card 2: Treinos montados */}
+          {/* Card 2: Treinos montados / Fichas salvas */}
           <View style={styles.metricCard}>
             <View style={styles.metricIconBox}>
-              <Dumbbell size={20} color={colors.pr} strokeWidth={1.75} />
+              {data.totalGroups === 0 ? (
+                <ClipboardList size={20} color={colors.pr} strokeWidth={1.75} />
+              ) : (
+                <Dumbbell size={20} color={colors.pr} strokeWidth={1.75} />
+              )}
             </View>
             <View style={styles.metricInfo}>
-              <Text variant="displayMedium" style={styles.metricNumber}>
-                {data.totalWorkouts}
-              </Text>
+              <View style={styles.metricValueRow}>
+                <Text variant="displayMedium" style={styles.metricNumber}>
+                  {data.totalWorkouts}
+                </Text>
+                <Text variant="bodySmall" color="secondary" style={styles.metricUnit}>
+                  {data.totalWorkouts === 0 ? 'treinos' : data.totalWorkouts === 1 ? 'treino' : 'treinos'}
+                </Text>
+              </View>
               <Text variant="labelSmall" color="secondary" numberOfLines={1}>
-                Treinos montados
+                {data.totalGroups === 0 ? 'Fichas salvas' : 'Treinos montados'}
               </Text>
             </View>
           </View>
@@ -401,6 +422,8 @@ export const WorkoutsScreen: React.FC = () => {
                 <Button
                   title="Usar modelo PPL padrão"
                   variant="secondary"
+                  disabled={isCreatingPPL}
+                  loading={isCreatingPPL}
                   icon={<Sparkles size={18} color={colors.pr} strokeWidth={1.75} />}
                   onPress={handleSeedDefaultPPL}
                   style={styles.emptySecondaryButton}
@@ -415,10 +438,10 @@ export const WorkoutsScreen: React.FC = () => {
               </View>
               <View style={styles.tipContent}>
                 <Text variant="bodySmall" style={styles.tipTitle}>
-                  Dica de periodização
+                  Dica de periodização:
                 </Text>
                 <Text variant="bodySmall" color="secondary" style={styles.tipText}>
-                  Divisões em grupos mantêm seus descansos em dia.
+                  divisões em grupos mantêm seus descansos em dia.
                 </Text>
               </View>
             </View>
@@ -1011,6 +1034,14 @@ const styles = StyleSheet.create({
   metricNumber: {
     color: colors.onSurface,
     lineHeight: 28,
+  },
+  metricValueRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+  },
+  metricUnit: {
+    fontSize: 12,
   },
 
   // Grupo Ativo

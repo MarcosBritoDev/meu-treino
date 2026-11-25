@@ -13,6 +13,7 @@ import { DevGalleryScreen } from '../screens/DevGalleryScreen';
 import { OnboardingScreen } from '../screens/OnboardingScreen';
 import { NewExerciseScreen } from '../screens/NewExerciseScreen';
 import { ExerciseDetailScreen } from '../screens/ExerciseDetailScreen';
+import { GroupDetailScreen } from '../screens/GroupDetailScreen';
 import { colors } from '../theme';
 import { useSettingsStore } from '../store/useSettingsStore';
 
@@ -87,6 +88,13 @@ export function AppNavigator() {
       <Stack.Screen
         name="ExerciseDetail"
         component={ExerciseDetailScreen}
+        options={{
+          presentation: 'card',
+        }}
+      />
+      <Stack.Screen
+        name="GroupDetail"
+        component={GroupDetailScreen}
         options={{
           presentation: 'card',
         }}

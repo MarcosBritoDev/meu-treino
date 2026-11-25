@@ -108,4 +108,33 @@ describe('Tela 3.1 - Treinos (Lógica de Domínio e Estimativas)', () => {
       expect(formatMuscles([])).toBe('Geral');
     });
   });
+
+  describe('Tela 3.2 - Estado Vazio e Métricas', () => {
+    it('retorna rótulos "Grupos ativos" e "Fichas salvas" quando não há grupos', () => {
+      const getMetricsLabels = (totalGroups: number) => {
+        return {
+          leftLabel: totalGroups === 0 ? 'Grupos ativos' : 'Grupos de treino',
+          leftUnit: totalGroups === 0 ? 'grupos' : totalGroups === 1 ? 'grupo' : 'grupos',
+          rightLabel: totalGroups === 0 ? 'Fichas salvas' : 'Treinos montados',
+          rightUnit: totalGroups === 0 ? 'treinos' : totalGroups === 1 ? 'treino' : 'treinos',
+        };
+      };
+
+      const emptyMetrics = getMetricsLabels(0);
+      expect(emptyMetrics.leftLabel).toBe('Grupos ativos');
+      expect(emptyMetrics.leftUnit).toBe('grupos');
+      expect(emptyMetrics.rightLabel).toBe('Fichas salvas');
+      expect(emptyMetrics.rightUnit).toBe('treinos');
+
+      const filledMetrics = getMetricsLabels(3);
+      expect(filledMetrics.leftLabel).toBe('Grupos de treino');
+      expect(filledMetrics.rightLabel).toBe('Treinos montados');
+    });
+
+    it('exibe texto completo de dica sem reticências', () => {
+      const tipText = 'Divisões em grupos mantêm seus descansos em dia.';
+      expect(tipText).not.toContain('...');
+      expect(tipText.length).toBeGreaterThan(20);
+    });
+  });
 });

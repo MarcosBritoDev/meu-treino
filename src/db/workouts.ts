@@ -352,9 +352,20 @@ export function deleteGroup(groupId: string): void {
 
 /**
  * Cria o modelo PPL padrão com Push A, Pull A e Legs A preenchidos com exercícios reais.
+ * É estritamente idempotente (não duplica se chamado mais de uma vez).
  */
-export function seedDefaultPPLGroup(): void {
+export function seedDefaultPPLGroup(): string {
   const rawDb = getExpoDb();
+
+  // Verifica idempotência: se já existir um grupo com o nome "PPL", ativa e retorna
+  const existing = rawDb.getAllSync<{ id: string }>(
+    `SELECT id FROM groups WHERE name = 'PPL' LIMIT 1`
+  );
+  if (existing.length > 0) {
+    const existingId = existing[0].id;
+    setActiveGroup(existingId);
+    return existingId;
+  }
 
   // Desativa outros grupos antes de criar o PPL ativo
   rawDb.execSync(`UPDATE groups SET is_active = 0;`);
@@ -437,6 +448,8 @@ export function seedDefaultPPLGroup(): void {
       [`we_legs_${pos}_${Date.now()}`, legsId, item.id, pos, item.sets, item.min, item.max, item.rest]
     );
   });
+
+  return groupId;
 }
 
 export interface InProgressSessionInfo {
