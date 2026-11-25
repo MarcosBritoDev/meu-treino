@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_stack" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;700&amp;family=DM+Sans:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100%;margin:0;padding:0;}body{overscroll-behavior-y:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {darkMode: "class", theme: {extend: {colors: {"on-primary": "#621100", secondary: "#cfc5ba", "on-primary-fixed-variant": "#862208", "on-tertiary-fixed": "#291800", "on-background": "#ede0d5", "surface-container-high": "#2f2922", "on-primary-fixed": "#3c0700", "surface-container": "#241f18", "secondary-fixed-dim": "#cfc5ba", error: "#ffb4ab", "tertiary-container": "#cd9844", "on-tertiary-fixed-variant": "#624000", "tertiary-fixed": "#ffddb1", outline: "#a68b84", "on-tertiary": "#442b00", "on-secondary-container": "#beb3a9", "on-error-container": "#ffdad6", "on-secondary-fixed": "#201b14", "primary-fixed": "#ffdad2", "primary-fixed-dim": "#ffb4a2", "surface-variant": "#3a342c", "primary-container": "#ff7a59", "on-tertiary-container": "#4e3300", "error-container": "#93000a", "inverse-primary": "#a7391e", "surface-bright": "#3f3830", "inverse-on-surface": "#362f28", tertiary: "#f6bc64", "tertiary-fixed-dim": "#f6bc64", "secondary-fixed": "#ece1d6", "surface-container-highest": "#3a342c", background: "#18120c", "on-secondary": "#352f28", "on-primary-container": "#701500", "surface-container-lowest": "#120d08", "surface-tint": "#ffb4a2", "on-secondary-fixed-variant": "#4d463e", surface: "#18120c", "on-surface": "#ede0d5", primary: "#ffb4a2", "on-surface-variant": "#dfc0b8", "secondary-container": "#4d463e", "inverse-surface": "#ede0d5", "on-error": "#690005", "surface-container-low": "#201b14", "surface-dim": "#18120c", "outline-variant": "#58423c"}, borderRadius: {DEFAULT: "1rem", lg: "2rem", xl: "3rem", full: "9999px"}, spacing: {margin: "1.25rem", gutter: "0.75rem", "space-xl": "2rem", "space-md": "1rem", "space-lg": "1.5rem", "space-xs": "0.25rem", "space-sm": "0.5rem"}, fontFamily: {"label-sm": ["DM Sans"], "body-md": ["DM Sans"], "headline-lg": ["Outfit"], "headline-md": ["Outfit"], "headline-sm": ["Outfit"], "body-sm": ["DM Sans"], "body-lg": ["DM Sans"], headline: ["Outfit"], display: ["Outfit"], body: ["DM Sans"], label: ["DM Sans"]}, fontSize: {"label-sm": ["12px", {lineHeight: "16px", fontWeight: "500"}], "body-md": ["15px", {lineHeight: "22px", fontWeight: "400"}], "headline-lg": ["48px", {lineHeight: "52px", fontWeight: "700"}], "headline-md": ["28px", {lineHeight: "34px", fontWeight: "600"}], "headline-sm": ["20px", {lineHeight: "26px", fontWeight: "600"}], "body-sm": ["13px", {lineHeight: "18px", fontWeight: "400"}], "body-lg": ["17px", {lineHeight: "24px", fontWeight: "500"}]}}}};</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-background text-on-surface min-h-screen"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 px-gutter flex items-center justify-between"><div class="flex items-center gap-space-sm"><button aria-label="Voltar" class="w-11 h-11 flex items-center justify-center rounded-full text-on-surface hover:bg-surface-container active:scale-95 transition-all" onclick="history.back()" type="button"><span class="material-symbols-outlined text-[24px]">arrow_back</span></button><h1 class="font-headline-lg text-body-md text-on-surface tracking-tight truncate">Grupo</h1></div><div class="flex items-center gap-space-xs"><button aria-label="Mais opções" class="w-11 h-11 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container active:scale-95 transition-all" type="button"><span class="material-symbols-outlined text-[24px]">more_vert</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex flex-col relative w-full pt-16 pb-safe bg-surface min-h-screen"><div class="flex flex-col w-full pb-10">
+<!-- Bloco de Identidade do Grupo -->
+<section class="px-gutter pt-space-md flex flex-col gap-space-sm">
+<!-- Linha de Chips do Topo -->
+<div class="flex items-center gap-space-xs">
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm shadow-sm">
+<span class="material-symbols-outlined text-[14px] text-primary">fitness_center</span>
+        3 treinos
+      </span>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm shadow-sm">
+<span class="material-symbols-outlined text-[14px] text-secondary">sync</span>
+        Ciclo de 6 dias
+      </span>
+</div>
+<!-- Título Principal & Ação Rápida de Edição -->
+<div class="flex items-start justify-between gap-space-sm mt-1">
+<div class="flex flex-col min-w-0">
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight leading-none">
+          PPL
+        </h1>
+<p class="font-body-md text-body-md text-primary font-medium tracking-wide mt-0.5">
+          Push · Pull · Legs
+        </p>
+</div>
+<button aria-label="Editar grupo" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container-high text-on-surface-variant active:scale-95 transition-all shadow-sm" type="button">
+<span class="material-symbols-outlined text-[16px]">edit</span>
+<span class="font-label-sm text-label-sm">Editar</span>
+</button>
+</div>
+<!-- Descrição Estratégica -->
+<p class="font-body-md text-body-md text-on-surface-variant leading-relaxed">
+      Siga a sequência alternando os dias de empurrar, puxar e pernas. Foco em sobrecarga progressiva e hipertrofia.
+    </p>
+</section>
+<!-- Cabeçalho de Lista de Treinos -->
+<section class="px-gutter pt-space-lg flex items-center justify-between">
+<div class="flex items-center gap-2">
+<h2 class="font-headline-lg text-body-md text-on-surface font-semibold tracking-tight">
+        Treinos do grupo
+      </h2>
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+</div>
+<button class="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-surface-container-high text-primary active:scale-95 transition-all shadow-sm" type="button">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span class="font-label-sm text-label-sm font-semibold">Novo treino</span>
+</button>
+</section>
+<!-- Cards de Treino Empilhados -->
+<section class="px-gutter pt-space-sm flex flex-col gap-space-md">
+<!-- Card 1: Push A -->
+<article class="flex flex-col rounded-xl bg-surface-container-low shadow-sm p-4 relative overflow-hidden">
+<!-- Topo do Card -->
+<div class="flex items-center justify-between gap-2">
+<div class="flex items-center gap-2 flex-wrap min-w-0">
+<span class="px-2 py-0.5 rounded-md bg-secondary-container text-on-secondary-container font-label-sm text-label-sm">
+            Rotina A-1
+          </span>
+<span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">history</span>
+            Último log há 2 dias
+          </span>
+</div>
+<button aria-label="Mais opções Push A" class="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container active:scale-95 transition-all" type="button">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</div>
+<!-- Nome & Foco -->
+<div class="mt-2.5">
+<h3 class="font-headline-lg text-body-md font-bold text-on-surface flex items-baseline gap-1.5 flex-wrap">
+<span>Push A</span>
+<span class="font-body-md text-label-sm text-on-surface-variant font-normal">(Peito, ombros e tríceps)</span>
+</h3>
+</div>
+<!-- Sequência de Carga -->
+<div class="mt-3 flex flex-col gap-1.5">
+<span class="font-label-sm text-label-sm text-on-surface-variant tracking-wider uppercase">
+          Sequência de carga
+        </span>
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="px-2.5 py-1 rounded-md bg-surface-container-highest text-on-surface font-label-sm text-label-sm">
+            Supino Inclinado
+          </span>
+<span class="px-2.5 py-1 rounded-md bg-surface-container-highest text-on-surface font-label-sm text-label-sm">
+            Desenvolvimento
+          </span>
+<span class="px-2.5 py-1 rounded-md bg-surface-container-highest text-on-surface font-label-sm text-label-sm">
+            Crucifixo
+          </span>
+<span class="px-2.5 py-1 rounded-md bg-surface-container-highest text-on-surface font-label-sm text-label-sm">
+            Tríceps Corda
+          </span>
+<span class="px-2 py-1 rounded-md bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm font-semibold">
+            +1 exercício
+          </span>
+</div>
+</div>
+<!-- Métricas -->
+<div class="flex items-center gap-2 mt-3.5 pt-3 bg-surface-container-high/40 rounded-lg px-2.5 py-1.5">
+<span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px] text-primary">format_list_bulleted</span>
+          5 exercícios
+        </span>
+<span class="text-on-surface-variant font-label-sm text-label-sm">·</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px] text-secondary">repeat</span>
+          18 séries
+        </span>
+<span class="text-on-surface-variant font-label-sm text-label-sm">·</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px] text-tertiary">schedule</span>
+          ~55 min
+        </span>
+</div>
+<!-- Rodapé com Ações -->
+<div class="mt-4 flex items-center gap-2">
+<button class="flex-1 h-11 flex items-center justify-center gap-2 rounded-full bg-primary-container text-on-primary font-label-sm text-body-md font-semibold active:scale-[0.98] transition-all shadow-sm" type="button">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+<span>Iniciar treino</span>
+</button>
+<button aria-label="Editar Push A" class="w-11 h-11 flex items-center justify-center rounded-full bg-surface-container-high text-on-surface-variant active:scale-95 transition-all shadow-sm" type="button">
+<span class="material-symbols-outlined text-[20px]">edit</span>
+</button>
+</div>
+</article>
+<!-- Card 2: Pull A -->
+<article class="flex flex-col rounded-xl bg-surface-container-low shadow-sm p-4 relative overflow-hidden">
+<!-- Topo do Card -->
+<div class="flex items-center justify-between gap-2">
+<div class="flex items-center gap-2 flex-wrap min-w-0">
+<span class="px-2 py-0.5 rounded-md bg-secondary-container text-on-secondary-container font-label-sm text-label-sm">
+            Rotina A-2
+          </span>
+<span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">history</span>
+            Último log há 2 dias
+          </span>
+</div>
+<button aria-label="Mais opções Pull A" class="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container active:scale-95 transition-all" type="button">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</div>
+<!-- Nome & Foco -->
+<div class="mt-2.5">
+<h3 class="font-headline-lg text-body-md font-bold text-on-surface flex items-baseline gap-1.5 flex-wrap">
+<span>Pull A</span>
+<span class="font-body-md text-label-sm text-on-surface-variant font-normal">(Costas, bíceps e trapézio)</span>
+</h3>
+</div>
+<!-- Sequência de Carga -->
+<div class="mt-3 flex flex-col gap-1.5">
+<span class="font-label-sm text-label-sm text-on-surface-variant tracking-wider uppercase">
+          Sequência de carga
+        </span>
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="px-2.5 py-1 rounded-md bg-surface-container-highest text-on-surface font-label-sm text-label-sm">
+            Puxada Alta
+          </span>
+<span class="px-2.5 py-1 rounded-md bg-surface-container-highest text-on-surface font-label-sm text-label-sm">
+            Remada Curvada
+          </span>
+<span class="px-2.5 py-1 rounded-md bg-surface-container-highest text-on-surface font-label-sm text-label-sm">
+            Face Pull
+          </span>
+<span class="px-2.5 py-1 rounded-md bg-surface-container-highest text-on-surface font-label-sm text-label-sm">
+            Rosca Direta
+          </span>
+<span class="px-2 py-1 rounded-md bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm font-semibold">
+            +1 exercício
+          </span>
+</div>
+</div>
+<!-- Métricas -->
+<div class="flex items-center gap-2 mt-3.5 pt-3 bg-surface-container-high/40 rounded-lg px-2.5 py-1.5">
+<span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px] text-primary">format_list_bulleted</span>
+          5 exercícios
+        </span>
+<span class="text-on-surface-variant font-label-sm text-label-sm">·</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px] text-secondary">repeat</span>
+          17 séries
+        </span>
+<span class="text-on-surface-variant font-label-sm text-label-sm">·</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px] text-tertiary">schedule</span>
+          ~50 min
+        </span>
+</div>
+<!-- Rodapé com Ações -->
+<div class="mt-4 flex items-center gap-2">
+<button class="flex-1 h-11 flex items-center justify-center gap-2 rounded-full bg-primary-container text-on-primary font-label-sm text-body-md font-semibold active:scale-[0.98] transition-all shadow-sm" type="button">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+<span>Iniciar treino</span>
+</button>
+<button aria-label="Editar Pull A" class="w-11 h-11 flex items-center justify-center rounded-full bg-surface-container-high text-on-surface-variant active:scale-95 transition-all shadow-sm" type="button">
+<span class="material-symbols-outlined text-[20px]">edit</span>
+</button>
+</div>
+</article>
+<!-- Card 3: Legs A (Hoje em destaque) -->
+<article class="flex flex-col rounded-xl bg-surface-container-low shadow-md p-4 relative overflow-hidden">
+<!-- Destaque visual sutil superior -->
+<div class="absolute top-0 left-0 right-0 h-1 bg-tertiary-container"></div>
+<!-- Topo do Card -->
+<div class="flex items-center justify-between gap-2">
+<div class="flex items-center gap-2 flex-wrap min-w-0">
+<span class="px-2 py-0.5 rounded-md bg-secondary-container text-on-secondary-container font-label-sm text-label-sm">
+            Rotina A-3
+          </span>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary-container animate-pulse"></span>
+            Programado para hoje
+          </span>
+</div>
+<button aria-label="Mais opções Legs A" class="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container active:scale-95 transition-all" type="button">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</div>
+<!-- Nome & Foco -->
+<div class="mt-2.5">
+<h3 class="font-headline-lg text-body-md font-bold text-on-surface flex items-baseline gap-1.5 flex-wrap">
+<span>Legs A</span>
+<span class="font-body-md text-label-sm text-on-surface-variant font-normal">(Quadríceps e panturrilhas)</span>
+</h3>
+</div>
+<!-- Sequência de Carga -->
+<div class="mt-3 flex flex-col gap-1.5">
+<span class="font-label-sm text-label-sm text-on-surface-variant tracking-wider uppercase">
+          Sequência de carga
+        </span>
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="px-2.5 py-1 rounded-md bg-surface-container-highest text-on-surface font-label-sm text-label-sm">
+            Agachamento Livre
+          </span>
+<span class="px-2.5 py-1 rounded-md bg-surface-container-highest text-on-surface font-label-sm text-label-sm">
+            Leg Press 45°
+          </span>
+<span class="px-2.5 py-1 rounded-md bg-surface-container-highest text-on-surface font-label-sm text-label-sm">
+            Cadeira Extensora
+          </span>
+<span class="px-2.5 py-1 rounded-md bg-surface-container-highest text-on-surface font-label-sm text-label-sm">
+            Elevação Pélvica
+          </span>
+<span class="px-2 py-1 rounded-md bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm font-semibold">
+            +2 exercícios
+          </span>
+</div>
+</div>
+<!-- Métricas -->
+<div class="flex items-center gap-2 mt-3.5 pt-3 bg-surface-container-high/40 rounded-lg px-2.5 py-1.5">
+<span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px] text-primary">format_list_bulleted</span>
+          6 exercícios
+        </span>
+<span class="text-on-surface-variant font-label-sm text-label-sm">·</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px] text-secondary">repeat</span>
+          20 séries
+        </span>
+<span class="text-on-surface-variant font-label-sm text-label-sm">·</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px] text-tertiary">schedule</span>
+          ~60 min
+        </span>
+</div>
+<!-- Rodapé com Ações -->
+<div class="mt-4 flex items-center gap-2">
+<button class="flex-1 h-11 flex items-center justify-center gap-2 rounded-full bg-primary-container text-on-primary font-label-sm text-body-md font-semibold active:scale-[0.98] transition-all shadow-sm" type="button">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+<span>Iniciar treino</span>
+</button>
+<button aria-label="Editar Legs A" class="w-11 h-11 flex items-center justify-center rounded-full bg-surface-container-high text-on-surface-variant active:scale-95 transition-all shadow-sm" type="button">
+<span class="material-symbols-outlined text-[20px]">edit</span>
+</button>
+</div>
+</article>
+</section>
+<!-- Botão Adicionar Treino a este Grupo -->
+<section class="px-gutter pt-space-lg">
+<button class="w-full py-4 px-4 rounded-xl bg-surface-container-low/70 hover:bg-surface-container active:scale-[0.99] transition-all flex items-center justify-center gap-2 shadow-sm text-primary" type="button">
+<span class="material-symbols-outlined text-[22px]">add_circle</span>
+<span class="font-label-sm text-body-md font-medium">
+        Adicionar outro treino a este grupo
+      </span>
+</button>
+</section>
+</div></main></body></html>
