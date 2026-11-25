@@ -1,24 +1,10 @@
-import React, { useRef, useState, useEffect } from 'react';
-import {
-  View,
-  StyleSheet,
-  Pressable,
-  Animated,
-  PanResponder,
-  Platform,
-  UIManager,
-  LayoutAnimation,
-} from 'react-native';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { View, StyleSheet, Pressable, Animated, PanResponder } from 'react-native';
 import { GripVertical } from 'lucide-react-native';
 import { colors, fontFamilies, radii } from '../theme';
 import { Text } from './Text';
 import { triggerHaptic } from './haptics';
 import { WorkoutExerciseForEdit } from '../db/workouts';
-
-// Habilita animações de layout nativas no Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 export interface ReorderableExerciseListProps {
   exercises: WorkoutExerciseForEdit[];
@@ -28,116 +14,102 @@ export interface ReorderableExerciseListProps {
   onDragEnd?: () => void;
 }
 
+// Altura fixa do card + espaço entre cards = distância real entre slots
+const ITEM_HEIGHT = 74;
+const GAP = 10;
+const PITCH = ITEM_HEIGHT + GAP;
+
 interface ExerciseRowProps {
   item: WorkoutExerciseForEdit;
   index: number;
-  totalCount: number;
-  isDraggingThis: boolean;
-  isAnyDragging: boolean;
+  dragIndex: number | null;
+  overIndex: number | null;
   onStartDrag: (index: number) => void;
-  onSwap: (fromIndex: number, toIndex: number) => void;
-  onEndDrag: () => void;
+  onMoveDrag: (dy: number) => void;
+  onEndDrag: (commit: boolean) => void;
   onPress: () => void;
 }
 
 const ExerciseRow: React.FC<ExerciseRowProps> = ({
   item,
   index,
-  totalCount,
-  isDraggingThis,
-  isAnyDragging,
+  dragIndex,
+  overIndex,
   onStartDrag,
-  onSwap,
+  onMoveDrag,
   onEndDrag,
   onPress,
 }) => {
-  const accumulatedDy = useRef(0);
-  const dragY = useRef(new Animated.Value(0)).current;
+  const isDraggingThis = dragIndex === index;
+  const isAnyDragging = dragIndex !== null;
 
-  // Refs mutáveis para evitar re-criação do PanResponder durante o gesto
-  const propsRef = useRef({
-    index,
-    item,
-    isDraggingThis,
-    onStartDrag,
-    onSwap,
-    onEndDrag,
-    totalCount,
-  });
+  const dragY = useRef(new Animated.Value(0)).current; // só usado pelo card arrastado
+  const shiftY = useRef(new Animated.Value(0)).current; // deslocamento dos vizinhos
+  const scale = useRef(new Animated.Value(1)).current;
 
+  const propsRef = useRef({ index, dragIndex, overIndex, onStartDrag, onMoveDrag, onEndDrag });
+  propsRef.current = { index, dragIndex, overIndex, onStartDrag, onMoveDrag, onEndDrag };
+
+  // Vizinhos deslizam para abrir espaço
   useEffect(() => {
-    propsRef.current = {
-      index,
-      item,
-      isDraggingThis,
-      onStartDrag,
-      onSwap,
-      onEndDrag,
-      totalCount,
-    };
-  });
+    if (dragIndex === null || overIndex === null) {
+      shiftY.setValue(0);
+      return;
+    }
+    if (index === dragIndex) return;
+
+    let target = 0;
+    if (dragIndex < overIndex && index > dragIndex && index <= overIndex) target = -PITCH;
+    else if (dragIndex > overIndex && index >= overIndex && index < dragIndex) target = PITCH;
+
+    Animated.spring(shiftY, {
+      toValue: target,
+      useNativeDriver: true,
+      tension: 220,
+      friction: 22,
+    }).start();
+  }, [dragIndex, overIndex, index, shiftY]);
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onStartShouldSetPanResponderCapture: () => true,
-      onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 2,
-      onMoveShouldSetPanResponderCapture: (_, gesture) => Math.abs(gesture.dy) > 2,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderTerminationRequest: () => false,
 
       onPanResponderGrant: () => {
-        accumulatedDy.current = 0;
         dragY.setValue(0);
         propsRef.current.onStartDrag(propsRef.current.index);
-        triggerHaptic('medium');
+        Animated.spring(scale, { toValue: 1.03, useNativeDriver: true }).start();
       },
 
-      onPanResponderMove: (_, gesture) => {
-        const currentDy = gesture.dy - accumulatedDy.current;
-        dragY.setValue(currentDy);
-
-        const STEP = 40; // Limiar de troca rápida e intuitiva
-        const curIdx = propsRef.current.index;
-        const count = propsRef.current.totalCount;
-
-        // Arrastando para baixo: ultrapassa o limiar para o próximo slot
-        if (currentDy > STEP && curIdx < count - 1) {
-          accumulatedDy.current += 76;
-          dragY.setValue(currentDy - 76);
-          triggerHaptic('selection');
-          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-          propsRef.current.onSwap(curIdx, curIdx + 1);
-        }
-        // Arrastando para cima: ultrapassa o limiar para o slot anterior
-        else if (currentDy < -STEP && curIdx > 0) {
-          accumulatedDy.current -= 76;
-          dragY.setValue(currentDy + 76);
-          triggerHaptic('selection');
-          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-          propsRef.current.onSwap(curIdx, curIdx - 1);
-        }
+      onPanResponderMove: (_, g) => {
+        const { index: i, onMoveDrag: move } = propsRef.current;
+        // Limita o arrasto para não sair da lista (ajustado no pai)
+        dragY.setValue(g.dy);
+        move(g.dy);
+        void i;
       },
 
-      onPanResponderRelease: () => {
-        finishDrag();
-      },
-
-      onPanResponderTerminate: () => {
-        finishDrag();
-      },
+      onPanResponderRelease: () => finish(true),
+      onPanResponderTerminate: () => finish(false),
     })
   ).current;
 
-  const finishDrag = () => {
-    Animated.spring(dragY, {
-      toValue: 0,
-      useNativeDriver: true,
-      tension: 180,
-      friction: 12,
-    }).start(() => {
+  const finish = (commit: boolean) => {
+    const { index: i, overIndex: over, onEndDrag: end } = propsRef.current;
+    const finalSlot = commit && over !== null ? over : i;
+
+    Animated.parallel([
+      Animated.spring(dragY, {
+        toValue: (finalSlot - i) * PITCH,
+        useNativeDriver: true,
+        tension: 220,
+        friction: 22,
+      }),
+      Animated.spring(scale, { toValue: 1, useNativeDriver: true }),
+    ]).start(() => {
+      end(commit);
       dragY.setValue(0);
-      accumulatedDy.current = 0;
-      propsRef.current.onEndDrag();
-      triggerHaptic('success');
     });
   };
 
@@ -148,8 +120,10 @@ const ExerciseRow: React.FC<ExerciseRowProps> = ({
       style={[
         styles.cardContainer,
         isDraggingThis && styles.cardContainerDragging,
-        isDraggingThis && {
-          transform: [{ translateY: dragY }, { scale: 1.03 }],
+        {
+          transform: isDraggingThis
+            ? [{ translateY: dragY }, { scale }]
+            : [{ translateY: shiftY }],
         },
       ]}
     >
@@ -165,24 +139,11 @@ const ExerciseRow: React.FC<ExerciseRowProps> = ({
         accessibilityLabel={`${item.name}, ${item.targetSets} séries de ${item.repMin} a ${item.repMax} repetições. Toque para editar metas.`}
       >
         <View style={styles.exerciseCardLeft}>
-          {/* Número ordinal estilizado */}
-          <Text
-            variant="displayMedium"
-            style={[
-              styles.ordinalNumber,
-              isDraggingThis && styles.ordinalNumberDragging,
-            ]}
-          >
+          <Text variant="displayMedium" style={styles.ordinalNumber}>
             {formattedIndex}
           </Text>
-
-          {/* Nome e Metas do Exercício */}
           <View style={styles.exerciseInfo}>
-            <Text
-              variant="bodyMedium"
-              style={styles.exerciseNameText}
-              numberOfLines={1}
-            >
+            <Text variant="bodyMedium" style={styles.exerciseNameText} numberOfLines={1}>
               {item.name}
             </Text>
             <Text variant="bodySmall" style={styles.exerciseMetaText}>
@@ -191,7 +152,6 @@ const ExerciseRow: React.FC<ExerciseRowProps> = ({
           </View>
         </View>
 
-        {/* Alça de Arrasto (Sem setas, 100% interativa com área de toque ampliada) */}
         <View
           {...panResponder.panHandlers}
           style={styles.dragHandleTouchArea}
@@ -199,12 +159,7 @@ const ExerciseRow: React.FC<ExerciseRowProps> = ({
           accessibilityRole="button"
           accessibilityLabel={`Arrastar para reordenar ${item.name}`}
         >
-          <View
-            style={[
-              styles.dragHandleBox,
-              isDraggingThis && styles.dragHandleBoxActive,
-            ]}
-          >
+          <View style={[styles.dragHandleBox, isDraggingThis && styles.dragHandleBoxActive]}>
             <GripVertical
               size={20}
               color={isDraggingThis ? colors.primary : colors.onSurfaceVariant}
@@ -224,52 +179,73 @@ export const ReorderableExerciseList: React.FC<ReorderableExerciseListProps> = (
   onDragStart,
   onDragEnd,
 }) => {
-  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [overIndex, setOverIndex] = useState<number | null>(null);
+  const overRef = useRef<number | null>(null);
+  const dragRef = useRef<number | null>(null);
 
-  const handleStartDrag = (index: number) => {
-    const item = exercises[index];
-    if (item) {
-      setActiveDragId(item.id || item.exerciseId);
-    }
-    onDragStart?.();
-  };
+  const handleStartDrag = useCallback(
+    (index: number) => {
+      dragRef.current = index;
+      overRef.current = index;
+      setDragIndex(index);
+      setOverIndex(index);
+      triggerHaptic('medium');
+      onDragStart?.();
+    },
+    [onDragStart]
+  );
 
-  const handleSwap = (fromIndex: number, toIndex: number) => {
-    if (fromIndex === toIndex) return;
-    if (fromIndex < 0 || toIndex < 0) return;
-    if (fromIndex >= exercises.length || toIndex >= exercises.length) return;
+  const handleMoveDrag = useCallback(
+    (dy: number) => {
+      const from = dragRef.current;
+      if (from === null) return;
+      const raw = Math.round(from + dy / PITCH);
+      const next = Math.max(0, Math.min(exercises.length - 1, raw));
+      if (next !== overRef.current) {
+        overRef.current = next;
+        setOverIndex(next);
+        triggerHaptic('selection');
+      }
+    },
+    [exercises.length]
+  );
 
-    const updated = [...exercises];
-    const [moved] = updated.splice(fromIndex, 1);
-    updated.splice(toIndex, 0, moved);
+  const handleEndDrag = useCallback(
+    (commit: boolean) => {
+      const from = dragRef.current;
+      const to = overRef.current;
 
-    const reindexed = updated.map((e, idx) => ({ ...e, position: idx }));
-    onReorder(reindexed);
-  };
+      if (commit && from !== null && to !== null && from !== to) {
+        const updated = [...exercises];
+        const [moved] = updated.splice(from, 1);
+        updated.splice(to, 0, moved);
+        onReorder(updated.map((e, idx) => ({ ...e, position: idx })));
+      }
 
-  const handleEndDrag = () => {
-    setActiveDragId(null);
-    onDragEnd?.();
-  };
-
-  const isAnyDragging = activeDragId !== null;
+      dragRef.current = null;
+      overRef.current = null;
+      setDragIndex(null);
+      setOverIndex(null);
+      triggerHaptic('success');
+      onDragEnd?.();
+    },
+    [exercises, onReorder, onDragEnd]
+  );
 
   return (
     <View style={styles.container}>
       {exercises.map((item, index) => {
         const itemId = item.id || item.exerciseId || `item-${index}`;
-        const isDraggingThis = activeDragId === itemId;
-
         return (
           <ExerciseRow
             key={itemId}
             item={item}
             index={index}
-            totalCount={exercises.length}
-            isDraggingThis={isDraggingThis}
-            isAnyDragging={isAnyDragging}
+            dragIndex={dragIndex}
+            overIndex={overIndex}
             onStartDrag={handleStartDrag}
-            onSwap={handleSwap}
+            onMoveDrag={handleMoveDrag}
             onEndDrag={handleEndDrag}
             onPress={() => onPressItem(index)}
           />
@@ -280,11 +256,10 @@ export const ReorderableExerciseList: React.FC<ReorderableExerciseListProps> = (
 };
 
 const styles = StyleSheet.create({
-  container: {
-    gap: 0,
-  },
+  container: {},
   cardContainer: {
-    marginBottom: 10,
+    height: ITEM_HEIGHT,
+    marginBottom: GAP,
     zIndex: 1,
   },
   cardContainerDragging: {
@@ -292,11 +267,10 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   exerciseCard: {
-    backgroundColor: colors.surfaceContainerHigh, // #2D2925
+    height: ITEM_HEIGHT,
+    backgroundColor: colors.surfaceContainerHigh,
     borderRadius: radii.card || 16,
     paddingHorizontal: 16,
-    paddingVertical: 14,
-    minHeight: 74,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -307,8 +281,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#35302C',
   },
   exerciseCardDragging: {
-    backgroundColor: '#3A251F', // Coral tint quente sem destaque âmbar (DESIGN.md)
-    borderColor: colors.primary, // #FF7A59
+    backgroundColor: '#3A251F',
+    borderColor: colors.primary,
     borderWidth: 1.5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
@@ -328,9 +302,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: colors.primary,
     width: 26,
-  },
-  ordinalNumberDragging: {
-    color: colors.primary,
   },
   exerciseInfo: {
     flex: 1,
@@ -358,6 +329,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   dragHandleBoxActive: {
-    backgroundColor: 'rgba(255, 122, 89, 0.22)', // Fundo coral suave ao arrastar
+    backgroundColor: 'rgba(255, 122, 89, 0.22)',
   },
 });

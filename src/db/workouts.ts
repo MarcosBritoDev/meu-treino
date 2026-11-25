@@ -337,6 +337,7 @@ export function deleteGroup(groupId: string): void {
 
   for (const w of workouts) {
     rawDb.runSync(`DELETE FROM workout_exercises WHERE workout_id = ?`, [w.id]);
+    rawDb.runSync(`UPDATE sessions SET workout_id = NULL WHERE workout_id = ?`, [w.id]);
     rawDb.runSync(`DELETE FROM workouts WHERE id = ?`, [w.id]);
   }
 
@@ -864,6 +865,7 @@ export function duplicateWorkout(workoutId: string): string {
 export function deleteWorkout(workoutId: string): void {
   const rawDb = getExpoDb();
   rawDb.runSync(`DELETE FROM workout_exercises WHERE workout_id = ?`, [workoutId]);
+  rawDb.runSync(`UPDATE sessions SET workout_id = NULL WHERE workout_id = ?`, [workoutId]);
   rawDb.runSync(`DELETE FROM workouts WHERE id = ?`, [workoutId]);
 }
 

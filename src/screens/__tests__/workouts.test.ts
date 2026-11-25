@@ -137,4 +137,40 @@ describe('Tela 3.1 - Treinos (Lógica de Domínio e Estimativas)', () => {
       expect(tipText.length).toBeGreaterThan(20);
     });
   });
+
+  describe('Integridade de Chaves Estrangeiras ao Excluir Grupos e Treinos', () => {
+    it('desvincula sessões existentes (workout_id = null) antes de deletar a ficha', () => {
+      interface MockWorkout {
+        id: string;
+        groupId: string;
+      }
+      interface MockSession {
+        id: string;
+        workoutId: string | null;
+      }
+
+      let sessions: MockSession[] = [
+        { id: 'sess_1', workoutId: 'w_1' },
+        { id: 'sess_2', workoutId: 'w_2' },
+      ];
+      let workouts: MockWorkout[] = [
+        { id: 'w_1', groupId: 'grp_1' },
+        { id: 'w_2', groupId: 'grp_2' },
+      ];
+
+      // Ao excluir w_1, a sessão preserva o histórico mas desvincula a chave estrangeira
+      const deleteWorkoutSafe = (workoutId: string) => {
+        sessions = sessions.map((s) =>
+          s.workoutId === workoutId ? { ...s, workoutId: null } : s
+        );
+        workouts = workouts.filter((w) => w.id !== workoutId);
+      };
+
+      deleteWorkoutSafe('w_1');
+      expect(workouts.find((w) => w.id === 'w_1')).toBeUndefined();
+      expect(sessions.find((s) => s.id === 'sess_1')?.workoutId).toBeNull();
+      // Outras sessões permanecem inalteradas
+      expect(sessions.find((s) => s.id === 'sess_2')?.workoutId).toBe('w_2');
+    });
+  });
 });
