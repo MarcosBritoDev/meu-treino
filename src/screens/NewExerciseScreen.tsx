@@ -71,6 +71,7 @@ export const NewExerciseScreen: React.FC = () => {
   const [name, setName] = useState(initialName);
   const [selectedMuscle, setSelectedMuscle] = useState<string>('Peito');
   const [selectedEquipment, setSelectedEquipment] = useState<string>('Barra');
+  const [selectedKind, setSelectedKind] = useState<'composto' | 'isolamento'>('composto');
   const [selectedIncrement, setSelectedIncrement] = useState<number>(storeIncrement);
   const [selectedRest, setSelectedRest] = useState<number>(storeRest);
   const [notes, setNotes] = useState<string>('');
@@ -118,6 +119,7 @@ export const NewExerciseScreen: React.FC = () => {
     const notesChanged = notes.trim().length > 0;
     const muscleChanged = selectedMuscle !== 'Peito';
     const equipChanged = selectedEquipment !== 'Barra';
+    const kindChanged = selectedKind !== 'composto';
     const incChanged = selectedIncrement !== storeIncrement;
     const restChanged = selectedRest !== storeRest;
     return (
@@ -125,6 +127,7 @@ export const NewExerciseScreen: React.FC = () => {
       notesChanged ||
       muscleChanged ||
       equipChanged ||
+      kindChanged ||
       incChanged ||
       restChanged
     );
@@ -134,6 +137,7 @@ export const NewExerciseScreen: React.FC = () => {
     notes,
     selectedMuscle,
     selectedEquipment,
+    selectedKind,
     selectedIncrement,
     storeIncrement,
     selectedRest,
@@ -180,7 +184,7 @@ export const NewExerciseScreen: React.FC = () => {
         name: name.trim(),
         muscleGroup: selectedMuscle,
         equipment: selectedEquipment,
-        kind: 'composto',
+        kind: selectedKind,
         defaultIncrement: selectedIncrement,
         defaultRestS: selectedRest,
         notes: notes.trim() || undefined,
@@ -361,6 +365,57 @@ export const NewExerciseScreen: React.FC = () => {
                       ]}
                     >
                       {eq}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* 3.1 Tipo de Movimento */}
+          <View style={styles.section}>
+            <Text variant="labelSmall" style={styles.fieldLabel}>
+              Tipo de movimento
+            </Text>
+            <View style={styles.equipmentRow}>
+              {(['composto', 'isolamento'] as const).map((k) => {
+                const isSelected = selectedKind === k;
+                const label = k === 'composto' ? 'Composto' : 'Isolamento';
+
+                return (
+                  <Pressable
+                    key={k}
+                    onPress={() => {
+                      triggerHaptic('light');
+                      setSelectedKind(k);
+                    }}
+                    accessible={true}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: isSelected }}
+                    accessibilityLabel={`Tipo ${label}`}
+                    style={[
+                      styles.eqChip,
+                      isSelected ? styles.eqChipSelected : styles.eqChipUnselected,
+                    ]}
+                  >
+                    {isSelected && (
+                      <Check
+                        size={16}
+                        color={colors.onPrimary}
+                        strokeWidth={2.2}
+                        style={styles.eqCheckIcon}
+                      />
+                    )}
+                    <Text
+                      variant="labelSmall"
+                      style={[
+                        styles.eqChipText,
+                        isSelected
+                          ? styles.eqChipTextSelected
+                          : styles.eqChipTextUnselected,
+                      ]}
+                    >
+                      {label}
                     </Text>
                   </Pressable>
                 );

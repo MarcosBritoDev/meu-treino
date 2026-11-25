@@ -14,6 +14,7 @@ export interface ScreenHeaderProps {
   title: string;
   onBack?: () => void;
   onOpenSettings?: () => void;
+  rightAction?: React.ReactNode;
   style?: ViewStyle;
 }
 
@@ -21,6 +22,7 @@ export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
   title,
   onBack,
   onOpenSettings,
+  rightAction,
   style,
 }) => {
   return (
@@ -51,7 +53,9 @@ export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
       </View>
 
       <View style={styles.right}>
-        {onOpenSettings && (
+        {rightAction ? (
+          rightAction
+        ) : onOpenSettings ? (
           <Pressable
             onPress={() => {
               triggerHaptic('light');
@@ -64,7 +68,7 @@ export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
           >
             <Settings size={22} color={colors.onSurfaceVariant} strokeWidth={1.75} />
           </Pressable>
-        )}
+        ) : null}
       </View>
     </View>
   );

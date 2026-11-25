@@ -13,7 +13,7 @@ export type RootStackParamList = {
   Ajustes: undefined;
   Backup: undefined;
   DevGallery: undefined;
-  NewExercise: { initialName?: string; fromScreen?: 'Biblioteca' | 'AddExercises' } | undefined;
+  NewExercise: { initialName?: string; fromScreen?: 'Biblioteca' | 'AddExercises'; exerciseId?: string } | undefined;
   ExerciseDetail: { exerciseId: string };
 };
 

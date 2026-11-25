@@ -200,4 +200,139 @@ export function isExerciseNameDuplicate(
   });
 }
 
+/**
+ * Deriva a região corporal a partir do grupo muscular:
+ * Peito, Costas, Ombros, Braços -> "Membros superiores"
+ * Pernas -> "Membros inferiores"
+ * Abdômen -> "Core e abdômen"
+ */
+export function deriveBodyRegion(muscleGroup: string): string {
+  const norm = normalizeSearchText(muscleGroup);
+  if (
+    norm.includes('peito') ||
+    norm.includes('costas') ||
+    norm.includes('ombro') ||
+    norm.includes('braco') ||
+    norm.includes('triceps') ||
+    norm.includes('biceps')
+  ) {
+    return 'Membros superiores';
+  }
+  if (
+    norm.includes('perna') ||
+    norm.includes('quadriceps') ||
+    norm.includes('posterior') ||
+    norm.includes('gluteo') ||
+    norm.includes('panturrilha')
+  ) {
+    return 'Membros inferiores';
+  }
+  if (norm.includes('abdomen') || norm.includes('core') || norm.includes('lombar')) {
+    return 'Core e abdômen';
+  }
+  return 'Geral';
+}
+
+export interface ExecutionTip {
+  title: string;
+  text: string;
+}
+
+/**
+ * Converte as notas do exercício em até 3 cartões de dicas de execução.
+ * Se notes for vazio ou nulo, retorna array vazio para ocultar a seção.
+ */
+export function parseExecutionTips(notes?: string | null): ExecutionTip[] {
+  if (!notes || !notes.trim()) return [];
+
+  const raw = notes.trim();
+  // Divide por quebras de linha ou frases terminadas em ponto/ponto-e-vírgula
+  const sentences = raw
+    .split(/(?<=[.;\n])\s+/)
+    .map((s) => s.trim().replace(/^[•\-\*]\s*/, ''))
+    .filter((s) => s.length > 3);
+
+  if (sentences.length === 0) {
+    return [{ title: 'Instrução técnica', text: raw }];
+  }
+
+  const defaultTitles = [
+    'Postura e alinhamento',
+    'Trajetória e controle',
+    'Amplitude completa',
+  ];
+
+  return sentences.slice(0, 3).map((sent, idx) => {
+    // Se a frase contiver dois pontos (ex: "Banco a 30°: Inclinação ideal"), usa a primeira parte como título
+    if (sent.includes(':')) {
+      const parts = sent.split(':');
+      return {
+        title: parts[0].trim(),
+        text: parts.slice(1).join(':').trim(),
+      };
+    }
+    return {
+      title: defaultTitles[idx] || 'Dica técnica',
+      text: sent,
+    };
+  });
+}
+
+export interface EvolutionPoint {
+  date: number; // timestamp ms
+  weight: number; // peso em kg
+}
+
+export interface EvolutionStats {
+  points: EvolutionPoint[];
+  cycleChangePercent: number;
+  peakWeight: number;
+}
+
+/**
+ * Filtra pontos de evolução por período (4 semanas, 3 meses ou tudo)
+ * e calcula a variação percentual no ciclo e o pico de carga.
+ */
+export function filterEvolutionByPeriod(
+  allPoints: EvolutionPoint[],
+  period: '4 sem' | '3 meses' | 'tudo',
+  now: number = Date.now()
+): EvolutionStats {
+  if (!allPoints || allPoints.length === 0) {
+    return { points: [], cycleChangePercent: 0, peakWeight: 0 };
+  }
+
+  let minDate = 0;
+  if (period === '4 sem') {
+    minDate = now - 28 * 24 * 60 * 60 * 1000;
+  } else if (period === '3 meses') {
+    minDate = now - 90 * 24 * 60 * 60 * 1000;
+  }
+
+  const filtered = minDate > 0
+    ? allPoints.filter((p) => p.date >= minDate)
+    : allPoints;
+
+  // Se o filtro deixou vazio mas há pontos anteriores, mostra os pontos disponíveis
+  const effectivePoints = filtered.length > 0 ? filtered : allPoints.slice(-4);
+
+  const peakWeight = Math.max(...effectivePoints.map((p) => p.weight));
+
+  let cycleChangePercent = 0;
+  if (effectivePoints.length >= 2) {
+    const first = effectivePoints[0].weight;
+    const last = effectivePoints[effectivePoints.length - 1].weight;
+    if (first > 0) {
+      cycleChangePercent = ((last - first) / first) * 100;
+    }
+  }
+
+  return {
+    points: effectivePoints,
+    cycleChangePercent,
+    peakWeight,
+  };
+}
+
+
 
