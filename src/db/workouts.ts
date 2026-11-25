@@ -613,6 +613,72 @@ export function addWorkoutToGroup(groupId: string, name: string): string {
   return id;
 }
 
+/**
+ * Cria um treino com base em um dos modelos populares da tela 4.2 Início:
+ * - 'superior_a': Superior A (Peito, ombros e tríceps)
+ * - 'pernas_core': Pernas e core (Quadríceps e panturrilha)
+ */
+export function createWorkoutFromPopularTemplate(templateType: 'superior_a' | 'pernas_core'): string {
+  const rawDb = getExpoDb();
+
+  // 1. Obtém ou cria o grupo ativo
+  const groupRows = rawDb.getAllSync<{ id: string }>(
+    `SELECT id FROM groups WHERE is_active = 1 LIMIT 1`
+  );
+  let groupId: string;
+  if (groupRows.length > 0) {
+    groupId = groupRows[0].id;
+  } else {
+    const anyGroup = rawDb.getAllSync<{ id: string }>(`SELECT id FROM groups LIMIT 1`);
+    if (anyGroup.length > 0) {
+      groupId = anyGroup[0].id;
+    } else {
+      groupId = createWorkoutGroup('Meu treino', 'Divisão inicial de treinos', 4, 'Ativo');
+    }
+  }
+
+  // 2. Define o nome do treino e os exercícios do modelo
+  const workoutName = templateType === 'superior_a' ? 'Superior A' : 'Pernas e core';
+  const workoutId = addWorkoutToGroup(groupId, workoutName);
+
+  const targetExerciseNames =
+    templateType === 'superior_a'
+      ? [
+          'Supino reto com barra',
+          'Supino inclinado com halteres',
+          'Desenvolvimento com halteres',
+          'Elevação lateral com halteres',
+          'Tríceps corda no cabo',
+        ]
+      : [
+          'Agachamento livre com barra',
+          'Leg press 45°',
+          'Cadeira extensora',
+          'Mesa flexora',
+          'Panturrilha em pé na máquina',
+          'Abdominal supra no solo',
+        ];
+
+  let currentPos = 0;
+  for (const name of targetExerciseNames) {
+    const exRows = rawDb.getAllSync<{ id: string; default_rest_s: number }>(
+      `SELECT id, default_rest_s FROM exercises WHERE name LIKE ? LIMIT 1`,
+      [`%${name}%`]
+    );
+    if (exRows.length > 0) {
+      const ex = exRows[0];
+      const weId = `we_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      rawDb.runSync(
+        `INSERT INTO workout_exercises (id, workout_id, exercise_id, position, target_sets, rep_min, rep_max, rest_s)
+         VALUES (?, ?, ?, ?, 3, 8, 12, ?)`,
+        [weId, workoutId, ex.id, currentPos++, ex.default_rest_s || 90]
+      );
+    }
+  }
+
+  return workoutId;
+}
+
 
 export interface GroupDetailWorkoutItem extends WorkoutItemDetail {
   lastLogText: string;

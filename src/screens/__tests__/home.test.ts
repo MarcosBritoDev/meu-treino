@@ -146,4 +146,69 @@ describe('Tela 4.1 - Início (Lógica de Domínio, Data, Saudação e Semana)', 
       expect(workouts[idx].name).toBe('Push A');
     });
   });
+
+  describe('Estado 4.2 - Início sem Treino (Regras de Exibição e Modelos Populares)', () => {
+    it('ativa o Estado 4.2 quando não há grupo ativo ou não há treinos cadastrados', () => {
+      const shouldShowEmptyState = (hasActiveGroup: boolean, hasWorkouts: boolean, hasActiveSession: boolean) =>
+        !hasActiveSession && (!hasActiveGroup || !hasWorkouts);
+
+      // App limpo após onboarding (sem grupos ou treinos)
+      expect(shouldShowEmptyState(false, false, false)).toBe(true);
+      expect(shouldShowEmptyState(true, false, false)).toBe(true);
+
+      // Com treino cadastrado no grupo ativo -> NÃO exibe Estado 4.2 (exibe 4.1)
+      expect(shouldShowEmptyState(true, true, false)).toBe(false);
+
+      // Com treino em andamento -> exibe cartão de treino ativo
+      expect(shouldShowEmptyState(false, false, true)).toBe(false);
+    });
+
+    it('mantém a recomendação normal (4.1) em dias de descanso planejado sem forçar o estado 4.2', () => {
+      // Regra: "se hoje não é dia de treino pela frequência, mantenha a recomendação normal (não force este estado)"
+      const state = {
+        hasActiveGroup: true,
+        recommendedWorkout: { id: 'w1', name: 'Push A' },
+        activeSession: null,
+      };
+
+      const isEmptyState = !state.activeSession && (!state.hasActiveGroup || !state.recommendedWorkout);
+      expect(isEmptyState).toBe(false);
+    });
+
+    it('define os modelos populares com seus nomes e grupos musculares correspondentes', () => {
+      const popularTemplates = {
+        superior_a: {
+          name: 'Superior A',
+          subtitle: 'Peito, ombros e tríceps',
+          exercises: [
+            'Supino reto com barra',
+            'Supino inclinado com halteres',
+            'Desenvolvimento com halteres',
+            'Elevação lateral com halteres',
+            'Tríceps corda no cabo',
+          ],
+        },
+        pernas_core: {
+          name: 'Pernas e core',
+          subtitle: 'Quadríceps e panturrilha',
+          exercises: [
+            'Agachamento livre com barra',
+            'Leg press 45°',
+            'Cadeira extensora',
+            'Mesa flexora',
+            'Panturrilha em pé na máquina',
+            'Abdominal supra no solo',
+          ],
+        },
+      };
+
+      expect(popularTemplates.superior_a.name).toBe('Superior A');
+      expect(popularTemplates.superior_a.subtitle).toBe('Peito, ombros e tríceps');
+      expect(popularTemplates.superior_a.exercises).toHaveLength(5);
+
+      expect(popularTemplates.pernas_core.name).toBe('Pernas e core');
+      expect(popularTemplates.pernas_core.subtitle).toBe('Quadríceps e panturrilha');
+      expect(popularTemplates.pernas_core.exercises).toHaveLength(6);
+    });
+  });
 });

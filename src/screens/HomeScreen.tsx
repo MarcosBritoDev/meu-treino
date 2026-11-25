@@ -11,7 +11,6 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
   Settings,
   Play,
-  RotateCw,
   Check,
   Dumbbell,
   Clock,
@@ -20,10 +19,11 @@ import {
   PlusCircle,
   ShieldCheck,
   Weight,
-  Sparkles,
+  Zap,
+  Moon,
 } from 'lucide-react-native';
 import { RootStackParamList } from '../navigation/types';
-import { colors, radii, fontFamilies, spacing } from '../theme';
+import { colors, radii, fontFamilies } from '../theme';
 import { Text } from '../ui/Text';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
@@ -31,7 +31,10 @@ import { triggerHaptic } from '../ui/haptics';
 import { EmptyHomeIllustration } from '../ui/illustrations/EmptyHomeIllustration';
 import { ConfirmModal } from '../ui/ConfirmModal';
 import { getHomeScreenData, HomeScreenData } from '../db/home';
-import { startWorkoutSession } from '../db/workouts';
+import {
+  startWorkoutSession,
+  createWorkoutFromPopularTemplate,
+} from '../db/workouts';
 import { getExpoDb } from '../db/client';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -96,12 +99,21 @@ export const HomeScreen: React.FC = () => {
     });
   };
 
-  // Iniciar sessão livre avulsa (Estado 4.2)
+  // Iniciar sessão livre avulsa (Estado 4.2: abre treino em andamento vazio)
   const handleStartFreeWorkout = () => {
     triggerHaptic('medium');
     const sessionId = startWorkoutSession(undefined, 'Treino avulso');
     navigation.navigate('ActiveSession', {
       sessionId,
+    });
+  };
+
+  // Criar treino a partir de modelo popular (Estado 4.2)
+  const handleSelectPopularTemplate = (type: 'superior_a' | 'pernas_core') => {
+    triggerHaptic('medium');
+    const workoutId = createWorkoutFromPopularTemplate(type);
+    navigation.navigate('EditWorkout', {
+      workoutId,
     });
   };
 
@@ -133,6 +145,8 @@ export const HomeScreen: React.FC = () => {
   };
 
   const displayName = data?.userName || 'Atleta';
+  const showEmptyState =
+    !data?.activeSession && (!data?.hasActiveGroup || !data?.recommendedWorkout);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
@@ -168,200 +182,67 @@ export const HomeScreen: React.FC = () => {
           </Text>
         </View>
 
-        {/* 2. CARTÃO DESTAQUE */}
-        {data?.activeSession ? (
-          /* CARTÃO: TREINO EM ANDAMENTO */
-          <Card variant="highlight" style={styles.heroCard}>
-            <View style={styles.heroGlow} pointerEvents="none" />
-            <View style={styles.heroContent}>
-              <View style={styles.activeSessionChip}>
-                <View style={styles.pulsingDot} />
-                <Text variant="labelSmall" style={styles.activeSessionChipText}>
-                  Treino em andamento
-                </Text>
+        {showEmptyState ? (
+          /* ================================================================
+             ESTADO 4.2: INÍCIO SEM TREINO (QUANDO NÃO HÁ GRUPO COM TREINOS)
+             ================================================================ */
+          <>
+            {/* CARTÃO GRANDE COM EMPTY STATE */}
+            <Card variant="surface" style={styles.emptyCard}>
+              <View style={styles.emptyGlow} pointerEvents="none" />
+
+              {/* ILUSTRAÇÃO COM SELO "PAUSA" */}
+              <View style={styles.emptyIllustrationWrapper}>
+                <EmptyHomeIllustration size={130} />
+                <View style={styles.pauseBadge}>
+                  <Moon size={13} color="#F6BC64" strokeWidth={2.4} fill="#F6BC64" />
+                  <Text variant="labelSmall" style={styles.pauseBadgeText}>
+                    Pausa
+                  </Text>
+                </View>
               </View>
 
-              <Text variant="headline" style={styles.heroTitle} numberOfLines={2}>
-                {data.activeSession.name}
+              <Text variant="headline" style={styles.emptyTitle}>
+                Nenhum treino para hoje
               </Text>
-              <Text variant="bodyMedium" style={styles.heroSubtitle}>
-                Tempo decorrido: {formattedElapsed}
+              <Text variant="bodyMedium" style={styles.emptySubtitle}>
+                Monte sua rotina semanal ou inicie uma sessão rápida avulsa.
               </Text>
 
-              <Button
-                title="Continuar treino"
-                variant="primary"
-                icon={<Play size={22} color={colors.onPrimary} fill={colors.onPrimary} />}
-                onPress={handleContinueActiveSession}
-                style={styles.heroPrimaryButton}
-              />
+              {/* BOTÕES DE AÇÃO */}
+              <View style={styles.emptyActions}>
+                <Button
+                  title="Montar primeiro treino"
+                  variant="primary"
+                  icon={<PlusCircle size={20} color={colors.onPrimary} strokeWidth={2.2} />}
+                  onPress={() => {
+                    triggerHaptic('medium');
+                    navigation.navigate('MainTabs', { screen: 'Treinos' });
+                  }}
+                  style={styles.emptyPrimaryButton}
+                />
 
-              <Pressable
-                onPress={() => setDiscardModalVisible(true)}
-                style={styles.heroSecondaryLink}
-                accessibilityRole="button"
-                accessibilityLabel="Descartar treino em andamento"
-              >
-                <Text variant="bodySmall" style={styles.heroSecondaryLinkText}>
-                  Descartar este treino
-                </Text>
-              </Pressable>
-            </View>
-          </Card>
-        ) : data?.hasActiveGroup && data?.recommendedWorkout ? (
-          /* CARTÃO: RECOMENDADO PARA HOJE */
-          <Card variant="surface" style={styles.heroCard}>
-            <View style={styles.heroGlow} pointerEvents="none" />
-            <View style={styles.heroContent}>
-              {/* Chip Recomendado com pulso coral */}
-              <View style={styles.recommendedChip}>
-                <View style={styles.pulsingDot} />
-                <Text variant="labelSmall" style={styles.recommendedChipText}>
-                  Recomendado para hoje
-                </Text>
+                <Pressable
+                  onPress={handleStartFreeWorkout}
+                  style={styles.emptyFreeButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Iniciar sessão livre avulsa"
+                >
+                  <Play size={17} color={colors.onSurfaceVariant} fill={colors.onSurfaceVariant} />
+                  <Text variant="bodyMedium" style={styles.emptyFreeText}>
+                    Iniciar sessão livre avulsa
+                  </Text>
+                </Pressable>
               </View>
+            </Card>
 
-              {/* Título & Subtítulo */}
-              <View style={styles.heroTitlesBlock}>
-                <Text variant="headline" style={styles.heroTitle} numberOfLines={2}>
-                  {data.recommendedWorkout.name}
-                </Text>
-                <Text variant="bodyMedium" style={styles.heroSubtitle}>
-                  {data.recommendedWorkout.targetMuscles} · Grupo {data.recommendedWorkout.groupName}
-                </Text>
-              </View>
-
-              {/* Indicador de Ciclo e Segmentos de Progresso */}
-              <View style={styles.cycleBlock}>
-                <View style={styles.cycleLabelRow}>
-                  <Text variant="bodySmall" style={styles.cycleText}>
-                    {data.recommendedWorkout.cycleIndex} de {data.recommendedWorkout.cycleTotal} no ciclo
-                  </Text>
-                </View>
-                <View style={styles.cycleBarRow}>
-                  {Array.from({ length: data.recommendedWorkout.cycleTotal }).map((_, idx) => (
-                    <View
-                      key={idx}
-                      style={[
-                        styles.cycleBarSegment,
-                        idx < data.recommendedWorkout!.cycleIndex
-                          ? styles.cycleBarSegmentActive
-                          : styles.cycleBarSegmentInactive,
-                      ]}
-                    />
-                  ))}
-                </View>
-              </View>
-
-              {/* Trio de Métricas em Outfit */}
-              <View style={styles.metricsBox}>
-                <View style={styles.metricColumn}>
-                  <Text variant="headline" style={styles.metricBigNumber}>
-                    {data.recommendedWorkout.exerciseCount}
-                  </Text>
-                  <Text variant="labelSmall" style={styles.metricSmallLabel}>
-                    exercícios
-                  </Text>
-                </View>
-
-                <View style={styles.metricDivider} />
-
-                <View style={styles.metricColumn}>
-                  <Text variant="headline" style={styles.metricBigNumber}>
-                    {data.recommendedWorkout.totalSets}
-                  </Text>
-                  <Text variant="labelSmall" style={styles.metricSmallLabel}>
-                    séries
-                  </Text>
-                </View>
-
-                <View style={styles.metricDivider} />
-
-                <View style={styles.metricColumn}>
-                  <Text variant="headline" style={styles.metricBigNumber}>
-                    {data.recommendedWorkout.estimatedDurationMin}{' '}
-                    <Text variant="bodySmall" style={styles.metricUnitText}>
-                      min
-                    </Text>
-                  </Text>
-                  <Text variant="labelSmall" style={styles.metricSmallLabel}>
-                    duração
-                  </Text>
-                </View>
-              </View>
-
-              {/* Botão Primário 56px Iniciar treino */}
-              <Button
-                title="Iniciar treino"
-                variant="primary"
-                icon={<Play size={22} color={colors.onPrimary} fill={colors.onPrimary} />}
-                onPress={handleStartRecommendedWorkout}
-                style={styles.heroPrimaryButton}
-              />
-
-              {/* Link Secundário: Ver ou alterar exercícios */}
-              <Pressable
-                onPress={() => {
-                  triggerHaptic('light');
-                  navigation.navigate('EditWorkout', {
-                    workoutId: data.recommendedWorkout!.id,
-                  });
-                }}
-                style={styles.heroSecondaryLink}
-                accessibilityRole="button"
-                accessibilityLabel="Ver ou alterar exercícios"
-              >
-                <Text variant="bodyMedium" style={styles.heroSecondaryLinkText}>
-                  Ver ou alterar exercícios
-                </Text>
-              </Pressable>
-            </View>
-          </Card>
-        ) : (
-          /* ESTADO 4.2: SEM GRUPO ATIVO OU SEM TREINOS */
-          <Card variant="surface" style={styles.emptyCard}>
-            <View style={styles.emptyGlow} pointerEvents="none" />
-            <EmptyHomeIllustration size={130} style={{ marginBottom: 12 }} />
-
-            <Text variant="headline" style={styles.emptyTitle}>
-              Nenhum treino para hoje
-            </Text>
-            <Text variant="bodyMedium" style={styles.emptySubtitle}>
-              Monte sua rotina semanal ou inicie uma sessão rápida avulsa.
-            </Text>
-
-            <View style={styles.emptyActions}>
-              <Button
-                title="Montar primeiro treino"
-                variant="primary"
-                icon={<PlusCircle size={20} color={colors.onPrimary} strokeWidth={2.2} />}
-                onPress={() => {
-                  triggerHaptic('medium');
-                  navigation.navigate('MainTabs', { screen: 'Treinos' });
-                }}
-                style={styles.emptyPrimaryButton}
-              />
-
-              <Pressable
-                onPress={handleStartFreeWorkout}
-                style={styles.emptyFreeButton}
-                accessibilityRole="button"
-                accessibilityLabel="Iniciar sessão livre avulsa"
-              >
-                <Play size={18} color={colors.onSurfaceVariant} fill={colors.onSurfaceVariant} />
-                <Text variant="bodyMedium" style={styles.emptyFreeText}>
-                  Iniciar sessão livre avulsa
-                </Text>
-              </Pressable>
-            </View>
-
-            {/* DICA VOLT */}
-            <View style={styles.dicaVoltBox}>
-              <View style={styles.dicaVoltIcon}>
+            {/* CARTÃO DE DICA: DICA VOLT · PRIVACIDADE TOTAL */}
+            <View style={styles.dicaVoltCard}>
+              <View style={styles.dicaVoltIconCircle}>
                 <ShieldCheck size={20} color={colors.primary} strokeWidth={2} />
               </View>
-              <View style={styles.dicaVoltTextContainer}>
-                <View style={styles.dicaVoltHeaderRow}>
+              <View style={styles.dicaVoltContent}>
+                <View style={styles.dicaVoltHeader}>
                   <Text variant="labelSmall" style={styles.dicaVoltTag}>
                     Dica Volt
                   </Text>
@@ -370,162 +251,387 @@ export const HomeScreen: React.FC = () => {
                     Privacidade total
                   </Text>
                 </View>
-                <Text variant="bodySmall" style={styles.dicaVoltBody}>
+                <Text variant="bodySmall" style={styles.dicaVoltDescription}>
                   Seus registros e cargas são salvos 100% offline no dispositivo. Sem necessidade de sinal de academia para progredir.
                 </Text>
               </View>
             </View>
-          </Card>
-        )}
 
-        {/* 3. SEÇÃO "SUA SEMANA" */}
-        <View style={styles.sectionBlock}>
-          <View style={styles.sectionHeaderRow}>
-            <Text variant="headline" style={styles.sectionTitle}>
-              Sua semana
-            </Text>
-            <View style={styles.weekBadge}>
-              <Text variant="labelSmall" style={styles.weekBadgeText}>
-                {data?.weekStatus ? `${data.weekStatus.completedCount} de ${data.weekStatus.frequencyGoal} treinos` : '0 de 5 treinos'}
-              </Text>
+            {/* SEÇÃO: IDEIAS POPULARES PARA INICIAR */}
+            <View style={styles.popularSection}>
+              <View style={styles.popularHeaderRow}>
+                <Text variant="labelSmall" style={styles.popularSectionTitle}>
+                  Ideias populares para iniciar
+                </Text>
+                <Pressable
+                  onPress={() => {
+                    triggerHaptic('light');
+                    navigation.navigate('MainTabs', { screen: 'Treinos' });
+                  }}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Ver modelos de treino"
+                >
+                  <Text variant="labelSmall" style={styles.viewTemplatesLink}>
+                    Ver modelos
+                  </Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.popularGrid}>
+                {/* MODELO 1: SUPERIOR A */}
+                <Pressable
+                  onPress={() => handleSelectPopularTemplate('superior_a')}
+                  style={({ pressed }) => [
+                    styles.popularCard,
+                    pressed && styles.popularCardPressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Criar modelo Superior A: Peito, ombros e tríceps"
+                >
+                  <View style={styles.popularCardTop}>
+                    <Text variant="bodyLarge" style={styles.popularCardTitle}>
+                      Superior A
+                    </Text>
+                    <Dumbbell size={20} color={colors.primary} strokeWidth={2} />
+                  </View>
+                  <Text variant="labelSmall" style={styles.popularCardSubtitle}>
+                    Peito, ombros e tríceps
+                  </Text>
+                  <View style={styles.popularCardDecoration} pointerEvents="none" />
+                </Pressable>
+
+                {/* MODELO 2: PERNAS E CORE */}
+                <Pressable
+                  onPress={() => handleSelectPopularTemplate('pernas_core')}
+                  style={({ pressed }) => [
+                    styles.popularCard,
+                    pressed && styles.popularCardPressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Criar modelo Pernas e core: Quadríceps e panturrilha"
+                >
+                  <View style={styles.popularCardTop}>
+                    <Text variant="bodyLarge" style={styles.popularCardTitle}>
+                      Pernas e core
+                    </Text>
+                    <Zap size={20} color="#F6BC64" strokeWidth={2} />
+                  </View>
+                  <Text variant="labelSmall" style={styles.popularCardSubtitle}>
+                    Quadríceps e panturrilha
+                  </Text>
+                  <View style={styles.popularCardDecoration} pointerEvents="none" />
+                </Pressable>
+              </View>
             </View>
-          </View>
+          </>
+        ) : (
+          /* ================================================================
+             ESTADO 4.1: INÍCIO COM TREINO RECOMENDADO OU EM ANDAMENTO
+             ================================================================ */
+          <>
+            {data?.activeSession ? (
+              /* CARTÃO: TREINO EM ANDAMENTO */
+              <Card variant="highlight" style={styles.heroCard}>
+                <View style={styles.heroGlow} pointerEvents="none" />
+                <View style={styles.heroContent}>
+                  <View style={styles.activeSessionChip}>
+                    <View style={styles.pulsingDot} />
+                    <Text variant="labelSmall" style={styles.activeSessionChipText}>
+                      Treino em andamento
+                    </Text>
+                  </View>
 
-          {/* 7 CÍRCULOS SEG A DOM */}
-          <View style={styles.weekCirclesContainer}>
-            {data?.weekStatus?.days.map((day) => {
-              const isCompleted = day.hasCompletedWorkout;
-              const isToday = day.isToday;
+                  <Text variant="headline" style={styles.heroTitle} numberOfLines={2}>
+                    {data.activeSession.name}
+                  </Text>
+                  <Text variant="bodyMedium" style={styles.heroSubtitle}>
+                    Tempo decorrido: {formattedElapsed}
+                  </Text>
 
-              return (
-                <View key={day.index} style={styles.dayColumn}>
-                  <View
-                    style={[
-                      styles.dayCircle,
-                      isCompleted && styles.dayCircleCompleted,
-                      !isCompleted && isToday && styles.dayCircleToday,
-                      !isCompleted && !isToday && styles.dayCircleDefault,
-                    ]}
+                  <Button
+                    title="Continuar treino"
+                    variant="primary"
+                    icon={<Play size={22} color={colors.onPrimary} fill={colors.onPrimary} />}
+                    onPress={handleContinueActiveSession}
+                    style={styles.heroPrimaryButton}
+                  />
+
+                  <Pressable
+                    onPress={() => setDiscardModalVisible(true)}
+                    style={styles.heroSecondaryLink}
+                    accessibilityRole="button"
+                    accessibilityLabel="Descartar treino em andamento"
                   >
-                    {isCompleted ? (
-                      <Check size={20} color={colors.onPrimary} strokeWidth={3} />
-                    ) : (
+                    <Text variant="bodySmall" style={styles.heroSecondaryLinkText}>
+                      Descartar este treino
+                    </Text>
+                  </Pressable>
+                </View>
+              </Card>
+            ) : data?.recommendedWorkout ? (
+              /* CARTÃO: RECOMENDADO PARA HOJE */
+              <Card variant="surface" style={styles.heroCard}>
+                <View style={styles.heroGlow} pointerEvents="none" />
+                <View style={styles.heroContent}>
+                  {/* Chip Recomendado com pulso coral */}
+                  <View style={styles.recommendedChip}>
+                    <View style={styles.pulsingDot} />
+                    <Text variant="labelSmall" style={styles.recommendedChipText}>
+                      Recomendado para hoje
+                    </Text>
+                  </View>
+
+                  {/* Título & Subtítulo */}
+                  <View style={styles.heroTitlesBlock}>
+                    <Text variant="headline" style={styles.heroTitle} numberOfLines={2}>
+                      {data.recommendedWorkout.name}
+                    </Text>
+                    <Text variant="bodyMedium" style={styles.heroSubtitle}>
+                      {data.recommendedWorkout.targetMuscles} · Grupo {data.recommendedWorkout.groupName}
+                    </Text>
+                  </View>
+
+                  {/* Indicador de Ciclo e Segmentos de Progresso */}
+                  <View style={styles.cycleBlock}>
+                    <View style={styles.cycleLabelRow}>
+                      <Text variant="bodySmall" style={styles.cycleText}>
+                        {data.recommendedWorkout.cycleIndex} de {data.recommendedWorkout.cycleTotal} no ciclo
+                      </Text>
+                    </View>
+                    <View style={styles.cycleBarRow}>
+                      {Array.from({ length: data.recommendedWorkout.cycleTotal }).map((_, idx) => (
+                        <View
+                          key={idx}
+                          style={[
+                            styles.cycleBarSegment,
+                            idx < data.recommendedWorkout!.cycleIndex
+                              ? styles.cycleBarSegmentActive
+                              : styles.cycleBarSegmentInactive,
+                          ]}
+                        />
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* Trio de Métricas em Outfit */}
+                  <View style={styles.metricsBox}>
+                    <View style={styles.metricColumn}>
+                      <Text variant="headline" style={styles.metricBigNumber}>
+                        {data.recommendedWorkout.exerciseCount}
+                      </Text>
+                      <Text variant="labelSmall" style={styles.metricSmallLabel}>
+                        exercícios
+                      </Text>
+                    </View>
+
+                    <View style={styles.metricDivider} />
+
+                    <View style={styles.metricColumn}>
+                      <Text variant="headline" style={styles.metricBigNumber}>
+                        {data.recommendedWorkout.totalSets}
+                      </Text>
+                      <Text variant="labelSmall" style={styles.metricSmallLabel}>
+                        séries
+                      </Text>
+                    </View>
+
+                    <View style={styles.metricDivider} />
+
+                    <View style={styles.metricColumn}>
+                      <Text variant="headline" style={styles.metricBigNumber}>
+                        {data.recommendedWorkout.estimatedDurationMin}{' '}
+                        <Text variant="bodySmall" style={styles.metricUnitText}>
+                          min
+                        </Text>
+                      </Text>
+                      <Text variant="labelSmall" style={styles.metricSmallLabel}>
+                        duração
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Botão Primário 56px Iniciar treino */}
+                  <Button
+                    title="Iniciar treino"
+                    variant="primary"
+                    icon={<Play size={22} color={colors.onPrimary} fill={colors.onPrimary} />}
+                    onPress={handleStartRecommendedWorkout}
+                    style={styles.heroPrimaryButton}
+                  />
+
+                  {/* Link Secundário: Ver ou alterar exercícios */}
+                  <Pressable
+                    onPress={() => {
+                      triggerHaptic('light');
+                      navigation.navigate('EditWorkout', {
+                        workoutId: data.recommendedWorkout!.id,
+                      });
+                    }}
+                    style={styles.heroSecondaryLink}
+                    accessibilityRole="button"
+                    accessibilityLabel="Ver ou alterar exercícios"
+                  >
+                    <Text variant="bodyMedium" style={styles.heroSecondaryLinkText}>
+                      Ver ou alterar exercícios
+                    </Text>
+                  </Pressable>
+                </View>
+              </Card>
+            ) : null}
+
+            {/* SEÇÃO "SUA SEMANA" */}
+            <View style={styles.sectionBlock}>
+              <View style={styles.sectionHeaderRow}>
+                <Text variant="headline" style={styles.sectionTitle}>
+                  Sua semana
+                </Text>
+                <View style={styles.weekBadge}>
+                  <Text variant="labelSmall" style={styles.weekBadgeText}>
+                    {data?.weekStatus
+                      ? `${data.weekStatus.completedCount} de ${data.weekStatus.frequencyGoal} treinos`
+                      : '0 de 5 treinos'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* 7 CÍRCULOS SEG A DOM */}
+              <View style={styles.weekCirclesContainer}>
+                {data?.weekStatus?.days.map((day) => {
+                  const isCompleted = day.hasCompletedWorkout;
+                  const isToday = day.isToday;
+
+                  return (
+                    <View key={day.index} style={styles.dayColumn}>
+                      <View
+                        style={[
+                          styles.dayCircle,
+                          isCompleted && styles.dayCircleCompleted,
+                          !isCompleted && isToday && styles.dayCircleToday,
+                          !isCompleted && !isToday && styles.dayCircleDefault,
+                        ]}
+                      >
+                        {isCompleted ? (
+                          <Check size={20} color={colors.onPrimary} strokeWidth={3} />
+                        ) : (
+                          <Text
+                            variant="labelSmall"
+                            style={[
+                              styles.dayNumberText,
+                              isToday && styles.dayNumberTextToday,
+                            ]}
+                          >
+                            {day.dayOfMonth}
+                          </Text>
+                        )}
+                      </View>
                       <Text
                         variant="labelSmall"
                         style={[
-                          styles.dayNumberText,
-                          isToday && styles.dayNumberTextToday,
+                          styles.dayLabelText,
+                          isToday && styles.dayLabelTextToday,
                         ]}
                       >
-                        {day.dayOfMonth}
+                        {day.label}
                       </Text>
-                    )}
-                  </View>
-                  <Text
-                    variant="labelSmall"
-                    style={[
-                      styles.dayLabelText,
-                      isToday && styles.dayLabelTextToday,
-                    ]}
-                  >
-                    {day.label}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
-        </View>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
 
-        {/* 4. SEÇÃO "ÚLTIMO TREINO" */}
-        <View style={styles.sectionBlock}>
-          <View style={styles.sectionHeaderRow}>
-            <Text variant="headline" style={styles.sectionTitle}>
-              Último treino
-            </Text>
-            {data?.lastCompletedSession && (
-              <Pressable
-                onPress={() => {
-                  triggerHaptic('light');
-                  navigation.navigate('SessionDetail', {
-                    sessionId: data.lastCompletedSession!.id,
-                  });
-                }}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="Ver detalhes do último treino"
-              >
-                <Text variant="labelSmall" style={styles.detailsLinkText}>
-                  Detalhes
+            {/* SEÇÃO "ÚLTIMO TREINO" */}
+            <View style={styles.sectionBlock}>
+              <View style={styles.sectionHeaderRow}>
+                <Text variant="headline" style={styles.sectionTitle}>
+                  Último treino
                 </Text>
-              </Pressable>
-            )}
-          </View>
-
-          {data?.lastCompletedSession ? (
-            <Pressable
-              onPress={() => {
-                triggerHaptic('light');
-                navigation.navigate('SessionDetail', {
-                  sessionId: data.lastCompletedSession!.id,
-                });
-              }}
-              style={({ pressed }) => [
-                styles.lastSessionCard,
-                pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={`Último treino: ${data.lastCompletedSession.name}`}
-            >
-              <View style={styles.lastSessionLeft}>
-                <View style={styles.lastSessionIconCircle}>
-                  <Dumbbell size={22} color={colors.primary} strokeWidth={2} />
-                </View>
-                <View style={styles.lastSessionInfo}>
-                  <View style={styles.lastSessionTitleRow}>
-                    <Text variant="bodyLarge" style={styles.lastSessionTitle} numberOfLines={1}>
-                      {data.lastCompletedSession.name}
+                {data?.lastCompletedSession && (
+                  <Pressable
+                    onPress={() => {
+                      triggerHaptic('light');
+                      navigation.navigate('SessionDetail', {
+                        sessionId: data.lastCompletedSession!.id,
+                      });
+                    }}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Ver detalhes do último treino"
+                  >
+                    <Text variant="labelSmall" style={styles.detailsLinkText}>
+                      Detalhes
                     </Text>
-                    <View style={styles.lastSessionDot} />
-                    <Text variant="labelSmall" style={styles.lastSessionDate}>
-                      {data.lastCompletedSession.relativeDate}
-                    </Text>
-                  </View>
-
-                  <View style={styles.lastSessionMetricsRow}>
-                    <View style={styles.lastSessionMetricItem}>
-                      <Weight size={13} color={colors.onSurfaceVariant} strokeWidth={2} />
-                      <Text variant="labelSmall" style={styles.lastSessionMetricText}>
-                        {data.lastCompletedSession.totalVolumeText}
-                      </Text>
-                    </View>
-                    <View style={styles.lastSessionMetricItem}>
-                      <Clock size={13} color={colors.onSurfaceVariant} strokeWidth={2} />
-                      <Text variant="labelSmall" style={styles.lastSessionMetricText}>
-                        {data.lastCompletedSession.durationMin} min
-                      </Text>
-                    </View>
-                    <View style={styles.lastSessionMetricItem}>
-                      <Repeat size={13} color={colors.onSurfaceVariant} strokeWidth={2} />
-                      <Text variant="labelSmall" style={styles.lastSessionMetricText}>
-                        {data.lastCompletedSession.totalSets} séries
-                      </Text>
-                    </View>
-                  </View>
-                </View>
+                  </Pressable>
+                )}
               </View>
 
-              <View style={styles.lastSessionChevron}>
-                <ChevronRight size={18} color={colors.onSurfaceVariant} strokeWidth={2} />
-              </View>
-            </Pressable>
-          ) : (
-            <Card variant="surface" style={styles.noLastSessionCard}>
-              <Text variant="bodySmall" style={styles.noLastSessionText}>
-                Nenhum treino concluído ainda. Inicie seu primeiro treino acima!
-              </Text>
-            </Card>
-          )}
-        </View>
+              {data?.lastCompletedSession ? (
+                <Pressable
+                  onPress={() => {
+                    triggerHaptic('light');
+                    navigation.navigate('SessionDetail', {
+                      sessionId: data.lastCompletedSession!.id,
+                    });
+                  }}
+                  style={({ pressed }) => [
+                    styles.lastSessionCard,
+                    pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Último treino: ${data.lastCompletedSession.name}`}
+                >
+                  <View style={styles.lastSessionLeft}>
+                    <View style={styles.lastSessionIconCircle}>
+                      <Dumbbell size={22} color={colors.primary} strokeWidth={2} />
+                    </View>
+                    <View style={styles.lastSessionInfo}>
+                      <View style={styles.lastSessionTitleRow}>
+                        <Text variant="bodyLarge" style={styles.lastSessionTitle} numberOfLines={1}>
+                          {data.lastCompletedSession.name}
+                        </Text>
+                        <View style={styles.lastSessionDot} />
+                        <Text variant="labelSmall" style={styles.lastSessionDate}>
+                          {data.lastCompletedSession.relativeDate}
+                        </Text>
+                      </View>
+
+                      <View style={styles.lastSessionMetricsRow}>
+                        <View style={styles.lastSessionMetricItem}>
+                          <Weight size={13} color={colors.onSurfaceVariant} strokeWidth={2} />
+                          <Text variant="labelSmall" style={styles.lastSessionMetricText}>
+                            {data.lastCompletedSession.totalVolumeText}
+                          </Text>
+                        </View>
+                        <View style={styles.lastSessionMetricItem}>
+                          <Clock size={13} color={colors.onSurfaceVariant} strokeWidth={2} />
+                          <Text variant="labelSmall" style={styles.lastSessionMetricText}>
+                            {data.lastCompletedSession.durationMin} min
+                          </Text>
+                        </View>
+                        <View style={styles.lastSessionMetricItem}>
+                          <Repeat size={13} color={colors.onSurfaceVariant} strokeWidth={2} />
+                          <Text variant="labelSmall" style={styles.lastSessionMetricText}>
+                            {data.lastCompletedSession.totalSets} séries
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={styles.lastSessionChevron}>
+                    <ChevronRight size={18} color={colors.onSurfaceVariant} strokeWidth={2} />
+                  </View>
+                </Pressable>
+              ) : (
+                <Card variant="surface" style={styles.noLastSessionCard}>
+                  <Text variant="bodySmall" style={styles.noLastSessionText}>
+                    Nenhum treino concluído ainda. Inicie seu primeiro treino acima!
+                  </Text>
+                </Card>
+              )}
+            </View>
+          </>
+        )}
       </ScrollView>
 
       {/* MODAL DE CONFIRMAÇÃO PARA DESCARTAR TREINO EM ANDAMENTO */}
@@ -574,7 +680,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 14,
     paddingBottom: 40,
-    gap: 20,
+    gap: 18,
   },
   greetingContainer: {
     gap: 4,
@@ -745,12 +851,14 @@ const styles = StyleSheet.create({
     color: colors.onSurfaceVariant,
     textAlign: 'center',
   },
+
+  /* ESTADO 4.2: EMPTY STATE */
   emptyCard: {
     backgroundColor: colors.surfaceContainerLow,
     borderRadius: 24,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.05)',
-    paddingVertical: 28,
+    paddingVertical: 32,
     paddingHorizontal: 20,
     alignItems: 'center',
     textAlign: 'center',
@@ -767,6 +875,36 @@ const styles = StyleSheet.create({
     borderRadius: 90,
     backgroundColor: 'rgba(255, 122, 89, 0.06)',
   },
+  emptyIllustrationWrapper: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  pauseBadge: {
+    position: 'absolute',
+    bottom: 2,
+    right: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#352F28',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  pauseBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.onSurface,
+  },
   emptyTitle: {
     fontSize: 20,
     fontFamily: fontFamilies.outfitBold,
@@ -780,57 +918,58 @@ const styles = StyleSheet.create({
     color: colors.onSurfaceVariant,
     textAlign: 'center',
     maxWidth: 280,
-    marginBottom: 20,
+    marginBottom: 24,
+    lineHeight: 20,
   },
   emptyActions: {
     width: '100%',
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 20,
+    gap: 12,
   },
   emptyPrimaryButton: {
     width: '100%',
-    maxWidth: 300,
-    height: 48,
+    maxWidth: 320,
+    height: 52,
     borderRadius: radii.pill,
   },
   emptyFreeButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingVertical: 8,
+    paddingVertical: 10,
     paddingHorizontal: 16,
   },
   emptyFreeText: {
-    fontSize: 14,
+    fontSize: 15,
     color: colors.onSurfaceVariant,
     fontWeight: '500',
   },
-  dicaVoltBox: {
+
+  /* DICA VOLT */
+  dicaVoltCard: {
     backgroundColor: colors.surfaceContainer,
-    borderRadius: 16,
-    padding: 14,
+    borderRadius: 18,
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
-    width: '100%',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.04)',
   },
-  dicaVoltIcon: {
-    width: 32,
-    height: 32,
+  dicaVoltIconCircle: {
+    width: 36,
+    height: 36,
     borderRadius: radii.pill,
     backgroundColor: 'rgba(255, 122, 89, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
-  dicaVoltTextContainer: {
+  dicaVoltContent: {
     flex: 1,
     gap: 4,
   },
-  dicaVoltHeaderRow: {
+  dicaVoltHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -851,11 +990,82 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
   },
-  dicaVoltBody: {
+  dicaVoltDescription: {
+    fontSize: 13,
+    color: colors.onSurfaceVariant,
+    lineHeight: 18,
+  },
+
+  /* IDEIAS POPULARES PARA INICIAR */
+  popularSection: {
+    gap: 10,
+    marginTop: 2,
+  },
+  popularHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 2,
+  },
+  popularSectionTitle: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.onSurfaceVariant,
+  },
+  viewTemplatesLink: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  popularGrid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  popularCard: {
+    flex: 1,
+    height: 112,
+    backgroundColor: colors.surfaceContainer,
+    borderRadius: 18,
+    padding: 14,
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  popularCardPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.98 }],
+  },
+  popularCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    zIndex: 1,
+  },
+  popularCardTitle: {
+    fontSize: 15,
+    fontFamily: fontFamilies.outfitBold,
+    fontWeight: '700',
+    color: colors.onSurface,
+  },
+  popularCardSubtitle: {
     fontSize: 12,
     color: colors.onSurfaceVariant,
-    lineHeight: 17,
+    zIndex: 1,
+    lineHeight: 16,
   },
+  popularCardDecoration: {
+    position: 'absolute',
+    bottom: -16,
+    right: -16,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+  },
+
+  /* SEÇÕES DO ESTADO 4.1 */
   sectionBlock: {
     gap: 12,
   },
