@@ -5,13 +5,20 @@ import {
   Pressable,
   Animated,
   PanResponder,
-  LayoutChangeEvent,
+  Platform,
+  UIManager,
+  LayoutAnimation,
 } from 'react-native';
 import { GripVertical } from 'lucide-react-native';
 import { colors, fontFamilies, radii } from '../theme';
 import { Text } from './Text';
 import { triggerHaptic } from './haptics';
 import { WorkoutExerciseForEdit } from '../db/workouts';
+
+// Habilita animações de layout nativas no Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 export interface ReorderableExerciseListProps {
   exercises: WorkoutExerciseForEdit[];
@@ -21,95 +28,138 @@ export interface ReorderableExerciseListProps {
   onDragEnd?: () => void;
 }
 
-interface RowItemProps {
+interface ExerciseRowProps {
   item: WorkoutExerciseForEdit;
   index: number;
   totalCount: number;
-  isDragging: boolean;
-  isHovered: boolean;
-  draggedIndex: number | null;
-  hoverIndex: number | null;
-  itemHeight: number;
-  panY: Animated.Value;
-  panResponderHandlers: any;
+  isDraggingThis: boolean;
+  isAnyDragging: boolean;
+  onStartDrag: (index: number) => void;
+  onSwap: (fromIndex: number, toIndex: number) => void;
+  onEndDrag: () => void;
   onPress: () => void;
-  onLayout: (e: LayoutChangeEvent) => void;
 }
 
-const ExerciseRow: React.FC<RowItemProps> = ({
+const ExerciseRow: React.FC<ExerciseRowProps> = ({
   item,
   index,
-  isDragging,
-  draggedIndex,
-  hoverIndex,
-  itemHeight,
-  panY,
-  panResponderHandlers,
+  totalCount,
+  isDraggingThis,
+  isAnyDragging,
+  onStartDrag,
+  onSwap,
+  onEndDrag,
   onPress,
-  onLayout,
 }) => {
-  const shiftAnim = useRef(new Animated.Value(0)).current;
+  const accumulatedDy = useRef(0);
+  const dragY = useRef(new Animated.Value(0)).current;
 
-  // Calcula o deslocamento do item que não está sendo arrastado
+  // Refs mutáveis para evitar re-criação do PanResponder durante o gesto
+  const propsRef = useRef({
+    index,
+    item,
+    isDraggingThis,
+    onStartDrag,
+    onSwap,
+    onEndDrag,
+    totalCount,
+  });
+
   useEffect(() => {
-    if (draggedIndex === null || hoverIndex === null || isDragging) {
-      Animated.spring(shiftAnim, {
-        toValue: 0,
-        useNativeDriver: true,
-        tension: 160,
-        friction: 14,
-      }).start();
-      return;
-    }
+    propsRef.current = {
+      index,
+      item,
+      isDraggingThis,
+      onStartDrag,
+      onSwap,
+      onEndDrag,
+      totalCount,
+    };
+  });
 
-    let targetShift = 0;
-    if (draggedIndex < hoverIndex) {
-      // Arrastando para baixo: itens entre draggedIndex+1 e hoverIndex sobem
-      if (index > draggedIndex && index <= hoverIndex) {
-        targetShift = -itemHeight;
-      }
-    } else if (draggedIndex > hoverIndex) {
-      // Arrastando para cima: itens entre hoverIndex e draggedIndex-1 descem
-      if (index >= hoverIndex && index < draggedIndex) {
-        targetShift = itemHeight;
-      }
-    }
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 2,
+      onMoveShouldSetPanResponderCapture: (_, gesture) => Math.abs(gesture.dy) > 2,
 
-    Animated.spring(shiftAnim, {
-      toValue: targetShift,
+      onPanResponderGrant: () => {
+        accumulatedDy.current = 0;
+        dragY.setValue(0);
+        propsRef.current.onStartDrag(propsRef.current.index);
+        triggerHaptic('medium');
+      },
+
+      onPanResponderMove: (_, gesture) => {
+        const currentDy = gesture.dy - accumulatedDy.current;
+        dragY.setValue(currentDy);
+
+        const STEP = 40; // Limiar de troca rápida e intuitiva
+        const curIdx = propsRef.current.index;
+        const count = propsRef.current.totalCount;
+
+        // Arrastando para baixo: ultrapassa o limiar para o próximo slot
+        if (currentDy > STEP && curIdx < count - 1) {
+          accumulatedDy.current += 76;
+          dragY.setValue(currentDy - 76);
+          triggerHaptic('selection');
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+          propsRef.current.onSwap(curIdx, curIdx + 1);
+        }
+        // Arrastando para cima: ultrapassa o limiar para o slot anterior
+        else if (currentDy < -STEP && curIdx > 0) {
+          accumulatedDy.current -= 76;
+          dragY.setValue(currentDy + 76);
+          triggerHaptic('selection');
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+          propsRef.current.onSwap(curIdx, curIdx - 1);
+        }
+      },
+
+      onPanResponderRelease: () => {
+        finishDrag();
+      },
+
+      onPanResponderTerminate: () => {
+        finishDrag();
+      },
+    })
+  ).current;
+
+  const finishDrag = () => {
+    Animated.spring(dragY, {
+      toValue: 0,
       useNativeDriver: true,
-      tension: 160,
-      friction: 14,
-    }).start();
-  }, [draggedIndex, hoverIndex, isDragging, index, itemHeight, shiftAnim]);
+      tension: 180,
+      friction: 12,
+    }).start(() => {
+      dragY.setValue(0);
+      accumulatedDy.current = 0;
+      propsRef.current.onEndDrag();
+      triggerHaptic('success');
+    });
+  };
 
   const formattedIndex = String(index + 1).padStart(2, '0');
 
-  // Estilo animado: o item arrastado segue o panY; os outros usam o shiftAnim
-  const transformStyle = isDragging
-    ? {
-        transform: [{ translateY: panY }, { scale: 1.03 }],
-      }
-    : {
-        transform: [{ translateY: shiftAnim }],
-      };
-
   return (
     <Animated.View
-      onLayout={onLayout}
       style={[
         styles.cardContainer,
-        transformStyle,
-        isDragging && styles.cardContainerDragging,
+        isDraggingThis && styles.cardContainerDragging,
+        isDraggingThis && {
+          transform: [{ translateY: dragY }, { scale: 1.03 }],
+        },
       ]}
     >
       <Pressable
         onPress={onPress}
-        disabled={draggedIndex !== null}
+        disabled={isAnyDragging}
         style={({ pressed }) => [
           styles.exerciseCard,
-          isDragging && styles.exerciseCardDragging,
-          pressed && !isDragging && styles.exerciseCardPressed,
+          isDraggingThis && styles.exerciseCardDragging,
+          pressed && !isDraggingThis && styles.exerciseCardPressed,
         ]}
         accessibilityRole="button"
         accessibilityLabel={`${item.name}, ${item.targetSets} séries de ${item.repMin} a ${item.repMax} repetições. Toque para editar metas.`}
@@ -120,7 +170,7 @@ const ExerciseRow: React.FC<RowItemProps> = ({
             variant="displayMedium"
             style={[
               styles.ordinalNumber,
-              isDragging && styles.ordinalNumberDragging,
+              isDraggingThis && styles.ordinalNumberDragging,
             ]}
           >
             {formattedIndex}
@@ -141,22 +191,23 @@ const ExerciseRow: React.FC<RowItemProps> = ({
           </View>
         </View>
 
-        {/* Alça de Arrasto (Sem setas, 100% interativa) */}
+        {/* Alça de Arrasto (Sem setas, 100% interativa com área de toque ampliada) */}
         <View
-          {...panResponderHandlers}
+          {...panResponder.panHandlers}
           style={styles.dragHandleTouchArea}
+          hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
           accessibilityRole="button"
           accessibilityLabel={`Arrastar para reordenar ${item.name}`}
         >
           <View
             style={[
               styles.dragHandleBox,
-              isDragging && styles.dragHandleBoxActive,
+              isDraggingThis && styles.dragHandleBoxActive,
             ]}
           >
             <GripVertical
               size={20}
-              color={isDragging ? colors.primary : colors.onSurfaceVariant}
+              color={isDraggingThis ? colors.primary : colors.onSurfaceVariant}
               strokeWidth={2}
             />
           </View>
@@ -173,128 +224,54 @@ export const ReorderableExerciseList: React.FC<ReorderableExerciseListProps> = (
   onDragStart,
   onDragEnd,
 }) => {
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
-  const [itemHeight, setItemHeight] = useState(82); // Altura estimada do card + margem
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
-  const panY = useRef(new Animated.Value(0)).current;
-  const draggedIndexRef = useRef<number | null>(null);
-  const hoverIndexRef = useRef<number | null>(null);
-  const itemHeightRef = useRef<number>(82);
-
-  // Mantém refs atualizadas
-  useEffect(() => {
-    draggedIndexRef.current = draggedIndex;
-  }, [draggedIndex]);
-
-  useEffect(() => {
-    hoverIndexRef.current = hoverIndex;
-  }, [hoverIndex]);
-
-  useEffect(() => {
-    itemHeightRef.current = itemHeight;
-  }, [itemHeight]);
-
-  const handleCardLayout = (e: LayoutChangeEvent) => {
-    const h = e.nativeEvent.layout.height;
-    // Card height + margem inferior de 10px
-    if (h > 50 && Math.abs(h + 10 - itemHeight) > 2) {
-      setItemHeight(h + 10);
-      itemHeightRef.current = h + 10;
+  const handleStartDrag = (index: number) => {
+    const item = exercises[index];
+    if (item) {
+      setActiveDragId(item.id || item.exerciseId);
     }
+    onDragStart?.();
   };
 
-  // Cria um PanResponder para um índice específico
-  const createPanResponder = (index: number) => {
-    return PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 3,
-      onPanResponderGrant: () => {
-        draggedIndexRef.current = index;
-        setDraggedIndex(index);
-        hoverIndexRef.current = index;
-        setHoverIndex(index);
-        panY.setValue(0);
-        onDragStart?.();
-        triggerHaptic('medium');
-      },
-      onPanResponderMove: (_, gesture) => {
-        panY.setValue(gesture.dy);
-        const slotDelta = Math.round(gesture.dy / itemHeightRef.current);
-        const nextHover = Math.max(0, Math.min(exercises.length - 1, index + slotDelta));
-        if (nextHover !== hoverIndexRef.current) {
-          hoverIndexRef.current = nextHover;
-          setHoverIndex(nextHover);
-          triggerHaptic('selection');
-        }
-      },
-      onPanResponderRelease: () => {
-        finishDrag(index);
-      },
-      onPanResponderTerminate: () => {
-        finishDrag(index);
-      },
-    });
+  const handleSwap = (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) return;
+    if (fromIndex < 0 || toIndex < 0) return;
+    if (fromIndex >= exercises.length || toIndex >= exercises.length) return;
+
+    const updated = [...exercises];
+    const [moved] = updated.splice(fromIndex, 1);
+    updated.splice(toIndex, 0, moved);
+
+    const reindexed = updated.map((e, idx) => ({ ...e, position: idx }));
+    onReorder(reindexed);
   };
 
-  const finishDrag = (fromIndex: number) => {
-    const toIndex = hoverIndexRef.current;
-    if (toIndex === null || toIndex === undefined) {
-      setDraggedIndex(null);
-      setHoverIndex(null);
-      panY.setValue(0);
-      onDragEnd?.();
-      return;
-    }
-
-    const targetOffset = (toIndex - fromIndex) * itemHeightRef.current;
-
-    Animated.spring(panY, {
-      toValue: targetOffset,
-      useNativeDriver: true,
-      tension: 160,
-      friction: 14,
-    }).start(() => {
-      if (fromIndex !== toIndex) {
-        const next = [...exercises];
-        const [moved] = next.splice(fromIndex, 1);
-        next.splice(toIndex, 0, moved);
-        const reindexed = next.map((e, idx) => ({ ...e, position: idx }));
-        onReorder(reindexed);
-      }
-
-      panY.setValue(0);
-      draggedIndexRef.current = null;
-      hoverIndexRef.current = null;
-      setDraggedIndex(null);
-      setHoverIndex(null);
-      onDragEnd?.();
-      triggerHaptic('success');
-    });
+  const handleEndDrag = () => {
+    setActiveDragId(null);
+    onDragEnd?.();
   };
+
+  const isAnyDragging = activeDragId !== null;
 
   return (
     <View style={styles.container}>
       {exercises.map((item, index) => {
-        const isDragging = draggedIndex === index;
-        const isHovered = hoverIndex === index;
-        const responder = createPanResponder(index);
+        const itemId = item.id || item.exerciseId || `item-${index}`;
+        const isDraggingThis = activeDragId === itemId;
 
         return (
           <ExerciseRow
-            key={item.id || `item-${index}`}
+            key={itemId}
             item={item}
             index={index}
             totalCount={exercises.length}
-            isDragging={isDragging}
-            isHovered={isHovered}
-            draggedIndex={draggedIndex}
-            hoverIndex={hoverIndex}
-            itemHeight={itemHeight}
-            panY={panY}
-            panResponderHandlers={responder.panHandlers}
+            isDraggingThis={isDraggingThis}
+            isAnyDragging={isAnyDragging}
+            onStartDrag={handleStartDrag}
+            onSwap={handleSwap}
+            onEndDrag={handleEndDrag}
             onPress={() => onPressItem(index)}
-            onLayout={handleCardLayout}
           />
         );
       })}
@@ -330,7 +307,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#35302C',
   },
   exerciseCardDragging: {
-    backgroundColor: '#3A251F', // Coral tint quente sem destaque âmbar
+    backgroundColor: '#3A251F', // Coral tint quente sem destaque âmbar (DESIGN.md)
     borderColor: colors.primary, // #FF7A59
     borderWidth: 1.5,
     shadowColor: '#000',
@@ -370,7 +347,7 @@ const styles = StyleSheet.create({
     color: colors.onSurfaceVariant,
   },
   dragHandleTouchArea: {
-    padding: 8,
+    padding: 10,
     marginRight: -6,
     justifyContent: 'center',
     alignItems: 'center',
@@ -381,6 +358,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   dragHandleBoxActive: {
-    backgroundColor: 'rgba(255, 122, 89, 0.2)', // Fundo coral suave ao arrastar
+    backgroundColor: 'rgba(255, 122, 89, 0.22)', // Fundo coral suave ao arrastar
   },
 });
