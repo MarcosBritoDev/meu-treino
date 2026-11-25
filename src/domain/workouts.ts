@@ -127,3 +127,18 @@ export function validateGroupName(
   }
   return { isValid: true };
 }
+
+/**
+ * Rótulo dinâmico da faixa de repetições (Tela 3.6):
+ * - Força: até 6 reps
+ * - Janela de hipertrofia: 7 a 12 reps
+ * - Resistência: acima de 12 reps
+ */
+export function getRepRangeLabel(minReps: number, maxReps: number): string {
+  if (maxReps <= 6) return 'Zona de força';
+  if (minReps >= 7 && maxReps <= 12) return 'Janela de hipertrofia';
+  if (minReps >= 13) return 'Resistência muscular';
+  if (minReps <= 6 && maxReps >= 7 && maxReps <= 12) return 'Força e hipertrofia';
+  return 'Hipertrofia e resistência';
+}
+

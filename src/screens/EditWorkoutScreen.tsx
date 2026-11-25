@@ -31,6 +31,7 @@ import { colors, radii, spacing, fontFamilies } from '../theme';
 import { Text } from '../ui/Text';
 import { ConfirmModal } from '../ui/ConfirmModal';
 import { Toast } from '../ui/Toast';
+import { ExerciseTargetSheet } from '../ui/ExerciseTargetSheet';
 import { triggerHaptic } from '../ui/haptics';
 import { estimarDuracao, formatarDuracao } from '../domain/duration';
 import {
@@ -614,247 +615,42 @@ export const EditWorkoutScreen: React.FC = () => {
       </View>
 
       {/* 3. SHEET 3.6: ALVO DO EXERCÍCIO */}
-      <Modal
-        transparent
+      <ExerciseTargetSheet
         visible={targetModalVisible}
-        animationType="fade"
-        onRequestClose={() => setTargetModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <Pressable
-            style={styles.modalBackdrop}
-            onPress={() => setTargetModalVisible(false)}
-          />
-
-          <View style={styles.targetSheetContainer}>
-            <View style={styles.sheetHandle} />
-
-            {/* Cabeçalho do Alvo */}
-            <View style={styles.targetSheetHeader}>
-              <View style={styles.targetHeaderLeft}>
-                <Text variant="headline" style={styles.targetExerciseTitle}>
-                  {currentExerciseForTarget?.name || 'Configurar exercício'}
-                </Text>
-                <Text variant="bodySmall" style={styles.targetSubtitle}>
-                  Configuração de alvo
-                </Text>
-              </View>
-              <Pressable
-                onPress={() => setTargetModalVisible(false)}
-                style={styles.sheetCloseButton}
-              >
-                <X size={18} color={colors.onSurfaceVariant} strokeWidth={2} />
-              </Pressable>
-            </View>
-
-            {/* BLOCO SÉRIES */}
-            <View style={styles.targetBlock}>
-              <View style={styles.targetBlockLabelRow}>
-                <Text variant="labelSmall" style={styles.targetBlockTitle}>
-                  Séries
-                </Text>
-                <Text variant="bodySmall" style={styles.targetBlockDescription}>
-                  Total de blocos de trabalho
-                </Text>
-              </View>
-
-              <View style={styles.stepperContainer}>
-                <Pressable
-                  onPress={() => {
-                    if (targetSets > 1) {
-                      triggerHaptic('selection');
-                      setTargetSets(targetSets - 1);
-                    }
-                  }}
-                  style={styles.stepperButton}
-                  accessibilityRole="button"
-                  accessibilityLabel="Diminuir séries"
-                >
-                  <Text variant="headline" style={styles.stepperButtonText}>
-                    -
-                  </Text>
-                </Pressable>
-                <Text variant="displayMedium" style={styles.stepperValueText}>
-                  {targetSets}
-                </Text>
-                <Pressable
-                  onPress={() => {
-                    if (targetSets < 15) {
-                      triggerHaptic('selection');
-                      setTargetSets(targetSets + 1);
-                    }
-                  }}
-                  style={styles.stepperButton}
-                  accessibilityRole="button"
-                  accessibilityLabel="Aumentar séries"
-                >
-                  <Text variant="headline" style={styles.stepperButtonText}>
-                    +
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-
-            {/* BLOCO FAIXA DE REPETIÇÕES */}
-            <View style={styles.targetBlock}>
-              <View style={styles.targetBlockLabelRow}>
-                <Text variant="labelSmall" style={styles.targetBlockTitle}>
-                  Faixa de repetições
-                </Text>
-                <Text variant="bodySmall" style={styles.hypertrophyTag}>
-                  Janela de hipertrofia
-                </Text>
-              </View>
-
-              <View style={styles.repRangeGrid}>
-                {/* Mínimo */}
-                <View style={styles.repBox}>
-                  <Text variant="bodySmall" style={styles.repBoxLabel}>
-                    Mínimo
-                  </Text>
-                  <View style={styles.repStepperRow}>
-                    <Pressable
-                      onPress={() => {
-                        if (targetRepMin > 1) {
-                          triggerHaptic('selection');
-                          setTargetRepMin(targetRepMin - 1);
-                        }
-                      }}
-                      style={styles.repStepperBtn}
-                    >
-                      <Text variant="bodyLarge" style={styles.repStepperBtnText}>
-                        -
-                      </Text>
-                    </Pressable>
-                    <Text variant="displayMedium" style={styles.repValue}>
-                      {targetRepMin}
-                    </Text>
-                    <Pressable
-                      onPress={() => {
-                        if (targetRepMin < targetRepMax) {
-                          triggerHaptic('selection');
-                          setTargetRepMin(targetRepMin + 1);
-                        }
-                      }}
-                      style={styles.repStepperBtn}
-                    >
-                      <Text variant="bodyLarge" style={styles.repStepperBtnText}>
-                        +
-                      </Text>
-                    </Pressable>
-                  </View>
-                </View>
-
-                {/* Máximo */}
-                <View style={styles.repBox}>
-                  <Text variant="bodySmall" style={styles.repBoxLabel}>
-                    Máximo
-                  </Text>
-                  <View style={styles.repStepperRow}>
-                    <Pressable
-                      onPress={() => {
-                        if (targetRepMax > targetRepMin) {
-                          triggerHaptic('selection');
-                          setTargetRepMax(targetRepMax - 1);
-                        }
-                      }}
-                      style={styles.repStepperBtn}
-                    >
-                      <Text variant="bodyLarge" style={styles.repStepperBtnText}>
-                        -
-                      </Text>
-                    </Pressable>
-                    <Text variant="displayMedium" style={styles.repValue}>
-                      {targetRepMax}
-                    </Text>
-                    <Pressable
-                      onPress={() => {
-                        if (targetRepMax < 50) {
-                          triggerHaptic('selection');
-                          setTargetRepMax(targetRepMax + 1);
-                        }
-                      }}
-                      style={styles.repStepperBtn}
-                    >
-                      <Text variant="bodyLarge" style={styles.repStepperBtnText}>
-                        +
-                      </Text>
-                    </Pressable>
-                  </View>
-                </View>
-              </View>
-            </View>
-
-            {/* BLOCO DESCANSO */}
-            <View style={styles.targetBlock}>
-              <View style={styles.targetBlockLabelRow}>
-                <Text variant="labelSmall" style={styles.targetBlockTitle}>
-                  Descanso entre séries
-                </Text>
-                <Text variant="bodySmall" style={styles.targetBlockDescription}>
-                  Recuperação recomendada
-                </Text>
-              </View>
-
-              <View style={styles.restChipsRow}>
-                {REST_CHIPS.map((sec) => {
-                  const isSelected = targetRestS === sec;
-                  return (
-                    <Pressable
-                      key={sec}
-                      onPress={() => {
-                        triggerHaptic('selection');
-                        setTargetRestS(sec);
-                      }}
-                      style={[
-                        styles.restChip,
-                        isSelected && styles.restChipSelected,
-                      ]}
-                    >
-                      <Text
-                        variant="labelSmall"
-                        style={[
-                          styles.restChipText,
-                          isSelected && styles.restChipTextSelected,
-                        ]}
-                      >
-                        {sec} s
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* AÇÕES DA SHEET DE ALVO */}
-            <View style={styles.targetActionsRow}>
-              <Pressable
-                onPress={handleApplyTargets}
-                style={styles.applyTargetsButton}
-              >
-                <CheckCircle size={18} color={colors.onPrimary} strokeWidth={2.4} />
-                <Text variant="bodyMedium" style={styles.applyTargetsText}>
-                  Aplicar metas
-                </Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => {
-                  if (targetIndex !== null) {
-                    handleRemoveExercise(targetIndex);
-                  }
-                }}
-                style={styles.removeTargetButton}
-              >
-                <Trash2 size={18} color={colors.error} strokeWidth={2} />
-                <Text variant="labelSmall" style={styles.removeTargetText}>
-                  Remover
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        exerciseName={currentExerciseForTarget?.name || ''}
+        initialSets={currentExerciseForTarget?.targetSets ?? 4}
+        initialRepMin={currentExerciseForTarget?.repMin ?? 8}
+        initialRepMax={currentExerciseForTarget?.repMax ?? 10}
+        initialRestS={currentExerciseForTarget?.restS ?? 90}
+        onClose={() => {
+          setTargetModalVisible(false);
+          setTargetIndex(null);
+        }}
+        onApply={(targets) => {
+          if (targetIndex === null || !exercises[targetIndex]) return;
+          triggerHaptic('success');
+          setExercises((prev) => {
+            const updated = [...prev];
+            updated[targetIndex] = {
+              ...updated[targetIndex],
+              targetSets: targets.targetSets,
+              repMin: targets.repMin,
+              repMax: targets.repMax,
+              restS: targets.restS,
+            };
+            return updated;
+          });
+          setTargetModalVisible(false);
+          setTargetIndex(null);
+        }}
+        onRemove={() => {
+          if (targetIndex !== null) {
+            handleRemoveExercise(targetIndex);
+            setTargetModalVisible(false);
+            setTargetIndex(null);
+          }
+        }}
+      />
 
       {/* 4. MODAL PARA ADICIONAR EXERCÍCIO DO CATÁLOGO */}
       <Modal
