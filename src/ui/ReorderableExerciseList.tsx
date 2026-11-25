@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback, memo } from 'react';
+import React, { useRef, useState, useEffect, useMemo, memo } from 'react';
 import {
   View,
   StyleSheet,
@@ -21,73 +21,62 @@ export interface ReorderableExerciseListProps {
   onDragEnd?: () => void;
 }
 
-// Altura exata do card + espaço entre cards = distância exata entre slots
+/**
+ * Arquitetura anti-flicker:
+ * - Cada card é posicionado de forma absoluta e tem seu próprio Animated.Value (translateY).
+ * - A posição de um card NÃO depende do índice no array React: reordenar o array
+ *   no fim do gesto não move nada na tela (os valores já estão nos slots finais).
+ * - Durante o arrasto não há setState por movimento: o card arrastado segue o dedo
+ *   via setValue (native driver) e só o vizinho que troca de slot anima.
+ */
 const ITEM_HEIGHT = 74;
 const GAP = 10;
 const PITCH = ITEM_HEIGHT + GAP;
+const SWAP_DURATION = 160;
+const SETTLE_DURATION = 160;
+
+const getId = (item: WorkoutExerciseForEdit, index: number): string =>
+  String(item.id || item.exerciseId || `item-${index}`);
+
+interface DragController {
+  start: (id: string) => void;
+  move: (id: string, dy: number) => void;
+  end: (id: string) => void;
+  press: (id: string) => void;
+}
 
 interface ExerciseRowProps {
   item: WorkoutExerciseForEdit;
-  index: number;
-  dragIndex: number | null;
-  overIndex: number | null;
-  onStartDrag: (index: number) => void;
-  onMoveDrag: (dy: number) => void;
-  onEndDrag: (commit: boolean) => void;
-  onPress: () => void;
+  displayIndex: number;
+  y: Animated.Value;
+  isDragging: boolean;
+  anyDragging: boolean;
+  id: string;
+  controller: DragController;
 }
 
 const ExerciseRowComponent: React.FC<ExerciseRowProps> = ({
   item,
-  index,
-  dragIndex,
-  overIndex,
-  onStartDrag,
-  onMoveDrag,
-  onEndDrag,
-  onPress,
+  displayIndex,
+  y,
+  isDragging,
+  anyDragging,
+  id,
+  controller,
 }) => {
-  const isDraggingThis = dragIndex === index;
-  const isAnyDragging = dragIndex !== null;
-
-  const dragY = useRef(new Animated.Value(0)).current;
-  const shiftY = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(1)).current;
 
-  const propsRef = useRef({ index, dragIndex, overIndex, onStartDrag, onMoveDrag, onEndDrag });
-  propsRef.current = { index, dragIndex, overIndex, onStartDrag, onMoveDrag, onEndDrag };
+  const latest = useRef({ id, controller });
+  latest.current = { id, controller };
 
-  // Animação suave de transição dos vizinhos sem oscilação ou piscada
-  useEffect(() => {
-    if (dragIndex === null || overIndex === null) {
-      Animated.timing(shiftY, {
-        toValue: 0,
-        duration: 140,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start();
-      return;
-    }
-
-    if (index === dragIndex) {
-      shiftY.setValue(0);
-      return;
-    }
-
-    let target = 0;
-    if (dragIndex < overIndex && index > dragIndex && index <= overIndex) {
-      target = -PITCH;
-    } else if (dragIndex > overIndex && index >= overIndex && index < dragIndex) {
-      target = PITCH;
-    }
-
-    Animated.timing(shiftY, {
-      toValue: target,
-      duration: 150,
-      easing: Easing.out(Easing.cubic),
+  const animateScale = (to: number) => {
+    Animated.timing(scale, {
+      toValue: to,
+      duration: 120,
+      easing: Easing.out(Easing.quad),
       useNativeDriver: true,
     }).start();
-  }, [dragIndex, overIndex, index, shiftY]);
+  };
 
   const panResponder = useRef(
     PanResponder.create({
@@ -98,69 +87,40 @@ const ExerciseRowComponent: React.FC<ExerciseRowProps> = ({
       onPanResponderTerminationRequest: () => false,
 
       onPanResponderGrant: () => {
-        dragY.setValue(0);
-        propsRef.current.onStartDrag(propsRef.current.index);
-        Animated.timing(scale, {
-          toValue: 1.025,
-          duration: 100,
-          easing: Easing.out(Easing.quad),
-          useNativeDriver: true,
-        }).start();
+        animateScale(1.03);
+        latest.current.controller.start(latest.current.id);
       },
-
       onPanResponderMove: (_, g) => {
-        dragY.setValue(g.dy);
-        propsRef.current.onMoveDrag(g.dy);
+        latest.current.controller.move(latest.current.id, g.dy);
       },
-
-      onPanResponderRelease: () => finish(true),
-      onPanResponderTerminate: () => finish(false),
+      onPanResponderRelease: () => {
+        animateScale(1);
+        latest.current.controller.end(latest.current.id);
+      },
+      onPanResponderTerminate: () => {
+        animateScale(1);
+        latest.current.controller.end(latest.current.id);
+      },
     })
   ).current;
 
-  const finish = (commit: boolean) => {
-    const { index: i, overIndex: over, onEndDrag: end } = propsRef.current;
-    const finalSlot = commit && over !== null ? over : i;
-
-    Animated.parallel([
-      Animated.timing(dragY, {
-        toValue: (finalSlot - i) * PITCH,
-        duration: 140,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(scale, {
-        toValue: 1,
-        duration: 140,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      end(commit);
-      dragY.setValue(0);
-    });
-  };
-
-  const formattedIndex = String(index + 1).padStart(2, '0');
+  const formattedIndex = String(displayIndex + 1).padStart(2, '0');
 
   return (
     <Animated.View
       style={[
         styles.cardContainer,
-        isDraggingThis && styles.cardContainerDragging,
-        {
-          transform: isDraggingThis
-            ? [{ translateY: dragY }, { scale }]
-            : [{ translateY: shiftY }],
-        },
+        isDragging && styles.cardContainerDragging,
+        { transform: [{ translateY: y }, { scale }] },
       ]}
     >
       <Pressable
-        onPress={onPress}
-        disabled={isAnyDragging}
+        onPress={() => controller.press(id)}
+        disabled={anyDragging}
         style={({ pressed }) => [
           styles.exerciseCard,
-          isDraggingThis && styles.exerciseCardDragging,
-          pressed && !isDraggingThis && styles.exerciseCardPressed,
+          isDragging && styles.exerciseCardDragging,
+          pressed && !isDragging && styles.exerciseCardPressed,
         ]}
         accessibilityRole="button"
         accessibilityLabel={`${item.name}, ${item.targetSets} séries de ${item.repMin} a ${item.repMax} repetições. Toque para editar metas.`}
@@ -186,10 +146,10 @@ const ExerciseRowComponent: React.FC<ExerciseRowProps> = ({
           accessibilityRole="button"
           accessibilityLabel={`Arrastar para reordenar ${item.name}`}
         >
-          <View style={[styles.dragHandleBox, isDraggingThis && styles.dragHandleBoxActive]}>
+          <View style={[styles.dragHandleBox, isDragging && styles.dragHandleBoxActive]}>
             <GripVertical
               size={20}
-              color={isDraggingThis ? colors.primary : colors.onSurfaceVariant}
+              color={isDragging ? colors.primary : colors.onSurfaceVariant}
               strokeWidth={2}
             />
           </View>
@@ -199,7 +159,6 @@ const ExerciseRowComponent: React.FC<ExerciseRowProps> = ({
   );
 };
 
-// Memoização para evitar re-renderização e piscadas nos itens não afetados
 const ExerciseRow = memo(ExerciseRowComponent);
 
 export const ReorderableExerciseList: React.FC<ReorderableExerciseListProps> = ({
@@ -209,78 +168,163 @@ export const ReorderableExerciseList: React.FC<ReorderableExerciseListProps> = (
   onDragStart,
   onDragEnd,
 }) => {
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [overIndex, setOverIndex] = useState<number | null>(null);
-  const overRef = useRef<number | null>(null);
-  const dragRef = useRef<number | null>(null);
+  // Posição Y animada de cada card, indexada por id (independe da ordem do array)
+  const yMap = useRef<Map<string, Animated.Value>>(new Map());
+  // Ordem "viva" (ids) durante/depois do arrasto
+  const orderRef = useRef<string[]>(exercises.map(getId));
+  const [liveOrder, setLiveOrder] = useState<string[]>(orderRef.current);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
 
-  const handleStartDrag = useCallback(
-    (index: number) => {
-      dragRef.current = index;
-      overRef.current = index;
-      setDragIndex(index);
-      setOverIndex(index);
-      triggerHaptic('medium');
-      onDragStart?.();
-    },
-    [onDragStart]
-  );
+  const draggingRef = useRef<string | null>(null);
+  const startYRef = useRef(0);
 
-  const handleMoveDrag = useCallback(
-    (dy: number) => {
-      const from = dragRef.current;
-      if (from === null) return;
-      const raw = Math.round(from + dy / PITCH);
-      const next = Math.max(0, Math.min(exercises.length - 1, raw));
-      if (next !== overRef.current) {
-        overRef.current = next;
-        setOverIndex(next);
+  const latest = useRef({ exercises, onReorder, onPressItem, onDragStart, onDragEnd });
+  latest.current = { exercises, onReorder, onPressItem, onDragStart, onDragEnd };
+
+  const getY = (id: string, initial: number): Animated.Value => {
+    let v = yMap.current.get(id);
+    if (!v) {
+      v = new Animated.Value(initial);
+      yMap.current.set(id, v);
+    }
+    return v;
+  };
+
+  // Sincroniza com as props quando NÃO está arrastando (adição/remoção/reordenação externa)
+  useEffect(() => {
+    if (draggingRef.current) return;
+
+    const ids = exercises.map(getId);
+    orderRef.current = ids;
+    ids.forEach((id, i) => getY(id, i * PITCH).setValue(i * PITCH));
+
+    // Limpa valores de itens removidos
+    const alive = new Set(ids);
+    Array.from(yMap.current.keys()).forEach((k) => {
+      if (!alive.has(k)) yMap.current.delete(k);
+    });
+
+    setLiveOrder((prev) =>
+      prev.length === ids.length && prev.every((v, i) => v === ids[i]) ? prev : ids
+    );
+  }, [exercises]);
+
+  const controller = useMemo<DragController>(
+    () => ({
+      start: (id) => {
+        const slot = orderRef.current.indexOf(id);
+        if (slot < 0) return;
+        draggingRef.current = id;
+        startYRef.current = slot * PITCH;
+        setDraggingId(id);
+        triggerHaptic('medium');
+        latest.current.onDragStart?.();
+      },
+
+      move: (id, dy) => {
+        if (draggingRef.current !== id) return;
+        const order = orderRef.current;
+        const count = order.length;
+        const maxY = (count - 1) * PITCH;
+
+        const y = Math.max(0, Math.min(maxY, startYRef.current + dy));
+        const dragged = yMap.current.get(id);
+        dragged?.setValue(y);
+
+        const currentSlot = order.indexOf(id);
+        const targetSlot = Math.max(0, Math.min(count - 1, Math.round(y / PITCH)));
+        if (targetSlot === currentSlot) return;
+
+        // Nova ordem: move o arrastado para o slot alvo
+        const next = [...order];
+        next.splice(currentSlot, 1);
+        next.splice(targetSlot, 0, id);
+
+        // Anima apenas os cards cujo slot mudou (exceto o arrastado)
+        next.forEach((otherId, slot) => {
+          if (otherId === id) return;
+          if (order[slot] === otherId) return; // slot não mudou
+          const v = yMap.current.get(otherId);
+          if (!v) return;
+          Animated.timing(v, {
+            toValue: slot * PITCH,
+            duration: SWAP_DURATION,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }).start();
+        });
+
+        orderRef.current = next;
+        setLiveOrder(next);
         triggerHaptic('selection');
-      }
-    },
-    [exercises.length]
+      },
+
+      end: (id) => {
+        if (draggingRef.current !== id) return;
+        const finalOrder = orderRef.current;
+        const finalSlot = finalOrder.indexOf(id);
+        const dragged = yMap.current.get(id);
+        if (!dragged) {
+          draggingRef.current = null;
+          setDraggingId(null);
+          return;
+        }
+
+        Animated.timing(dragged, {
+          toValue: finalSlot * PITCH,
+          duration: SETTLE_DURATION,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }).start(() => {
+          const { exercises: list, onReorder: reorder, onDragEnd: dragEnd } = latest.current;
+
+          const byId = new Map(list.map((e, i) => [getId(e, i), e]));
+          const reordered = finalOrder
+            .map((fid) => byId.get(fid))
+            .filter((e): e is WorkoutExerciseForEdit => !!e)
+            .map((e, idx) => ({ ...e, position: idx }));
+
+          const changed = finalOrder.some((fid, i) => getId(list[i], i) !== fid);
+
+          draggingRef.current = null;
+          setDraggingId(null);
+          triggerHaptic('success');
+          if (changed) reorder(reordered);
+          dragEnd?.();
+        });
+      },
+
+      press: (id) => {
+        const idx = latest.current.exercises.findIndex((e, i) => getId(e, i) === id);
+        if (idx >= 0) latest.current.onPressItem(idx);
+      },
+    }),
+    []
   );
 
-  const handleEndDrag = useCallback(
-    (commit: boolean) => {
-      const from = dragRef.current;
-      const to = overRef.current;
+  const positions = useMemo(() => {
+    const m = new Map<string, number>();
+    liveOrder.forEach((id, i) => m.set(id, i));
+    return m;
+  }, [liveOrder]);
 
-      if (commit && from !== null && to !== null && from !== to) {
-        const updated = [...exercises];
-        const [moved] = updated.splice(from, 1);
-        updated.splice(to, 0, moved);
-        onReorder(updated.map((e, idx) => ({ ...e, position: idx })));
-      }
-
-      // Sincroniza a limpeza de estado com o próximo frame de renderização evitando o snapback de 1 frame
-      requestAnimationFrame(() => {
-        dragRef.current = null;
-        overRef.current = null;
-        setDragIndex(null);
-        setOverIndex(null);
-        triggerHaptic('success');
-        onDragEnd?.();
-      });
-    },
-    [exercises, onReorder, onDragEnd]
-  );
+  const totalHeight = Math.max(0, exercises.length * PITCH - GAP);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { height: totalHeight }]}>
       {exercises.map((item, index) => {
-        const itemId = item.id || item.exerciseId || `item-${index}`;
+        const id = getId(item, index);
+        const displayIndex = positions.get(id) ?? index;
         return (
           <ExerciseRow
-            key={itemId}
+            key={id}
+            id={id}
             item={item}
-            index={index}
-            dragIndex={dragIndex}
-            overIndex={overIndex}
-            onStartDrag={handleStartDrag}
-            onMoveDrag={handleMoveDrag}
-            onEndDrag={handleEndDrag}
-            onPress={() => onPressItem(index)}
+            displayIndex={displayIndex}
+            y={getY(id, displayIndex * PITCH)}
+            isDragging={draggingId === id}
+            anyDragging={draggingId !== null}
+            controller={controller}
           />
         );
       })}
@@ -289,15 +333,20 @@ export const ReorderableExerciseList: React.FC<ReorderableExerciseListProps> = (
 };
 
 const styles = StyleSheet.create({
-  container: {},
+  container: {
+    position: 'relative',
+  },
   cardContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
     height: ITEM_HEIGHT,
-    marginBottom: GAP,
     zIndex: 1,
   },
   cardContainerDragging: {
     zIndex: 9999,
-    elevation: 6,
+    elevation: 8,
   },
   exerciseCard: {
     height: ITEM_HEIGHT,
@@ -308,7 +357,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderWidth: 1.5,
-    borderColor: 'transparent', // Mantém largura da borda fixa para evitar reflow layout
+    borderColor: 'transparent', // borda de largura fixa evita reflow
   },
   exerciseCardPressed: {
     backgroundColor: '#35302C',
@@ -316,12 +365,11 @@ const styles = StyleSheet.create({
   exerciseCardDragging: {
     backgroundColor: '#3A251F',
     borderColor: colors.primary,
-    borderWidth: 1.5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 6,
+    elevation: 8,
   },
   exerciseCardLeft: {
     flexDirection: 'row',
