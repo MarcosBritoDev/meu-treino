@@ -14,6 +14,7 @@ import { OnboardingScreen } from '../screens/OnboardingScreen';
 import { NewExerciseScreen } from '../screens/NewExerciseScreen';
 import { ExerciseDetailScreen } from '../screens/ExerciseDetailScreen';
 import { GroupDetailScreen } from '../screens/GroupDetailScreen';
+import { EditWorkoutScreen } from '../screens/EditWorkoutScreen';
 import { colors } from '../theme';
 import { useSettingsStore } from '../store/useSettingsStore';
 
@@ -95,6 +96,13 @@ export function AppNavigator() {
       <Stack.Screen
         name="GroupDetail"
         component={GroupDetailScreen}
+        options={{
+          presentation: 'card',
+        }}
+      />
+      <Stack.Screen
+        name="EditWorkout"
+        component={EditWorkoutScreen}
         options={{
           presentation: 'card',
         }}

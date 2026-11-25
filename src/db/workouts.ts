@@ -946,5 +946,204 @@ export function getExistingGroupNames(excludeGroupId?: string): string[] {
   return rows.map((r) => r.name);
 }
 
+export interface WorkoutExerciseForEdit {
+  id: string;
+  exerciseId: string;
+  name: string;
+  muscleGroup: string;
+  equipment: string;
+  position: number;
+  targetSets: number;
+  repMin: number;
+  repMax: number;
+  restS: number;
+  note?: string | null;
+}
+
+export interface WorkoutForEdit {
+  id: string;
+  groupId: string | null;
+  groupName: string;
+  code: string;
+  name: string;
+  isActive: boolean;
+  exercises: WorkoutExerciseForEdit[];
+  allGroups: { id: string; name: string }[];
+}
+
+/**
+ * Consulta os dados completos de um treino para a tela 3.5 Editar treino.
+ */
+export function getWorkoutForEdit(workoutId: string): WorkoutForEdit | null {
+  const rawDb = getExpoDb();
+
+  const workoutRows = rawDb.getAllSync<{
+    id: string;
+    groupId: string | null;
+    name: string;
+    position: number;
+    isActive: number;
+    groupName: string | null;
+  }>(
+    `SELECT 
+       w.id,
+       w.group_id AS groupId,
+       w.name,
+       w.position,
+       w.is_active AS isActive,
+       g.name AS groupName
+     FROM workouts w
+     LEFT JOIN groups g ON g.id = w.group_id
+     WHERE w.id = ?
+     LIMIT 1`,
+    [workoutId]
+  );
+
+  if (workoutRows.length === 0) return null;
+  const w = workoutRows[0];
+
+  // Identifica código do treino (ex.: A-1, A-2)
+  let code = `A-${w.position + 1}`;
+  if (w.groupId) {
+    const groupWorkouts = rawDb.getAllSync<{ id: string }>(
+      `SELECT id FROM workouts WHERE group_id = ? ORDER BY position ASC`,
+      [w.groupId]
+    );
+    const pos = groupWorkouts.findIndex((item) => item.id === w.id);
+    if (pos !== -1) {
+      code = `A-${pos + 1}`;
+    }
+  }
+
+  // Exercícios da ficha
+  const exRows = rawDb.getAllSync<{
+    id: string;
+    exerciseId: string;
+    name: string;
+    muscleGroup: string;
+    equipment: string;
+    position: number;
+    targetSets: number;
+    repMin: number;
+    repMax: number;
+    restS: number;
+    note: string | null;
+  }>(
+    `SELECT 
+       we.id,
+       we.exercise_id AS exerciseId,
+       e.name,
+       e.muscle_group AS muscleGroup,
+       e.equipment,
+       we.position,
+       we.target_sets AS targetSets,
+       we.rep_min AS repMin,
+       we.rep_max AS repMax,
+       we.rest_s AS restS,
+       we.note
+     FROM workout_exercises we
+     JOIN exercises e ON e.id = we.exercise_id
+     WHERE we.workout_id = ?
+     ORDER BY we.position ASC`,
+    [workoutId]
+  );
+
+  const allGroups = rawDb.getAllSync<{ id: string; name: string }>(
+    `SELECT id, name FROM groups ORDER BY position ASC`
+  );
+
+  return {
+    id: w.id,
+    groupId: w.groupId,
+    groupName: w.groupName || 'Personalizada',
+    code,
+    name: w.name,
+    isActive: w.isActive === 1,
+    exercises: exRows,
+    allGroups,
+  };
+}
+
+/**
+ * Salva as alterações de um treino (nome, grupo, status ativo e lista de exercícios reordenados).
+ * Conforme regra: não altera sessões passadas já concluídas.
+ */
+export function saveWorkout(
+  workoutId: string,
+  data: {
+    name: string;
+    groupId?: string | null;
+    isActive?: boolean;
+    exercises: WorkoutExerciseForEdit[];
+  }
+): void {
+  const rawDb = getExpoDb();
+
+  rawDb.runSync(
+    `UPDATE workouts 
+     SET name = ?, group_id = ?, is_active = ? 
+     WHERE id = ?`,
+    [
+      data.name.trim(),
+      data.groupId ?? null,
+      data.isActive !== false ? 1 : 0,
+      workoutId,
+    ]
+  );
+
+  // Substitui os exercícios da ficha mantendo integridade
+  rawDb.runSync(`DELETE FROM workout_exercises WHERE workout_id = ?`, [workoutId]);
+
+  for (let i = 0; i < data.exercises.length; i++) {
+    const ex = data.exercises[i];
+    const newId =
+      ex.id && !ex.id.startsWith('new_')
+        ? ex.id
+        : `we_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 6)}`;
+
+    rawDb.runSync(
+      `INSERT INTO workout_exercises (
+         id, workout_id, exercise_id, position, target_sets, rep_min, rep_max, rest_s, note
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        newId,
+        workoutId,
+        ex.exerciseId,
+        i, // Nova posição reordenada
+        ex.targetSets,
+        ex.repMin,
+        ex.repMax,
+        ex.restS,
+        ex.note || null,
+      ]
+    );
+  }
+}
+
+/**
+ * Retorna todos os exercícios disponíveis no catálogo para adição à ficha de treino.
+ */
+export function getAllExercisesForSelector(): {
+  id: string;
+  name: string;
+  muscleGroup: string;
+  equipment: string;
+  defaultRestS: number;
+}[] {
+  const rawDb = getExpoDb();
+  return rawDb.getAllSync<{
+    id: string;
+    name: string;
+    muscleGroup: string;
+    equipment: string;
+    defaultRestS: number;
+  }>(
+    `SELECT id, name, muscle_group AS muscleGroup, equipment, default_rest_s AS defaultRestS 
+     FROM exercises 
+     WHERE archived = 0 
+     ORDER BY name ASC`
+  );
+}
+
 
 
