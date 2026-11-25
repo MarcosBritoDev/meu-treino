@@ -15,6 +15,7 @@ import { NewExerciseScreen } from '../screens/NewExerciseScreen';
 import { ExerciseDetailScreen } from '../screens/ExerciseDetailScreen';
 import { GroupDetailScreen } from '../screens/GroupDetailScreen';
 import { EditWorkoutScreen } from '../screens/EditWorkoutScreen';
+import { AddExercisesScreen } from '../screens/AddExercisesScreen';
 import { colors } from '../theme';
 import { useSettingsStore } from '../store/useSettingsStore';
 
@@ -105,6 +106,13 @@ export function AppNavigator() {
         component={EditWorkoutScreen}
         options={{
           presentation: 'card',
+        }}
+      />
+      <Stack.Screen
+        name="AddExercises"
+        component={AddExercisesScreen}
+        options={{
+          presentation: 'modal',
         }}
       />
     </Stack.Navigator>

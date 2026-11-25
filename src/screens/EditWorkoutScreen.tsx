@@ -7,7 +7,6 @@ import {
   TextInput,
   ScrollView,
   Platform,
-  Modal,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -22,7 +21,6 @@ import {
   ArrowDown,
   GripVertical,
   X,
-  Search,
   CheckCircle,
   Sliders,
 } from 'lucide-react-native';
@@ -37,7 +35,6 @@ import { estimarDuracao, formatarDuracao } from '../domain/duration';
 import {
   getWorkoutForEdit,
   saveWorkout,
-  getAllExercisesForSelector,
   WorkoutForEdit,
   WorkoutExerciseForEdit,
 } from '../db/workouts';
@@ -79,13 +76,6 @@ export const EditWorkoutScreen: React.FC = () => {
   const [targetRepMax, setTargetRepMax] = useState(12);
   const [targetRestS, setTargetRestS] = useState(90);
 
-  // Modal de Adicionar Exercício
-  const [addExerciseModalVisible, setAddExerciseModalVisible] = useState(false);
-  const [availableCatalog, setAvailableCatalog] = useState<
-    { id: string; name: string; muscleGroup: string; equipment: string; defaultRestS: number }[]
-  >([]);
-  const [catalogSearch, setCatalogSearch] = useState('');
-
   // Toast de Feedback
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -126,15 +116,37 @@ export const EditWorkoutScreen: React.FC = () => {
     loadWorkout();
   }, [loadWorkout]);
 
-  // Carrega catálogo para seleção de exercícios
+  // Recebe exercícios selecionados na tela modal 3.7 Adicionar exercícios
   useEffect(() => {
-    try {
-      const catalog = getAllExercisesForSelector();
-      setAvailableCatalog(catalog);
-    } catch (err) {
-      console.warn('Erro ao carregar catálogo de exercícios:', err);
+    const newItems = route.params?.addedExercises;
+    if (newItems && newItems.length > 0) {
+      setExercises((prev) => {
+        const nextPos = prev.length;
+        const mapped: WorkoutExerciseForEdit[] = newItems.map((item, idx) => ({
+          id: `new_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
+          exerciseId: item.exerciseId,
+          name: item.name,
+          muscleGroup: item.muscleGroup,
+          equipment: item.equipment,
+          position: nextPos + idx,
+          targetSets: 3,
+          repMin: 8,
+          repMax: 12,
+          restS: item.defaultRestS || 90,
+          note: null,
+        }));
+        return [...prev, ...mapped];
+      });
+      triggerHaptic('success');
+      setToastMessage(
+        newItems.length === 1
+          ? '1 exercício adicionado'
+          : `${newItems.length} exercícios adicionados`
+      );
+      setToastVisible(true);
+      navigation.setParams({ addedExercises: undefined });
     }
-  }, []);
+  }, [route.params?.addedExercises, navigation]);
 
   // Verifica se há alterações pendentes
   const isDirty = useMemo(() => {
@@ -214,48 +226,6 @@ export const EditWorkoutScreen: React.FC = () => {
     setTargetRepMax(ex.repMax);
     setTargetRestS(ex.restS);
     setTargetModalVisible(true);
-  };
-
-  // Aplicar metas configuradas na Sheet 3.6
-  const handleApplyTargets = () => {
-    if (targetIndex === null || !exercises[targetIndex]) return;
-    triggerHaptic('success');
-    setExercises((prev) => {
-      const updated = [...prev];
-      updated[targetIndex] = {
-        ...updated[targetIndex],
-        targetSets,
-        repMin: targetRepMin,
-        repMax: targetRepMax,
-        restS: targetRestS,
-      };
-      return updated;
-    });
-    setTargetModalVisible(false);
-    setTargetIndex(null);
-  };
-
-  // Adicionar exercício selecionado do catálogo
-  const handleAddExerciseFromCatalog = (catalogItem: (typeof availableCatalog)[0]) => {
-    triggerHaptic('selection');
-    const newExercise: WorkoutExerciseForEdit = {
-      id: `new_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      exerciseId: catalogItem.id,
-      name: catalogItem.name,
-      muscleGroup: catalogItem.muscleGroup,
-      equipment: catalogItem.equipment,
-      position: exercises.length,
-      targetSets: 3,
-      repMin: 8,
-      repMax: 12,
-      restS: catalogItem.defaultRestS || 90,
-      note: null,
-    };
-    setExercises((prev) => [...prev, newExercise]);
-    setAddExerciseModalVisible(false);
-    setCatalogSearch('');
-    setToastMessage(`"${catalogItem.name}" adicionado`);
-    setToastVisible(true);
   };
 
   // Salvar ficha completa
@@ -553,7 +523,10 @@ export const EditWorkoutScreen: React.FC = () => {
           <Pressable
             onPress={() => {
               triggerHaptic('light');
-              setAddExerciseModalVisible(true);
+              navigation.navigate('AddExercises', {
+                workoutId,
+                existingExerciseIds: exercises.map((e) => e.exerciseId),
+              });
             }}
             style={({ pressed }) => [
               styles.addExerciseButton,
@@ -652,86 +625,7 @@ export const EditWorkoutScreen: React.FC = () => {
         }}
       />
 
-      {/* 4. MODAL PARA ADICIONAR EXERCÍCIO DO CATÁLOGO */}
-      <Modal
-        transparent
-        visible={addExerciseModalVisible}
-        animationType="fade"
-        onRequestClose={() => setAddExerciseModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <Pressable
-            style={styles.modalBackdrop}
-            onPress={() => setAddExerciseModalVisible(false)}
-          />
-
-          <View style={styles.catalogSheetContainer}>
-            <View style={styles.sheetHandle} />
-
-            <View style={styles.catalogHeader}>
-              <Text variant="headline" style={styles.catalogTitle}>
-                Adicionar exercício
-              </Text>
-              <Pressable
-                onPress={() => setAddExerciseModalVisible(false)}
-                style={styles.sheetCloseButton}
-              >
-                <X size={18} color={colors.onSurfaceVariant} strokeWidth={2} />
-              </Pressable>
-            </View>
-
-            {/* Campo de Busca no Catálogo */}
-            <View style={styles.searchBox}>
-              <Search size={16} color={colors.textMuted} strokeWidth={2} />
-              <TextInput
-                style={styles.searchInput}
-                value={catalogSearch}
-                onChangeText={setCatalogSearch}
-                placeholder="Buscar por nome ou músculo..."
-                placeholderTextColor={colors.textMuted}
-                autoCorrect={false}
-              />
-              {catalogSearch.length > 0 && (
-                <Pressable onPress={() => setCatalogSearch('')}>
-                  <X size={14} color={colors.onSurfaceVariant} />
-                </Pressable>
-              )}
-            </View>
-
-            {/* Lista de Exercícios Filtrada */}
-            <ScrollView style={styles.catalogList} keyboardShouldPersistTaps="handled">
-              {availableCatalog
-                .filter((item) => {
-                  if (!catalogSearch.trim()) return true;
-                  const q = catalogSearch.toLowerCase().trim();
-                  return (
-                    item.name.toLowerCase().includes(q) ||
-                    item.muscleGroup.toLowerCase().includes(q)
-                  );
-                })
-                .map((item) => (
-                  <Pressable
-                    key={item.id}
-                    onPress={() => handleAddExerciseFromCatalog(item)}
-                    style={styles.catalogItemRow}
-                  >
-                    <View style={styles.catalogItemInfo}>
-                      <Text variant="bodyMedium" style={styles.catalogItemName}>
-                        {item.name}
-                      </Text>
-                      <Text variant="bodySmall" style={styles.catalogItemMeta}>
-                        {item.muscleGroup} · {item.equipment}
-                      </Text>
-                    </View>
-                    <Plus size={18} color={colors.primary} strokeWidth={2.2} />
-                  </Pressable>
-                ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* 5. MODAL DE CONFIRMAÇÃO DE DESCARTE DE ALTERAÇÕES */}
+      {/* 4. MODAL DE CONFIRMAÇÃO DE DESCARTE DE ALTERAÇÕES */}
       <ConfirmModal
         visible={discardModalVisible}
         title="Descartar alterações?"
@@ -1305,64 +1199,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: colors.error,
-  },
-  catalogSheetContainer: {
-    backgroundColor: colors.surfaceContainer,
-    borderTopLeftRadius: radii.sheet,
-    borderTopRightRadius: radii.sheet,
-    padding: 20,
-    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
-    height: '80%',
-  },
-  catalogHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  catalogTitle: {
-    fontFamily: fontFamilies.outfitBold,
-    fontSize: 18,
-    color: colors.onSurface,
-  },
-  searchBox: {
-    backgroundColor: colors.surfaceContainerHigh,
-    borderRadius: 10,
-    height: 44,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-  },
-  searchInput: {
-    flex: 1,
-    fontFamily: fontFamilies.dmSansRegular,
-    fontSize: 14,
-    color: colors.onSurface,
-  },
-  catalogList: {
-    flex: 1,
-  },
-  catalogItemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  catalogItemInfo: {
-    flex: 1,
-  },
-  catalogItemName: {
-    fontFamily: fontFamilies.outfitSemiBold,
-    fontSize: 14,
-    color: colors.onSurface,
-    marginBottom: 2,
-  },
-  catalogItemMeta: {
-    fontSize: 12,
-    color: colors.onSurfaceVariant,
   },
 });

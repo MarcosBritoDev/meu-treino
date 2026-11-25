@@ -58,6 +58,75 @@ export function getExercisesWithPR(): ExerciseItemData[] {
   }
 }
 
+export interface ExerciseSelectionItem {
+  id: string;
+  name: string;
+  muscleGroup: string;
+  equipment: string;
+  kind: string;
+  defaultIncrement: number;
+  defaultRestS: number;
+  lastWeight: number | null;
+  lastReps: number | null;
+}
+
+/**
+ * Consulta os exercícios disponíveis para adição à ficha de treino (Tela 3.7),
+ * trazendo o último registro concluído de carga e repetições.
+ */
+export function getExercisesForAddSelection(): ExerciseSelectionItem[] {
+  try {
+    const rawDb = getExpoDb();
+    const rows = rawDb.getAllSync<ExerciseSelectionItem>(`
+      SELECT 
+        e.id,
+        e.name,
+        e.muscle_group AS muscleGroup,
+        e.equipment,
+        e.kind,
+        e.default_increment AS defaultIncrement,
+        e.default_rest_s AS defaultRestS,
+        (
+          SELECT s.weight 
+          FROM sets s 
+          JOIN session_exercises se ON s.session_exercise_id = se.id 
+          JOIN sessions sess ON se.session_id = sess.id
+          WHERE se.exercise_id = e.id 
+            AND s.completed_at IS NOT NULL 
+            AND s.is_warmup = 0 
+          ORDER BY sess.started_at DESC, s.completed_at DESC 
+          LIMIT 1
+        ) AS lastWeight,
+        (
+          SELECT s.reps 
+          FROM sets s 
+          JOIN session_exercises se ON s.session_exercise_id = se.id 
+          JOIN sessions sess ON se.session_id = sess.id
+          WHERE se.exercise_id = e.id 
+            AND s.completed_at IS NOT NULL 
+            AND s.is_warmup = 0 
+          ORDER BY sess.started_at DESC, s.completed_at DESC 
+          LIMIT 1
+        ) AS lastReps
+      FROM exercises e
+      WHERE e.archived = 0
+      ORDER BY e.name ASC
+    `);
+
+    return rows.map((r) => ({
+      ...r,
+      defaultIncrement: Number(r.defaultIncrement) || 2.5,
+      defaultRestS: Number(r.defaultRestS) || 90,
+      lastWeight: r.lastWeight != null ? Number(r.lastWeight) : null,
+      lastReps: r.lastReps != null ? Number(r.lastReps) : null,
+    }));
+  } catch (error) {
+    console.warn('Erro ao carregar exercícios para seleção:', error);
+    return [];
+  }
+}
+
+
 export interface CreateExerciseInput {
   name: string;
   muscleGroup: string;

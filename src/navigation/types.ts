@@ -17,7 +17,17 @@ export type RootStackParamList = {
   ExerciseDetail: { exerciseId: string };
   GroupDetail: { groupId: string } | undefined;
   EditGroup: { groupId?: string } | undefined;
-  EditWorkout: { workoutId: string } | undefined;
+  EditWorkout: {
+    workoutId: string;
+    addedExercises?: {
+      exerciseId: string;
+      name: string;
+      muscleGroup: string;
+      equipment: string;
+      defaultRestS: number;
+    }[];
+  } | undefined;
+  AddExercises: { workoutId: string; existingExerciseIds: string[] } | undefined;
   ActiveSession: { sessionId: string; workoutId?: string } | undefined;
 };
 
