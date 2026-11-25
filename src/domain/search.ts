@@ -146,3 +146,36 @@ export function filterAndGroupExercises(
 
   return sections;
 }
+
+/**
+ * Retorna o título da tela de estado vazio conforme a biblioteca ter ou não itens.
+ */
+export function getEmptyStateTitle(isLibraryEmpty: boolean): string {
+  if (isLibraryEmpty) {
+    return 'Sua biblioteca está vazia';
+  }
+  return 'Nenhum exercício encontrado';
+}
+
+/**
+ * Retorna a mensagem descritiva do estado vazio.
+ * Formato especificado: Não encontramos "<termo>" na sua biblioteca.
+ */
+export function getEmptyStateDescription(
+  isLibraryEmpty: boolean,
+  searchQuery: string,
+  selectedGroup: string
+): string {
+  if (isLibraryEmpty) {
+    return 'Cadastre seu primeiro exercício para começar a montar seus treinos.';
+  }
+  const q = searchQuery.trim();
+  if (q.length > 0) {
+    return `Não encontramos "${q}" na sua biblioteca.`;
+  }
+  if (selectedGroup !== 'Todos') {
+    return `Não encontramos exercícios para o grupo "${selectedGroup}" na sua biblioteca.`;
+  }
+  return 'Não encontramos resultados para os filtros selecionados na sua biblioteca.';
+}
+

@@ -7,6 +7,8 @@ import {
   ORDERED_MUSCLE_GROUPS,
   FILTER_CHIPS,
   ExerciseItemData,
+  getEmptyStateTitle,
+  getEmptyStateDescription,
 } from '../../domain/search';
 import { seedExercises } from '../../db/seed';
 
@@ -299,6 +301,73 @@ describe('Biblioteca de Exercícios — Tela 2.1 (Volt Precision)', () => {
         'Braços',
         'Abdômen',
       ]);
+    });
+  });
+
+  describe('Estado Vazio da Biblioteca — Tela 2.2', () => {
+    it('retorna título apropriado quando a biblioteca inteira está vazia', () => {
+      expect(getEmptyStateTitle(true)).toBe('Sua biblioteca está vazia');
+    });
+
+    it('retorna título padrão quando houver busca sem resultados', () => {
+      expect(getEmptyStateTitle(false)).toBe('Nenhum exercício encontrado');
+    });
+
+    it('buscar "Kettlebell Swing" formata o texto exato com aspas', () => {
+      const desc = getEmptyStateDescription(false, 'Kettlebell Swing', 'Todos');
+      expect(desc).toBe('Não encontramos "Kettlebell Swing" na sua biblioteca.');
+    });
+
+    it('faz trim de espaços no termo buscado para a mensagem', () => {
+      const desc = getEmptyStateDescription(false, '   Kettlebell Swing   ', 'Todos');
+      expect(desc).toBe('Não encontramos "Kettlebell Swing" na sua biblioteca.');
+    });
+
+    it('retorna mensagem de grupo quando apenas o chip estiver filtrado', () => {
+      const desc = getEmptyStateDescription(false, '', 'Ombros');
+      expect(desc).toBe('Não encontramos exercícios para o grupo "Ombros" na sua biblioteca.');
+    });
+
+    it('retorna mensagem de biblioteca vazia quando isLibraryEmpty for true', () => {
+      const desc = getEmptyStateDescription(true, '', 'Todos');
+      expect(desc).toBe('Cadastre seu primeiro exercício para começar a montar seus treinos.');
+    });
+
+    it('buscar "Kettlebell Swing" nos exercícios do seed retorna lista vazia acionando o estado 2.2', () => {
+      const seedAsItems: ExerciseItemData[] = seedExercises.map((s) => ({
+        ...s,
+        kind: s.kind as 'composto' | 'isolamento',
+        defaultIncrement: s.defaultIncrement ?? 2.5,
+        defaultRestS: s.defaultRestS ?? 90,
+        isCustom: Boolean(s.isCustom),
+        archived: Boolean(s.archived),
+        bestWeight: null,
+        bestReps: null,
+      }));
+
+      const sections = filterAndGroupExercises(seedAsItems, 'Todos', 'Kettlebell Swing');
+      expect(sections.length).toBe(0);
+    });
+
+    it('limpar busca ("") restaura a lista completa', () => {
+      const seedAsItems: ExerciseItemData[] = seedExercises.map((s) => ({
+        ...s,
+        kind: s.kind as 'composto' | 'isolamento',
+        defaultIncrement: s.defaultIncrement ?? 2.5,
+        defaultRestS: s.defaultRestS ?? 90,
+        isCustom: Boolean(s.isCustom),
+        archived: Boolean(s.archived),
+        bestWeight: null,
+        bestReps: null,
+      }));
+
+      // Busca sem resultado
+      const emptySections = filterAndGroupExercises(seedAsItems, 'Todos', 'Kettlebell Swing');
+      expect(emptySections.length).toBe(0);
+
+      // Limpar busca restaura
+      const restoredSections = filterAndGroupExercises(seedAsItems, 'Todos', '');
+      expect(restoredSections.length).toBe(6);
     });
   });
 });

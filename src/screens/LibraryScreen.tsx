@@ -16,7 +16,6 @@ import {
   Plus,
   Settings,
   ChevronRight,
-  SearchX,
   Dumbbell,
   Weight,
   Cable,
@@ -25,7 +24,7 @@ import {
 } from 'lucide-react-native';
 import { RootStackParamList } from '../navigation/types';
 import { colors, radii, spacing, typography } from '../theme';
-import { Text, triggerHaptic, Button } from '../ui';
+import { Text, triggerHaptic, Button, EmptySearchIllustration } from '../ui';
 import { useSettingsStore } from '../store/useSettingsStore';
 import {
   getExercisesWithPR,
@@ -37,6 +36,8 @@ import {
   filterAndGroupExercises,
   formatGroupHeader,
   formatExercisePR,
+  getEmptyStateTitle,
+  getEmptyStateDescription,
 } from '../domain/search';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -126,9 +127,11 @@ export const LibraryScreen: React.FC = () => {
     navigation.navigate('Ajustes');
   }, [navigation]);
 
-  const handleOpenNewExercise = useCallback(() => {
+  const handleOpenNewExercise = useCallback((initialName?: string) => {
     triggerHaptic('light');
-    navigation.navigate('NewExercise');
+    navigation.navigate('NewExercise', {
+      initialName: initialName && initialName.trim() ? initialName.trim() : undefined,
+    });
   }, [navigation]);
 
   const handleExercisePress = useCallback(
@@ -246,7 +249,7 @@ export const LibraryScreen: React.FC = () => {
           </Pressable>
 
           <Pressable
-            onPress={handleOpenNewExercise}
+            onPress={() => handleOpenNewExercise()}
             accessible={true}
             accessibilityRole="button"
             accessibilityLabel="Cadastrar novo exercício"
@@ -355,32 +358,49 @@ export const LibraryScreen: React.FC = () => {
           </View>
         ) : flatListItems.length === 0 ? (
           /* TELA 2.2 — BIBLIOTECA BUSCA VAZIA */
-          <View style={styles.emptyContainer}>
-            <View style={styles.emptyIconCircle}>
-              <SearchX size={32} color={colors.primary} strokeWidth={1.75} />
-            </View>
-            <Text variant="headline" style={styles.emptyTitle}>
-              Nenhum exercício encontrado
-            </Text>
-            <Text variant="bodySmall" color="secondary" style={styles.emptySubtitle}>
-              Não encontramos resultados para este termo na sua biblioteca local.
-            </Text>
-            <View style={styles.emptyActions}>
-              <Button
-                title="Cadastrar exercício"
-                variant="primary"
-                icon={<Plus size={18} color={colors.onPrimary} strokeWidth={2} />}
-                onPress={handleOpenNewExercise}
-                style={styles.emptyPrimaryButton}
-              />
-              <Button
-                title="Limpar busca"
-                variant="text"
-                onPress={handleResetFilters}
-                style={styles.emptySecondaryButton}
-              />
-            </View>
-          </View>
+          (() => {
+            const isLibraryEmpty = exercises.length === 0;
+            const currentTerm = (debouncedQuery || searchText).trim();
+            const emptyTitle = getEmptyStateTitle(isLibraryEmpty);
+            const emptyDescription = getEmptyStateDescription(
+              isLibraryEmpty,
+              currentTerm,
+              selectedGroup
+            );
+
+            return (
+              <View style={styles.emptyContainer}>
+                <EmptySearchIllustration size={144} style={styles.emptyIllustration} />
+                <Text variant="headline" style={styles.emptyTitle}>
+                  {emptyTitle}
+                </Text>
+                <Text
+                  variant="bodyMedium"
+                  color="secondary"
+                  numberOfLines={2}
+                  style={styles.emptySubtitle}
+                >
+                  {emptyDescription}
+                </Text>
+                <View style={styles.emptyActions}>
+                  <Button
+                    title="+ Cadastrar exercício"
+                    variant="primary"
+                    onPress={() => handleOpenNewExercise(currentTerm)}
+                    style={styles.emptyPrimaryButton}
+                  />
+                  {!isLibraryEmpty && (
+                    <Button
+                      title="Limpar busca"
+                      variant="text"
+                      onPress={handleResetFilters}
+                      style={styles.emptySecondaryButton}
+                    />
+                  )}
+                </View>
+              </View>
+            );
+          })()
         ) : (
           <FlashList
             data={flatListItems}
@@ -627,14 +647,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.xl,
   },
-  emptyIconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: radii.pill,
-    backgroundColor: colors.primaryContainer,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.md,
+  emptyIllustration: {
+    marginBottom: spacing.lg,
   },
   emptyTitle: {
     fontSize: 20,
@@ -643,11 +657,11 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   emptySubtitle: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 15,
+    lineHeight: 22,
     textAlign: 'center',
-    maxWidth: 280,
-    marginBottom: spacing.lg,
+    maxWidth: 320,
+    marginBottom: spacing.xl,
   },
   emptyActions: {
     width: '100%',
