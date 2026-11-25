@@ -19,6 +19,7 @@ import {
   Stepper,
   Button,
   BottomSheet,
+  TextField,
   triggerHaptic,
 } from '../ui';
 import { useSettingsStore } from '../store/useSettingsStore';
@@ -30,6 +31,7 @@ import {
   RotateCcw,
   Sparkles,
   Info,
+  User,
 } from 'lucide-react-native';
 
 const APP_VERSION = '1.0.0';
@@ -38,6 +40,8 @@ const APP_BUILD = '1';
 export const SettingsScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const {
+    userName,
+    setUserName,
     unit,
     setUnit,
     defaultIncrement,
@@ -49,6 +53,7 @@ export const SettingsScreen: React.FC = () => {
     resetOnboarding,
   } = useSettingsStore();
 
+  const [nameInput, setNameInput] = useState(userName || '');
   const [notesSheetOpen, setNotesSheetOpen] = useState(false);
   const [licensesSheetOpen, setLicensesSheetOpen] = useState(false);
 
@@ -129,6 +134,30 @@ export const SettingsScreen: React.FC = () => {
             Seus registros ficam direto no dispositivo. Sem sinal, sem espera.
           </Text>
         </Card>
+
+        {/* Seção: Perfil do atleta */}
+        <View style={styles.sectionContainer}>
+          <Text variant="labelSmall" color="secondary" style={styles.sectionLabel}>
+            Perfil
+          </Text>
+
+          <Card variant="surface" style={styles.groupedCard}>
+            <View style={{ padding: 16 }}>
+              <TextField
+                label="Nome do atleta (opcional)"
+                placeholder="Ex: Marcos"
+                value={nameInput}
+                onChangeText={(val) => {
+                  setNameInput(val);
+                  setUserName(val);
+                }}
+                maxLength={30}
+                showCounter
+                helperText="Usado para saudações na aba Início. Se vazio, exibe 'Atleta'."
+              />
+            </View>
+          </Card>
+        </View>
 
         {/* 2. Seção: Preferências de treino */}
         <View style={styles.sectionContainer}>

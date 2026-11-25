@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { getExpoDb, initializeDatabase } from '../db';
 
 export interface SettingsState {
+  userName: string | null;
   unit: 'kg' | 'lb';
   defaultIncrement: number;
   defaultRestS: number;
@@ -11,6 +12,7 @@ export interface SettingsState {
   isReady: boolean;
   dbError: string | null;
   loadSettings: () => Promise<void>;
+  setUserName: (name: string) => Promise<void>;
   setUnit: (unit: 'kg' | 'lb') => Promise<void>;
   setDefaultIncrement: (inc: number) => Promise<void>;
   setDefaultRestS: (sec: number) => Promise<void>;
@@ -29,6 +31,7 @@ export interface SettingsState {
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
+  userName: null,
   unit: 'kg',
   defaultIncrement: 2.5,
   defaultRestS: 90,
@@ -44,6 +47,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       await initializeDatabase();
       const rawDb = getExpoDb();
       const rows = rawDb.getAllSync<{
+        user_name?: string | null;
         unit: string;
         default_increment: number;
         default_rest_s?: number;
@@ -55,6 +59,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       if (rows.length > 0) {
         const row = rows[0];
         set({
+          userName: row.user_name || null,
           unit: (row.unit as 'kg' | 'lb') || 'kg',
           defaultIncrement: row.default_increment ?? 2.5,
           defaultRestS: row.default_rest_s ?? 90,
@@ -71,6 +76,17 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       await get().fetchTestRecordCount();
     } catch (err: any) {
       set({ dbError: err?.message || 'Erro ao carregar banco de dados', isReady: true });
+    }
+  },
+
+  setUserName: async (name: string) => {
+    const trimmed = name.trim();
+    set({ userName: trimmed || null });
+    try {
+      const rawDb = getExpoDb();
+      rawDb.runSync('UPDATE settings SET user_name = ? WHERE id = 1', [trimmed || null]);
+    } catch (err) {
+      console.warn('Erro ao atualizar nome do usuário:', err);
     }
   },
 

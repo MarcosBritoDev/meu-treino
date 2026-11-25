@@ -133,4 +133,11 @@ export const migrations: Migration[] = [
       `ALTER TABLE groups ADD COLUMN badge TEXT;`,
     ],
   },
+  {
+    version: 4,
+    name: 'add_user_name_to_settings',
+    sql: [
+      `ALTER TABLE settings ADD COLUMN user_name TEXT;`,
+    ],
+  },
 ];

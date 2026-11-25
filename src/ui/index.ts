@@ -17,3 +17,4 @@ export * from './EditGroupSheet';
 export * from './ExerciseTargetSheet';
 export * from './illustrations/EmptySearchIllustration';
 export * from './illustrations/EmptyWorkoutsIllustration';
+export * from './illustrations/EmptyHomeIllustration';

@@ -10,6 +10,7 @@ import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
  */
 export const settings = sqliteTable('settings', {
   id: integer('id').primaryKey().default(1),
+  userName: text('user_name'),
   unit: text('unit').notNull().default('kg'),
   defaultIncrement: real('default_increment').notNull().default(2.5),
   defaultRestS: integer('default_rest_s').notNull().default(90),

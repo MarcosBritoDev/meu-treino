@@ -17,6 +17,7 @@ import { GroupDetailScreen } from '../screens/GroupDetailScreen';
 import { EditWorkoutScreen } from '../screens/EditWorkoutScreen';
 import { AddExercisesScreen } from '../screens/AddExercisesScreen';
 import { ActiveSessionScreen } from '../screens/ActiveSessionScreen';
+import { SessionDetailScreen } from '../screens/SessionDetailScreen';
 import { colors } from '../theme';
 import { useSettingsStore } from '../store/useSettingsStore';
 
@@ -119,6 +120,13 @@ export function AppNavigator() {
       <Stack.Screen
         name="ActiveSession"
         component={ActiveSessionScreen}
+        options={{
+          presentation: 'card',
+        }}
+      />
+      <Stack.Screen
+        name="SessionDetail"
+        component={SessionDetailScreen}
         options={{
           presentation: 'card',
         }}
