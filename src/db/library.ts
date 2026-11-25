@@ -57,3 +57,55 @@ export function getExercisesWithPR(): ExerciseItemData[] {
     return [];
   }
 }
+
+export interface CreateExerciseInput {
+  name: string;
+  muscleGroup: string;
+  equipment: string;
+  kind?: 'composto' | 'isolamento';
+  defaultIncrement: number;
+  defaultRestS: number;
+  notes?: string;
+}
+
+/**
+ * Cria um novo exercício personalizado no banco SQLite com is_custom = 1
+ */
+export function createCustomExercise(input: CreateExerciseInput): ExerciseItemData {
+  const rawDb = getExpoDb();
+  const id = `ex_custom_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const kind = input.kind || 'composto';
+  const notes = input.notes?.trim() || null;
+
+  rawDb.runSync(
+    `INSERT INTO exercises (
+      id, name, muscle_group, equipment, kind, default_increment, default_rest_s, notes, is_custom, archived
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 0)`,
+    [
+      id,
+      input.name.trim(),
+      input.muscleGroup,
+      input.equipment,
+      kind,
+      input.defaultIncrement,
+      input.defaultRestS,
+      notes,
+    ]
+  );
+
+  return {
+    id,
+    name: input.name.trim(),
+    muscleGroup: input.muscleGroup,
+    equipment: input.equipment,
+    kind,
+    defaultIncrement: input.defaultIncrement,
+    defaultRestS: input.defaultRestS,
+    notes,
+    isCustom: true,
+    archived: false,
+    bestWeight: null,
+    bestReps: null,
+  };
+}
+

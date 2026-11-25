@@ -179,3 +179,25 @@ export function getEmptyStateDescription(
   return 'Não encontramos resultados para os filtros selecionados na sua biblioteca.';
 }
 
+/**
+ * Verifica se já existe um exercício ativo com o mesmo nome no mesmo grupo muscular,
+ * ignorando acentos e maiúsculas/minúsculas.
+ */
+export function isExerciseNameDuplicate(
+  name: string,
+  muscleGroup: string,
+  existingExercises: { name: string; muscleGroup: string; archived?: boolean }[]
+): boolean {
+  const normName = normalizeSearchText(name);
+  if (!normName || !muscleGroup) return false;
+
+  return existingExercises.some((ex) => {
+    if (ex.archived) return false;
+    return (
+      ex.muscleGroup.trim().toLowerCase() === muscleGroup.trim().toLowerCase() &&
+      normalizeSearchText(ex.name) === normName
+    );
+  });
+}
+
+
