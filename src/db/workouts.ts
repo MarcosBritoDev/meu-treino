@@ -1,5 +1,11 @@
 import { getExpoDb } from './client';
 import { estimarDuracao } from '../domain/duration';
+import {
+  formatTempoRelativoLog,
+  calculateNextScheduledWorkoutIndex,
+} from '../domain/workouts';
+
+export { formatTempoRelativoLog, calculateNextScheduledWorkoutIndex };
 
 export interface WorkoutItemDetail {
   id: string;
@@ -605,4 +611,323 @@ export function addWorkoutToGroup(groupId: string, name: string): string {
 
   return id;
 }
+
+
+export interface GroupDetailWorkoutItem extends WorkoutItemDetail {
+  lastLogText: string;
+  isScheduledForToday: boolean;
+  exerciseChips: string[];
+  extraExerciseCount: number;
+}
+
+export interface GroupDetailResult {
+  group: WorkoutGroupDetail;
+  workouts: GroupDetailWorkoutItem[];
+  otherGroups: { id: string; name: string }[];
+}
+
+/**
+ * Obtém os detalhes completos de um grupo específico para a tela 3.3.
+ */
+export function getGroupDetail(groupId: string): GroupDetailResult | null {
+  try {
+    const rawDb = getExpoDb();
+
+    // 1. Grupo
+    const groupRows = rawDb.getAllSync<{
+      id: string;
+      name: string;
+      description: string | null;
+      frequencyDays: number | null;
+      position: number;
+      isActive: number;
+      badge: string | null;
+    }>(
+      `SELECT id, name, description, frequency_days AS frequencyDays, position, is_active AS isActive, badge
+       FROM groups WHERE id = ? LIMIT 1`,
+      [groupId]
+    );
+
+    if (groupRows.length === 0) return null;
+    const g = groupRows[0];
+    const isGroupActive = Boolean(g.isActive);
+
+    // 2. Outros grupos disponíveis para transferência
+    const otherGroups = rawDb.getAllSync<{ id: string; name: string }>(
+      `SELECT id, name FROM groups WHERE id != ? ORDER BY position ASC, name ASC`,
+      [groupId]
+    );
+
+    // 3. Fichas de treino do grupo
+    const workoutRows = rawDb.getAllSync<{
+      id: string;
+      groupId: string | null;
+      name: string;
+      position: number;
+    }>(
+      `SELECT id, group_id AS groupId, name, position
+       FROM workouts
+       WHERE group_id = ? AND is_active = 1
+       ORDER BY position ASC, name ASC`,
+      [groupId]
+    );
+
+    // 4. Último treino concluído dentro deste grupo (para determinar "Programado para hoje")
+    const lastSessionRow = rawDb.getAllSync<{ workoutId: string }>(
+      `SELECT s.workout_id AS workoutId
+       FROM sessions s
+       JOIN workouts w ON s.workout_id = w.id
+       WHERE w.group_id = ? AND s.status = 'completed'
+       ORDER BY s.ended_at DESC, s.started_at DESC
+       LIMIT 1`,
+      [groupId]
+    );
+
+    let scheduledWorkoutIndex = 0;
+    if (workoutRows.length > 0) {
+      if (lastSessionRow.length > 0) {
+        const lastWId = lastSessionRow[0].workoutId;
+        const lastIdx = workoutRows.findIndex((w) => w.id === lastWId);
+        if (lastIdx !== -1) {
+          scheduledWorkoutIndex = (lastIdx + 1) % workoutRows.length;
+        }
+      }
+    }
+
+    const workouts: GroupDetailWorkoutItem[] = [];
+    let groupTotalEstSeconds = 0;
+
+    for (let wIdx = 0; wIdx < workoutRows.length; wIdx++) {
+      const w = workoutRows[wIdx];
+      const code = `Rotina A-${wIdx + 1}`;
+
+      // Exercícios
+      const exRows = rawDb.getAllSync<{
+        exerciseId: string;
+        name: string;
+        muscleGroup: string;
+        targetSets: number;
+        restS: number;
+      }>(
+        `SELECT 
+          we.exercise_id AS exerciseId,
+          e.name AS name,
+          e.muscle_group AS muscleGroup,
+          we.target_sets AS targetSets,
+          we.rest_s AS restS
+         FROM workout_exercises we
+         JOIN exercises e ON e.id = we.exercise_id
+         WHERE we.workout_id = ?
+         ORDER BY we.position ASC`,
+        [w.id]
+      );
+
+      const exerciseCount = exRows.length;
+      const totalSets = exRows.reduce((acc, curr) => acc + (curr.targetSets || 0), 0);
+
+      const durationSeconds = estimarDuracao({
+        exercises: exRows.map((r) => ({
+          targetSets: r.targetSets,
+          restS: r.restS,
+        })),
+      });
+      groupTotalEstSeconds += durationSeconds;
+      const estimatedDurationMin = Math.max(1, Math.round(durationSeconds / 60));
+
+      // Músculos
+      const musclesSet = Array.from(new Set(exRows.map((r) => r.muscleGroup.toLowerCase())));
+      let targetMuscles = 'Geral';
+      if (musclesSet.length > 0) {
+        if (musclesSet.length === 1) {
+          targetMuscles = musclesSet[0].charAt(0).toUpperCase() + musclesSet[0].slice(1);
+        } else if (musclesSet.length === 2) {
+          targetMuscles = `${musclesSet[0]} e ${musclesSet[1]}`;
+          targetMuscles = targetMuscles.charAt(0).toUpperCase() + targetMuscles.slice(1);
+        } else {
+          const last = musclesSet[musclesSet.length - 1];
+          const initial = musclesSet.slice(0, -1).join(', ');
+          targetMuscles = `${initial} e ${last}`;
+          targetMuscles = targetMuscles.charAt(0).toUpperCase() + targetMuscles.slice(1);
+        }
+      }
+
+      // Chips da "Sequência de carga": primeiros 4 + contador excedente
+      const exerciseChips = exRows.slice(0, 4).map((r) => r.name);
+      const extraExerciseCount = Math.max(0, exRows.length - 4);
+
+      // Último log desta ficha específica
+      const lastWorkoutLog = rawDb.getAllSync<{ endedAt: number | null }>(
+        `SELECT ended_at AS endedAt
+         FROM sessions
+         WHERE workout_id = ? AND status = 'completed'
+         ORDER BY ended_at DESC
+         LIMIT 1`,
+        [w.id]
+      );
+      const lastLogText = formatTempoRelativoLog(lastWorkoutLog[0]?.endedAt ?? null);
+
+      const isScheduledForToday = wIdx === scheduledWorkoutIndex;
+
+      workouts.push({
+        id: w.id,
+        groupId: w.groupId,
+        code,
+        name: w.name,
+        position: w.position,
+        exerciseCount,
+        totalSets,
+        estimatedDurationMin,
+        targetMuscles,
+        previewExercises: exerciseChips.join(', '),
+        lastLogText,
+        isScheduledForToday,
+        exerciseChips,
+        extraExerciseCount,
+      });
+    }
+
+    const totalEstimatedMin = Math.max(1, Math.round(groupTotalEstSeconds / 60));
+
+    const groupDetail: WorkoutGroupDetail = {
+      id: g.id,
+      name: g.name,
+      description: g.description,
+      frequencyDays: g.frequencyDays,
+      frequencyText: g.frequencyDays ? `Ciclo de ${g.frequencyDays} dias` : 'Ciclo de 6 dias',
+      position: g.position,
+      isActive: isGroupActive,
+      badge: isGroupActive ? 'Ativo' : (g.badge || 'Secundário'),
+      workoutCount: workouts.length,
+      totalEstimatedMin,
+      workouts,
+    };
+
+    return {
+      group: groupDetail,
+      workouts,
+      otherGroups,
+    };
+  } catch (error) {
+    console.warn('Erro ao obter detalhes do grupo:', error);
+    return null;
+  }
+}
+
+/**
+ * Duplica um treino específico dentro do mesmo grupo.
+ */
+export function duplicateWorkout(workoutId: string): string {
+  const rawDb = getExpoDb();
+  const rows = rawDb.getAllSync<{ groupId: string; name: string; position: number }>(
+    `SELECT group_id AS groupId, name, position FROM workouts WHERE id = ? LIMIT 1`,
+    [workoutId]
+  );
+  if (rows.length === 0) return '';
+  const original = rows[0];
+
+  const newId = `w_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  rawDb.runSync(
+    `INSERT INTO workouts (id, group_id, name, position, is_active)
+     VALUES (?, ?, ?, ?, 1)`,
+    [newId, original.groupId, `${original.name} (Cópia)`, original.position + 1]
+  );
+
+  const exRows = rawDb.getAllSync<{
+    exerciseId: string;
+    position: number;
+    targetSets: number;
+    repMin: number;
+    repMax: number;
+    restS: number;
+    note: string | null;
+  }>(
+    `SELECT exercise_id AS exerciseId, position, target_sets AS targetSets, rep_min AS repMin, rep_max AS repMax, rest_s AS restS, note
+     FROM workout_exercises WHERE workout_id = ?`,
+    [workoutId]
+  );
+
+  for (const ex of exRows) {
+    const newWeId = `we_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    rawDb.runSync(
+      `INSERT INTO workout_exercises (id, workout_id, exercise_id, position, target_sets, rep_min, rep_max, rest_s, note)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [newWeId, newId, ex.exerciseId, ex.position, ex.targetSets, ex.repMin, ex.repMax, ex.restS, ex.note]
+    );
+  }
+
+  return newId;
+}
+
+/**
+ * Exclui uma ficha de treino.
+ */
+export function deleteWorkout(workoutId: string): void {
+  const rawDb = getExpoDb();
+  rawDb.runSync(`DELETE FROM workout_exercises WHERE workout_id = ?`, [workoutId]);
+  rawDb.runSync(`DELETE FROM workouts WHERE id = ?`, [workoutId]);
+}
+
+/**
+ * Move um treino para outro grupo de treino.
+ */
+export function moveWorkoutToGroup(workoutId: string, targetGroupId: string): void {
+  const rawDb = getExpoDb();
+  const maxPosRow = rawDb.getAllSync<{ maxPos: number | null }>(
+    `SELECT MAX(position) as maxPos FROM workouts WHERE group_id = ?`,
+    [targetGroupId]
+  );
+  const nextPos = (maxPosRow[0]?.maxPos ?? -1) + 1;
+
+  rawDb.runSync(
+    `UPDATE workouts SET group_id = ?, position = ? WHERE id = ?`,
+    [targetGroupId, nextPos, workoutId]
+  );
+}
+
+/**
+ * Reordena um treino para cima ou para baixo na lista.
+ */
+export function reorderWorkout(workoutId: string, direction: 'up' | 'down'): void {
+  const rawDb = getExpoDb();
+  const current = rawDb.getAllSync<{ id: string; groupId: string; position: number }>(
+    `SELECT id, group_id AS groupId, position FROM workouts WHERE id = ? LIMIT 1`,
+    [workoutId]
+  );
+  if (current.length === 0) return;
+  const curr = current[0];
+
+  const siblings = rawDb.getAllSync<{ id: string; position: number }>(
+    `SELECT id, position FROM workouts WHERE group_id = ? ORDER BY position ASC`,
+    [curr.groupId]
+  );
+
+  const idx = siblings.findIndex((s) => s.id === workoutId);
+  if (idx === -1) return;
+
+  const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+  if (targetIdx < 0 || targetIdx >= siblings.length) return;
+
+  const neighbor = siblings[targetIdx];
+
+  // Troca de posição
+  rawDb.runSync(`UPDATE workouts SET position = ? WHERE id = ?`, [neighbor.position, curr.id]);
+  rawDb.runSync(`UPDATE workouts SET position = ? WHERE id = ?`, [curr.position, neighbor.id]);
+}
+
+/**
+ * Atualiza os dados de um grupo de treino (nome, descrição, frequência).
+ */
+export function updateWorkoutGroup(
+  groupId: string,
+  name: string,
+  description?: string,
+  frequencyDays?: number
+): void {
+  const rawDb = getExpoDb();
+  rawDb.runSync(
+    `UPDATE groups SET name = ?, description = ?, frequency_days = ? WHERE id = ?`,
+    [name.trim(), description?.trim() || null, frequencyDays || null, groupId]
+  );
+}
+
 
