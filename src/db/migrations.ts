@@ -126,4 +126,11 @@ export const migrations: Migration[] = [
       `ALTER TABLE settings ADD COLUMN default_rest_s INTEGER NOT NULL DEFAULT 90;`,
     ],
   },
+  {
+    version: 3,
+    name: 'add_badge_to_groups',
+    sql: [
+      `ALTER TABLE groups ADD COLUMN badge TEXT;`,
+    ],
+  },
 ];

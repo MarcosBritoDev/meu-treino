@@ -334,5 +334,45 @@ export function filterEvolutionByPeriod(
   };
 }
 
+const SHORT_MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+const LONG_MONTHS = [
+  'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'
+];
+
+/**
+ * Formata data no estilo "24 de out"
+ */
+export function formatPtBrDateMedium(timestamp: number | null): string {
+  if (!timestamp) return '—';
+  const d = new Date(timestamp);
+  const day = d.getDate();
+  const month = SHORT_MONTHS[d.getMonth()] || '';
+  return `${day} de ${month}`;
+}
+
+/**
+ * Formata data no estilo "24 de outubro"
+ */
+export function formatPtBrDateLong(timestamp: number | null): string {
+  if (!timestamp) return '—';
+  const d = new Date(timestamp);
+  const day = d.getDate();
+  const month = LONG_MONTHS[d.getMonth()] || '';
+  return `${day} de ${month}`;
+}
+
+/**
+ * Formata data curta no estilo "24 Out" (para eixos de gráficos)
+ */
+export function formatPtBrDateDayMonth(timestamp: number | null): string {
+  if (!timestamp) return '—';
+  const d = new Date(timestamp);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = SHORT_MONTHS[d.getMonth()] || '';
+  const monthCap = month.charAt(0).toUpperCase() + month.slice(1);
+  return `${day} ${monthCap}`;
+}
+
 
 

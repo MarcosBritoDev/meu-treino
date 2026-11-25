@@ -47,6 +47,7 @@ export const groups = sqliteTable('groups', {
   frequencyDays: integer('frequency_days'),
   position: integer('position').notNull().default(0),
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  badge: text('badge'),
 });
 
 /**
