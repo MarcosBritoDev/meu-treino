@@ -39,6 +39,7 @@ import {
   Toast,
   TextField,
   BottomSheet,
+  EditGroupSheet,
   EmptyWorkoutsIllustration,
   triggerHaptic,
 } from '../ui';
@@ -52,6 +53,7 @@ import {
   discardInProgressSession,
   startWorkoutSession,
   createWorkoutGroup,
+  getExistingGroupNames,
   addWorkoutToGroup,
   WorkoutSummaryResult,
   WorkoutGroupDetail,
@@ -879,41 +881,29 @@ export const WorkoutsScreen: React.FC = () => {
         onCancel={() => setDeleteModalVisible(false)}
       />
 
-      {/* Modal para criar novo grupo */}
-      <BottomSheet
+      {/* Sheet para Criar Novo Grupo (3.4) */}
+      <EditGroupSheet
         visible={newGroupModalVisible}
+        mode="create"
+        existingGroupNames={getExistingGroupNames()}
         onClose={() => setNewGroupModalVisible(false)}
-        title="Novo grupo de treino"
-      >
-        <View style={styles.bottomSheetForm}>
-          <TextField
-            label="Nome do grupo *"
-            placeholder="Ex.: ABC, Upper / Lower, Fullbody"
-            value={newGroupName}
-            onChangeText={setNewGroupName}
-            maxLength={40}
-          />
-
-          <TextField
-            label="Descrição ou foco (opcional)"
-            placeholder="Ex.: Foco em força e hipertrofia"
-            value={newGroupDesc}
-            onChangeText={setNewGroupDesc}
-            maxLength={80}
-            containerStyle={styles.formFieldSpacing}
-          />
-
-          <View style={styles.formButtonRow}>
-            <Button
-              title="Criar grupo"
-              variant="primary"
-              disabled={!newGroupName.trim()}
-              onPress={handleCreateGroup}
-              style={styles.fullWidthButton}
-            />
-          </View>
-        </View>
-      </BottomSheet>
+        onSave={(formData) => {
+          try {
+            createWorkoutGroup(
+              formData.name,
+              formData.description,
+              formData.frequencyDays
+            );
+            triggerHaptic('success');
+            setNewGroupModalVisible(false);
+            loadData();
+            setToastMessage('Grupo de treino criado com sucesso');
+            setToastVisible(true);
+          } catch (err) {
+            console.warn('Erro ao criar grupo:', err);
+          }
+        }}
+      />
 
       {/* Modal para adicionar treino a um grupo */}
       <BottomSheet

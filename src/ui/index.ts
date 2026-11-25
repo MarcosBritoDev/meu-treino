@@ -13,5 +13,6 @@ export * from './PRBadge';
 export * from './EmptyState';
 export * from './ScreenHeader';
 export * from './TabBar';
+export * from './EditGroupSheet';
 export * from './illustrations/EmptySearchIllustration';
 export * from './illustrations/EmptyWorkoutsIllustration';

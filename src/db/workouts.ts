@@ -930,4 +930,21 @@ export function updateWorkoutGroup(
   );
 }
 
+/**
+ * Retorna todos os nomes de grupos existentes para validação de unicidade.
+ */
+export function getExistingGroupNames(excludeGroupId?: string): string[] {
+  const rawDb = getExpoDb();
+  if (excludeGroupId) {
+    const rows = rawDb.getAllSync<{ name: string }>(
+      `SELECT name FROM groups WHERE id != ?`,
+      [excludeGroupId]
+    );
+    return rows.map((r) => r.name);
+  }
+  const rows = rawDb.getAllSync<{ name: string }>(`SELECT name FROM groups`);
+  return rows.map((r) => r.name);
+}
+
+
 

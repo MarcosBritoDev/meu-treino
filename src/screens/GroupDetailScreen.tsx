@@ -39,6 +39,7 @@ import {
   Toast,
   TextField,
   BottomSheet,
+  EditGroupSheet,
   triggerHaptic,
 } from '../ui';
 import {
@@ -47,6 +48,7 @@ import {
   duplicateGroup,
   deleteGroup,
   updateWorkoutGroup,
+  getExistingGroupNames,
   addWorkoutToGroup,
   duplicateWorkout,
   deleteWorkout,
@@ -139,14 +141,17 @@ export const GroupDetailScreen: React.FC = () => {
   const { group, workouts, otherGroups } = data;
 
   // Ações do Grupo
-  const handleSaveEditGroup = () => {
-    if (!editGroupName.trim()) return;
+  const handleSaveEditGroup = (formData: {
+    name: string;
+    description?: string;
+    frequencyDays: number;
+  }) => {
     try {
       updateWorkoutGroup(
         group.id,
-        editGroupName.trim(),
-        editGroupDesc.trim() || undefined,
-        parseInt(editGroupFreq, 10) || undefined
+        formData.name,
+        formData.description,
+        formData.frequencyDays
       );
       triggerHaptic('success');
       setEditGroupSheetVisible(false);
@@ -794,47 +799,23 @@ export const GroupDetailScreen: React.FC = () => {
       </Modal>
 
       {/* Sheet para Editar Grupo (3.4) */}
-      <BottomSheet
+      <EditGroupSheet
         visible={editGroupSheetVisible}
+        mode="edit"
+        initialData={{
+          id: group.id,
+          name: group.name,
+          description: group.description,
+          frequencyDays: group.frequencyDays,
+        }}
+        existingGroupNames={getExistingGroupNames(group.id)}
         onClose={() => setEditGroupSheetVisible(false)}
-        title="Editar grupo de treino"
-      >
-        <View style={styles.bottomSheetForm}>
-          <TextField
-            label="Nome do grupo *"
-            value={editGroupName}
-            onChangeText={setEditGroupName}
-            maxLength={40}
-          />
-
-          <TextField
-            label="Frequência / Ciclo (em dias)"
-            value={editGroupFreq}
-            onChangeText={setEditGroupFreq}
-            keyboardType="numeric"
-            maxLength={2}
-            containerStyle={styles.formFieldSpacing}
-          />
-
-          <TextField
-            label="Descrição ou foco estratégico"
-            value={editGroupDesc}
-            onChangeText={setEditGroupDesc}
-            maxLength={140}
-            containerStyle={styles.formFieldSpacing}
-          />
-
-          <View style={styles.formButtonRow}>
-            <Button
-              title="Salvar alterações"
-              variant="primary"
-              disabled={!editGroupName.trim()}
-              onPress={handleSaveEditGroup}
-              style={styles.fullWidthButton}
-            />
-          </View>
-        </View>
-      </BottomSheet>
+        onSave={handleSaveEditGroup}
+        onDelete={() => {
+          setEditGroupSheetVisible(false);
+          handleConfirmDeleteGroup();
+        }}
+      />
 
       {/* Sheet para Adicionar Treino ao Grupo */}
       <BottomSheet

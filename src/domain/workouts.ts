@@ -3,6 +3,8 @@
  * Zero dependências de banco de dados ou React Native.
  */
 
+import { normalizeSearchText } from './search';
+
 /**
  * Formata o tempo relativo da última sessão concluída.
  * Sentence case: "Último log há 2 dias", "Último log hoje", "Último log ontem", "Nunca treinado".
@@ -59,4 +61,69 @@ export function formatSequenceChips(exerciseNames: string[]): {
     extraCount,
     extraText,
   };
+}
+
+export interface GroupSplitSuggestion {
+  name: string;
+  frequencyDays: number;
+  description: string;
+}
+
+/**
+ * Sugestões padrão de divisão de treino (Split Suggestions).
+ * Sentence case e descrições estratégicas.
+ */
+export const GROUP_SPLIT_SUGGESTIONS: readonly GroupSplitSuggestion[] = [
+  {
+    name: 'PPL',
+    frequencyDays: 6,
+    description: 'Siga a sequência alternando os dias de empurrar, puxar e pernas.',
+  },
+  {
+    name: 'Upper / Lower',
+    frequencyDays: 4,
+    description: 'Membros superiores e inferiores alternados com dias de descanso intermediários.',
+  },
+  {
+    name: 'Fullbody',
+    frequencyDays: 3,
+    description: 'Treino de corpo inteiro 3 vezes na semana com foco em grandes compostos.',
+  },
+  {
+    name: 'ABCDE',
+    frequencyDays: 5,
+    description: 'Um grupo muscular isolado por dia da semana para alto volume por região.',
+  },
+  {
+    name: 'Arnold Split',
+    frequencyDays: 6,
+    description: 'Peito/Costas, Ombros/Braços e Pernas — alta intensidade e volume sinérgico.',
+  },
+] as const;
+
+/**
+ * Validação do nome do grupo de treino:
+ * - Obrigatório (não vazio)
+ * - Máximo de 40 caracteres
+ * - Único (ignora maiúsculas/minúsculas e acentos entre grupos existentes)
+ */
+export function validateGroupName(
+  name: string,
+  existingNames: string[]
+): { isValid: boolean; error?: string } {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return { isValid: false, error: 'O nome do grupo é obrigatório' };
+  }
+  if (trimmed.length > 40) {
+    return { isValid: false, error: 'O nome deve ter no máximo 40 caracteres' };
+  }
+  const norm = normalizeSearchText(trimmed);
+  const isDuplicate = existingNames.some(
+    (existing) => normalizeSearchText(existing) === norm
+  );
+  if (isDuplicate) {
+    return { isValid: false, error: 'Já existe um grupo com este nome' };
+  }
+  return { isValid: true };
 }
