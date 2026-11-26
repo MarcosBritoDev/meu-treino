@@ -345,7 +345,7 @@ describe('ETAPA 2 — Numeração visual vs position e sanitização', () => {
         { type: 'normal' },  // 3 -> '2'
         { type: 'failure' }, // 4 -> 'F'
         { type: 'drop' },    // 5 -> 'D'
-        { type: 'normal' },  // 6 -> '5' (5ª série não-aquecimento)
+        { type: 'normal' },  // 6 -> '4' (ignora aquecimento e drop)
       ];
 
       expect(getSetDisplayLabel(sets, 0)).toBe('A');
@@ -354,7 +354,7 @@ describe('ETAPA 2 — Numeração visual vs position e sanitização', () => {
       expect(getSetDisplayLabel(sets, 3)).toBe('2');
       expect(getSetDisplayLabel(sets, 4)).toBe('F');
       expect(getSetDisplayLabel(sets, 5)).toBe('D');
-      expect(getSetDisplayLabel(sets, 6)).toBe('5');
+      expect(getSetDisplayLabel(sets, 6)).toBe('4');
     });
 
     it('retorna string vazia para índices fora do intervalo', () => {

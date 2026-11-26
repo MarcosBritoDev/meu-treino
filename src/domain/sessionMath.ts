@@ -176,10 +176,13 @@ interface SetEffortLike {
   effort_value_max?: number | null;
   effortRefExerciseId?: string | null;
   effort_ref_exercise_id?: string | null;
+  drop_percent?: number | null;
+  dropPercent?: number | null;
 }
 
 /**
  * Formata a meta de esforço ou referência pré-definida.
+ * Para séries drop com drop_percent configurado, exibe a redução (-{drop_percent}% da anterior).
  * Retorna string vazia para tipos que não são "normal" ou quando esforço for "none".
  */
 export function formatEffort(
@@ -188,6 +191,19 @@ export function formatEffort(
   refExerciseName?: string
 ): string {
   const type = set.type || 'normal';
+
+  if (type === 'drop') {
+    const rawDrop = set.drop_percent ?? set.dropPercent;
+    if (rawDrop !== null && rawDrop !== undefined && !Number.isNaN(Number(rawDrop))) {
+      const dropPercent = Number(rawDrop);
+      const formattedPercent = Number.isInteger(dropPercent)
+        ? String(dropPercent)
+        : String(round2(dropPercent)).replace('.', ',');
+      return `-${formattedPercent}% da anterior`;
+    }
+    return '';
+  }
+
   if (type !== 'normal') return '';
 
   const mode = (set.effortMode || set.effort_mode || 'none') as EffortMode;
@@ -226,6 +242,27 @@ export function formatEffort(
   }
 
   return '';
+}
+
+/**
+ * Formata o alvo/esforço da série. Para drop sets, exibe -{drop_percent}% da anterior
+ * (padrão 20% caso drop_percent não seja especificado).
+ */
+export function formatTarget(
+  set: SetEffortLike,
+  unit: Unit = 'kg',
+  refExerciseName?: string
+): string {
+  const type = set.type || 'normal';
+  if (type === 'drop') {
+    const rawDrop = set.drop_percent ?? set.dropPercent ?? 20;
+    const dropPercent = Number(rawDrop);
+    const formattedPercent = Number.isInteger(dropPercent)
+      ? String(dropPercent)
+      : String(round2(dropPercent)).replace('.', ',');
+    return `-${formattedPercent}% da anterior`;
+  }
+  return formatEffort(set, unit, refExerciseName);
 }
 
 // ============================================================================
@@ -279,8 +316,110 @@ export function suggest1RmWeightKg(
 }
 
 /**
+ * Calcula a carga sugerida para uma série Drop a partir de um peso base.
+ * - Se baseKg == null ou baseKg <= 0, retorna null.
+ * - Limita dropPercent entre 1 e 90 (padrão 20%).
+ * - Calcula baseKg * (1 - dropPercent / 100) e arredonda para o múltiplo mais próximo de incrementKg (mínimo incrementKg).
+ */
+export function calcDropFromWeightKg(
+  baseKg: number | null | undefined,
+  dropPercent = 20,
+  incrementKg = 2.5
+): number | null {
+  if (baseKg === null || baseKg === undefined || Number.isNaN(baseKg) || baseKg <= 0) {
+    return null;
+  }
+  const inc = Number.isFinite(incrementKg) && incrementKg > 0 ? incrementKg : 2.5;
+  const rawPercent = Number.isFinite(dropPercent) ? dropPercent : 20;
+  const clampedPercent = Math.min(90, Math.max(1, rawPercent));
+
+  const reduced = baseKg * (1 - clampedPercent / 100);
+  const rounded = Math.max(inc, Math.round(reduced / inc) * inc);
+  return round2(rounded);
+}
+
+/**
+ * Recalcula em cascata o peso das séries drop consecutivas após changedIndex.
+ * - Percorre os itens consecutivos após changedIndex enquanto sets[i].type === 'drop'.
+ * - Se o item tiver manual_weight === true (ou manualWeight === true), para a cascata.
+ * - Caso contrário, recalcula o peso desse drop a partir do peso da série imediatamente acima usando calcDropFromWeightKg.
+ */
+export function recalculateDropCascade<T extends Record<string, any>>(
+  sets: T[],
+  changedIndex: number,
+  incrementKg = 2.5
+): T[] {
+  if (!sets || changedIndex < 0 || changedIndex >= sets.length) {
+    return sets ? sets.map((s) => ({ ...s })) : [];
+  }
+
+  const result = sets.map((s) => ({ ...s }));
+
+  for (let i = changedIndex + 1; i < result.length; i++) {
+    const current = result[i];
+    const currentType = current.type || (current.isWarmup ? 'warmup' : 'normal');
+    if (currentType !== 'drop') {
+      break;
+    }
+
+    const isManual = current.manual_weight === true || current.manualWeight === true;
+    if (isManual) {
+      break;
+    }
+
+    const prev = result[i - 1];
+    const prevWeight = prev.weight ?? prev.actual_weight_kg ?? prev.weightKg ?? null;
+    const dropPercent = current.drop_percent ?? current.dropPercent ?? 20;
+
+    const newWeight = calcDropFromWeightKg(prevWeight, dropPercent, incrementKg);
+
+    (current as any).weight = newWeight;
+    if ('actual_weight_kg' in current) {
+      (current as any).actual_weight_kg = newWeight;
+    }
+    if ('weightKg' in current) {
+      (current as any).weightKg = newWeight;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Retorna true apenas se existir pelo menos uma série com type !== 'warmup' na lista.
+ */
+export function canAddDropAtEnd(
+  sets: Array<{ type?: SetType | string; isWarmup?: boolean }>
+): boolean {
+  if (!sets || sets.length === 0) return false;
+  return sets.some((s) => {
+    const type = s.type || (s.isWarmup ? 'warmup' : 'normal');
+    return type !== 'warmup';
+  });
+}
+
+/**
+ * Retorna true apenas se index > 0 e existir pelo menos uma série com type !== 'warmup' antes de index.
+ */
+export function canSetBeDrop(
+  sets: Array<{ type?: SetType | string; isWarmup?: boolean }>,
+  index: number
+): boolean {
+  if (!sets || index <= 0 || index >= sets.length) return false;
+  for (let i = 0; i < index; i++) {
+    const s = sets[i];
+    const type = s.type || (s.isWarmup ? 'warmup' : 'normal');
+    if (type !== 'warmup') {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Retorna o rótulo de exibição da série:
- * 'A' (warmup), 'F' (failure), 'D' (drop) ou contagem sequencial ('1', '2', ...) ignorando aquecimento.
+ * 'A' (warmup), 'F' (failure), 'D' (drop) ou contagem sequencial ('1', '2', ...)
+ * ignorando tanto warmup quanto drop (nunca pula número por causa de um D).
  */
 export function getSetDisplayLabel(
   sets: Array<{ type?: SetType | string; isWarmup?: boolean }>,
@@ -297,7 +436,7 @@ export function getSetDisplayLabel(
   let normalCount = 0;
   for (let i = 0; i <= index; i++) {
     const t = (sets[i].type || (sets[i].isWarmup ? 'warmup' : 'normal')) as SetType;
-    if (t !== 'warmup') {
+    if (t !== 'warmup' && t !== 'drop') {
       normalCount++;
     }
   }

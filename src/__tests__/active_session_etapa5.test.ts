@@ -155,7 +155,7 @@ describe('ETAPA 5 — Integração com startWorkoutSession e ActiveSessionScreen
       expect(getSetDisplayLabel(sets as any, 1)).toBe('1');
       expect(getSetDisplayLabel(sets as any, 2)).toBe('F');
       expect(getSetDisplayLabel(sets as any, 3)).toBe('D');
-      expect(getSetDisplayLabel(sets as any, 4)).toBe('4');
+      expect(getSetDisplayLabel(sets as any, 4)).toBe('3');
 
       // Tag de sessão
       expect(sets[3].is_session_only).toBe(true);
