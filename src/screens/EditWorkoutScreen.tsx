@@ -5,20 +5,20 @@ import {
   Pressable,
   TextInput,
   ScrollView,
-  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
-  ArrowLeft,
   ChevronLeft,
   Play,
   Save,
   Plus,
+  Pencil,
+  Dumbbell,
 } from 'lucide-react-native';
 import { RootStackParamList } from '../navigation/types';
-import { colors } from '../theme';
+import { colors, radii, spacing } from '../theme';
 import { Text } from '../ui/Text';
 import { Toast } from '../ui/Toast';
 import { ConfirmModal } from '../ui/ConfirmModal';
@@ -27,7 +27,7 @@ import { SetTypeSheet, SetTypeOptionKey } from '../ui/SetTypeSheet';
 import { SetEditSheet } from '../ui/SetEditSheet';
 import { SetMenuAction } from '../ui/session/SetTable';
 import { triggerHaptic } from '../ui/haptics';
-import { estimarDuracao, formatarDuracao } from '../domain/duration';
+import { estimarDuracao } from '../domain/duration';
 import {
   Unit,
   PlannedSet,
@@ -59,6 +59,8 @@ export const EditWorkoutScreen: React.FC = () => {
 
   const [data, setData] = useState<WorkoutForEdit | null>(null);
   const [name, setName] = useState('');
+  const [nameError, setNameError] = useState(false);
+  const [isInputFocused, setIsInputFocused] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [isActive, setIsActive] = useState(true);
   const [exercises, setExercises] = useState<WorkoutExerciseForEdit[]>([]);
@@ -271,10 +273,15 @@ export const EditWorkoutScreen: React.FC = () => {
 
   // Salvar ficha completa
   const handleSaveWorkout = () => {
-    if (!workoutId || !name.trim()) {
+    if (!workoutId) return;
+    if (!name.trim()) {
       triggerHaptic('error');
+      setNameError(true);
+      setToastMessage('Informe um nome para o treino');
+      setToastVisible(true);
       return;
     }
+    setNameError(false);
     try {
       saveWorkout(workoutId, {
         name: name.trim(),
@@ -553,8 +560,14 @@ export const EditWorkoutScreen: React.FC = () => {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
-          <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-            <ArrowLeft size={22} color="#FFFFFF" strokeWidth={2} />
+          <Pressable
+            onPress={() => navigation.goBack()}
+            style={styles.backButton}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel="Voltar"
+          >
+            <ChevronLeft size={24} color={colors.onSurface} strokeWidth={2} />
           </Pressable>
           <Text variant="headline" style={styles.headerTitleFallback}>
             Editar treino
@@ -571,46 +584,55 @@ export const EditWorkoutScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* 1. CABEÇALHO DA PRÉVIA */}
+      {/* 1. CABEÇALHO LIMPO E ERGONÔMICO (Sem botão minúsculo no topo) */}
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Pressable
-            onPress={handleBack}
-            style={styles.backButton}
-            accessibilityRole="button"
-            accessibilityLabel="Voltar"
-          >
-            <ChevronLeft size={24} color="#FFFFFF" strokeWidth={2} />
-          </Pressable>
+        <Pressable
+          onPress={handleBack}
+          style={styles.backButton}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel="Voltar"
+        >
+          <ChevronLeft size={24} color={colors.onSurface} strokeWidth={2} />
+        </Pressable>
 
+        <View
+          style={[
+            styles.nameInputContainer,
+            isInputFocused && styles.nameInputContainerFocused,
+            nameError && styles.nameInputContainerError,
+          ]}
+        >
           <TextInput
             value={name}
-            onChangeText={setName}
+            onChangeText={(text) => {
+              setName(text);
+              if (nameError && text.trim().length > 0) {
+                setNameError(false);
+              }
+            }}
+            onFocus={() => setIsInputFocused(true)}
+            onBlur={() => setIsInputFocused(false)}
             maxLength={40}
             placeholder="Nome do treino"
-            placeholderTextColor="#636366"
+            placeholderTextColor={colors.textMuted}
             style={styles.nameInputInline}
             accessible={true}
             accessibilityLabel="Nome do treino"
           />
-
-          <View style={styles.codeBadge}>
-            <Text style={styles.codeBadgeText}>{data.code}</Text>
-          </View>
+          <Pencil
+            size={14}
+            color={isInputFocused ? colors.primary : colors.textMuted}
+            strokeWidth={1.75}
+            style={styles.pencilIcon}
+          />
         </View>
 
-        <Pressable
-          onPress={handleStartClick}
-          style={({ pressed }) => [
-            styles.startBtn,
-            pressed && { opacity: 0.8 },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Iniciar treino"
-        >
-          <Play size={12} fill="#FF7A59" color="#FF7A59" />
-          <Text style={styles.startBtnText}>Iniciar</Text>
-        </Pressable>
+        <View style={styles.codeBadge}>
+          <Text variant="labelSmall" tabular style={styles.codeBadgeText}>
+            {data.code}{data.groupName ? ` · ${data.groupName}` : ''}
+          </Text>
+        </View>
       </View>
 
       {/* 2. CONTEÚDO ROLÁVEL (LISTA DE EXERCÍCIOS) */}
@@ -646,13 +668,19 @@ export const EditWorkoutScreen: React.FC = () => {
 
         {exercises.length === 0 && (
           <View style={styles.emptyPreviewBox}>
+            <View style={styles.emptyIconCircle}>
+              <Dumbbell size={28} color={colors.textMuted} strokeWidth={1.75} />
+            </View>
+            <Text variant="headline" style={styles.emptyPreviewTitle}>
+              Ficha sem exercícios
+            </Text>
             <Text variant="bodyMedium" color="secondary" style={styles.emptyPreviewText}>
-              Nenhum exercício nesta ficha ainda.
+              Adicione exercícios abaixo para estruturar suas séries planejadas, metas e tempos de descanso.
             </Text>
           </View>
         )}
 
-        {/* BOTÃO + ADICIONAR EXERCÍCIO */}
+        {/* BOTÃO + ADICIONAR EXERCÍCIO (Superfície sólida, sem border tracejado) */}
         <Pressable
           onPress={() => {
             triggerHaptic('light');
@@ -664,43 +692,85 @@ export const EditWorkoutScreen: React.FC = () => {
           }}
           style={({ pressed }) => [
             styles.addExerciseButton,
-            pressed && { opacity: 0.8 },
+            pressed && styles.btnSecondaryPressed,
           ]}
           accessibilityRole="button"
           accessibilityLabel="Adicionar exercício"
         >
-          <Plus size={18} color="#FF7A59" strokeWidth={2.4} />
+          <Plus size={18} color={colors.primary} strokeWidth={2.4} />
           <Text style={styles.addExerciseButtonText}>Adicionar exercício</Text>
         </Pressable>
       </ScrollView>
 
-      {/* 3. RODAPÉ FIXO (Modo Prévia) */}
+      {/* 3. RODAPÉ FIXO CONTEXTUAL (Thumb Zone) */}
       <View style={styles.fixedFooter}>
         <View style={styles.footerInfoRow}>
-          <Text style={styles.footerStatsText}>
-            <Text style={styles.footerStatsBold}>{totalSets} {totalSets === 1 ? 'série' : 'séries'}</Text> · ~{approxMin} min
+          <Text variant="bodySmall" color="secondary" style={styles.footerStatsText}>
+            <Text variant="headline" tabular style={styles.footerStatsBold}>
+              {totalSets}
+            </Text>
+            {' '}{totalSets === 1 ? 'série' : 'séries'}
+            {' · ~'}
+            <Text variant="headline" tabular style={styles.footerStatsBold}>
+              {approxMin}
+            </Text>
+            {' min'}
           </Text>
 
-          {isDirty && (
+          {isDirty ? (
             <View style={styles.unsavedIndicator}>
               <View style={styles.unsavedDot} />
-              <Text style={styles.unsavedText}>Alterações não salvas</Text>
+              <Text variant="labelSmall" color="coral" style={styles.unsavedText}>
+                Alterações não salvas
+              </Text>
             </View>
-          )}
+          ) : null}
         </View>
 
-        <Pressable
-          onPress={handleSaveWorkout}
-          style={({ pressed }) => [
-            styles.saveButton,
-            pressed && { opacity: 0.85 },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Salvar treino"
-        >
-          <Save size={16} color="#FFFFFF" strokeWidth={2} />
-          <Text style={styles.saveButtonText}>Salvar treino</Text>
-        </Pressable>
+        {!isDirty ? (
+          /* Quando limpo (!isDirty): Botão primário heróico é Iniciar treino */
+          <Pressable
+            onPress={handleStartClick}
+            style={({ pressed }) => [
+              styles.primaryHeroBtn,
+              pressed && styles.btnPressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Iniciar treino"
+          >
+            <Play size={18} fill={colors.onPrimary} color={colors.onPrimary} />
+            <Text style={styles.primaryHeroBtnText}>Iniciar treino</Text>
+          </Pressable>
+        ) : (
+          /* Quando modificado (isDirty): Botão primário Salvar alterações + Secundário Iniciar */
+          <View style={styles.dualActionRow}>
+            <Pressable
+              onPress={handleStartClick}
+              style={({ pressed }) => [
+                styles.secondaryStartBtn,
+                pressed && styles.btnSecondaryPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Iniciar treino"
+            >
+              <Play size={16} fill={colors.onSurface} color={colors.onSurface} />
+              <Text style={styles.secondaryStartBtnText}>Iniciar</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={handleSaveWorkout}
+              style={({ pressed }) => [
+                styles.primarySaveBtn,
+                pressed && styles.btnPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Salvar alterações"
+            >
+              <Save size={18} color={colors.onPrimary} strokeWidth={2} />
+              <Text style={styles.primarySaveBtnText}>Salvar alterações</Text>
+            </Pressable>
+          </View>
+        )}
       </View>
 
       {/* SHEET: Adicionar série (6 opções) */}
@@ -731,75 +801,25 @@ export const EditWorkoutScreen: React.FC = () => {
         onRemove={handleRemoveSetFromSheet}
       />
 
-      {/* MODAL: "Salvar antes de iniciar?" */}
-      {showUnsavedModal && (
-        <Modal
-          transparent
-          visible={showUnsavedModal}
-          animationType="fade"
-          onRequestClose={() => setShowUnsavedModal(false)}
-        >
-          <Pressable
-            style={styles.modalOverlay}
-            onPress={() => setShowUnsavedModal(false)}
-          >
-            <Pressable
-              style={styles.unsavedModalCard}
-              onPress={(e) => e.stopPropagation()}
-            >
-              <Text style={styles.unsavedModalTitle}>Salvar antes de iniciar?</Text>
-              <Text style={styles.unsavedModalDesc}>
-                Você fez alterações na prévia deste treino. Deseja salvar no planejamento antes de iniciar a sessão?
-              </Text>
-
-              <View style={styles.unsavedModalBtnList}>
-                <Pressable
-                  onPress={() => {
-                    handleSaveWorkout();
-                    setShowUnsavedModal(false);
-                    checkConflictAndStart();
-                  }}
-                  style={({ pressed }) => [
-                    styles.modalPrimaryBtn,
-                    pressed && { opacity: 0.85 },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Salvar e iniciar treino"
-                >
-                  <Text style={styles.modalPrimaryBtnText}>Salvar e iniciar</Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={() => {
-                    setShowUnsavedModal(false);
-                    checkConflictAndStart();
-                  }}
-                  style={({ pressed }) => [
-                    styles.modalSecondaryBtn,
-                    pressed && { opacity: 0.85 },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Iniciar sem salvar"
-                >
-                  <Text style={styles.modalSecondaryBtnText}>Iniciar sem salvar</Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={() => setShowUnsavedModal(false)}
-                  style={({ pressed }) => [
-                    styles.modalCancelBtn,
-                    pressed && { opacity: 0.6 },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Cancelar"
-                >
-                  <Text style={styles.modalCancelBtnText}>Cancelar</Text>
-                </Pressable>
-              </View>
-            </Pressable>
-          </Pressable>
-        </Modal>
-      )}
+      {/* MODAL: Salvar antes de iniciar? (Padronizado via ConfirmModal) */}
+      <ConfirmModal
+        visible={showUnsavedModal}
+        title="Salvar antes de iniciar?"
+        description="Você fez alterações nesta ficha de treino. Deseja salvar as alterações no planejamento antes de iniciar a sessão?"
+        confirmLabel="Salvar e iniciar"
+        cancelLabel="Continuar editando"
+        discardLabel="Iniciar versão salva"
+        onConfirm={() => {
+          handleSaveWorkout();
+          setShowUnsavedModal(false);
+          checkConflictAndStart();
+        }}
+        onCancel={() => setShowUnsavedModal(false)}
+        onDiscard={() => {
+          setShowUnsavedModal(false);
+          checkConflictAndStart();
+        }}
+      />
 
       {/* Modal de Conflito de Sessão */}
       <ConfirmModal
@@ -845,93 +865,126 @@ export const EditWorkoutScreen: React.FC = () => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#1A1715',
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#23201D',
-    backgroundColor: '#1A1715',
+    borderBottomColor: colors.surfaceContainer,
+    backgroundColor: colors.background,
+    gap: spacing.sm,
   },
-  headerLeft: {
+  backButton: {
+    width: spacing.touchTargetMin,
+    height: spacing.touchTargetMin,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: -spacing.sm,
+    borderRadius: radii.pill,
+  },
+  headerTitleFallback: {
+    color: colors.onSurface,
+    fontSize: 16,
+    fontWeight: '700',
+    marginLeft: spacing.sm,
+  },
+  nameInputContainer: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginRight: 8,
+    backgroundColor: colors.surfaceContainerHighest,
+    borderRadius: radii.input,
+    paddingHorizontal: spacing.gutter,
+    height: 44,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
   },
-  backButton: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: -4,
+  nameInputContainerFocused: {
+    borderColor: colors.primary,
   },
-  headerTitleFallback: {
-    color: '#F5EFE8',
-    fontSize: 16,
-    fontWeight: '700',
-    marginLeft: 8,
+  nameInputContainerError: {
+    borderColor: colors.error,
   },
   nameInputInline: {
-    flexShrink: 1,
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#F5EFE8',
-    paddingVertical: 2,
-    paddingHorizontal: 0,
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.onSurface,
+    paddingVertical: 0,
     minWidth: 80,
   },
+  pencilIcon: {
+    marginLeft: spacing.xs,
+  },
   codeBadge: {
-    backgroundColor: '#2D2925',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    backgroundColor: colors.surfaceContainerHigh,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   codeBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#FF7A59',
-  },
-  startBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#2D2925',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  startBtnText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#F5EFE8',
+    fontWeight: '700',
+    color: colors.primary,
   },
   scrollContent: {
     padding: 14,
-    paddingBottom: 110,
+    paddingBottom: 130,
+  },
+  emptyPreviewBox: {
+    paddingVertical: 36,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceContainer,
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+    marginBottom: spacing.gutter,
+  },
+  emptyIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceContainerHigh,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.gutter,
+  },
+  emptyPreviewTitle: {
+    color: colors.onSurface,
+    marginBottom: spacing.xs,
+    textAlign: 'center',
+  },
+  emptyPreviewText: {
+    textAlign: 'center',
+    color: colors.onSurfaceVariant,
+    lineHeight: 20,
   },
   addExerciseButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: spacing.sm,
+    minHeight: 52,
     paddingVertical: 14,
-    backgroundColor: '#23201D',
+    backgroundColor: colors.surfaceContainer,
     borderWidth: 1,
-    borderColor: '#38332F',
-    borderStyle: 'dashed',
-    borderRadius: 14,
-    marginTop: 4,
+    borderColor: colors.outlineVariant,
+    borderRadius: radii.card,
+    marginTop: spacing.xs,
   },
   addExerciseButtonText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
-    color: '#FF7A59',
+    color: colors.primary,
   },
   fixedFooter: {
     position: 'absolute',
@@ -940,127 +993,98 @@ const styles = StyleSheet.create({
     right: 0,
     backgroundColor: 'rgba(35, 32, 29, 0.96)',
     borderTopWidth: 1,
-    borderTopColor: '#2D2925',
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 16,
+    borderTopColor: colors.surfaceContainerHigh,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.gutter,
+    paddingBottom: spacing.md,
   },
   footerInfoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   footerStatsText: {
-    fontSize: 12,
-    color: '#B7ADA3',
+    color: colors.onSurfaceVariant,
+    fontSize: 13,
   },
   footerStatsBold: {
+    color: colors.onSurface,
+    fontSize: 15,
     fontWeight: '700',
-    color: '#F5EFE8',
   },
   unsavedIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: spacing.xs + 2,
   },
   unsavedDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#FF7A59',
+    backgroundColor: colors.primary,
   },
   unsavedText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#FF7A59',
   },
-  saveButton: {
+  primaryHeroBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#FF7A59',
-    paddingVertical: 12,
-    borderRadius: 12,
+    gap: spacing.sm,
+    backgroundColor: colors.primary,
+    height: spacing.buttonHeight,
+    borderRadius: radii.pill,
   },
-  saveButtonText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1A1715',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  unsavedModalCard: {
-    width: '100%',
-    maxWidth: 340,
-    backgroundColor: '#23201D',
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: '#2D2925',
-    padding: 20,
-  },
-  unsavedModalTitle: {
+  primaryHeroBtnText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#F5EFE8',
-    marginBottom: 6,
+    color: colors.onPrimary,
   },
-  unsavedModalDesc: {
-    fontSize: 12,
-    color: '#B7ADA3',
-    lineHeight: 18,
-    marginBottom: 18,
-  },
-  unsavedModalBtnList: {
-    flexDirection: 'column',
-    gap: 8,
-  },
-  modalPrimaryBtn: {
-    backgroundColor: '#FF7A59',
-    paddingVertical: 11,
-    borderRadius: 12,
+  dualActionRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.gutter,
   },
-  modalPrimaryBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#1A1715',
-  },
-  modalSecondaryBtn: {
-    backgroundColor: '#2D2925',
-    paddingVertical: 11,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  modalSecondaryBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#F5EFE8',
-  },
-  modalCancelBtn: {
-    paddingVertical: 8,
-    alignItems: 'center',
-  },
-  modalCancelBtnText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#8E8E93',
-  },
-  emptyPreviewBox: {
-    paddingVertical: 32,
-    paddingHorizontal: 16,
+  secondaryStartBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: spacing.xs + 2,
+    backgroundColor: colors.surfaceContainerHigh,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+    height: spacing.buttonHeight,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.pill,
   },
-  emptyPreviewText: {
-    textAlign: 'center',
-    fontSize: 14,
+  secondaryStartBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.onSurface,
+  },
+  primarySaveBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.primary,
+    height: spacing.buttonHeight,
+    borderRadius: radii.pill,
+  },
+  primarySaveBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.onPrimary,
+  },
+  btnPressed: {
+    backgroundColor: colors.accentPressed,
+    transform: [{ scale: 0.995 }],
+  },
+  btnSecondaryPressed: {
+    opacity: 0.8,
   },
   emptyContainer: {
     flex: 1,
