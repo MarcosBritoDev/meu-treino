@@ -1,8 +1,7 @@
-import React, { memo, useState } from 'react';
+import React, { memo, useState, useRef } from 'react';
 import {
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -10,19 +9,14 @@ import {
 } from 'react-native';
 import {
   Check,
-  PlusCircle,
-  ArrowUpDown,
-  MoreHorizontal,
   MoreVertical,
   Trophy,
-  X,
   Copy,
   ArrowUp,
   ArrowDown,
   Trash2,
 } from 'lucide-react-native';
-import { C, F } from './tokens';
-import { GRID } from './grid';
+import { F } from './tokens';
 import {
   Unit,
   SetType,
@@ -30,10 +24,8 @@ import {
   EffortMode,
   formatWeight,
   rowStates,
-  setLabels,
   RowState,
   formatRepsTarget,
-  formatRepsShort,
   formatEffort,
   formatTarget,
   getSetDisplayLabel,
@@ -124,7 +116,7 @@ export function SetTable(p: SetTableProps) {
   const [activeMenuSetId, setActiveMenuSetId] = useState<string | null>(null);
 
   // ==========================================================================
-  // 1. MODO PRÉVIA (4 COLUNAS: Série | Meta | Reps | ⋮ — SEM PESO, SEM CHECK)
+  // 1. MODO PRÉVIA (3 COLUNAS LIMPAS: Série | Meta | ⋮ — SEM PESO, SEM DUPLICATA)
   // ==========================================================================
   if (mode === 'preview') {
     const activeMenuIndex = activeMenuSetId
@@ -141,7 +133,7 @@ export function SetTable(p: SetTableProps) {
 
     return (
       <View style={s.tableContainer}>
-        {/* Cabeçalho de 4 colunas */}
+        {/* Cabeçalho de 3 colunas limpas: Série | Meta | (ação ⋮) */}
         <View
           style={s.previewHeader}
           accessibilityElementsHidden
@@ -149,7 +141,6 @@ export function SetTable(p: SetTableProps) {
         >
           <Text style={[s.headText, s.previewColSerie]}>Série</Text>
           <Text style={[s.headText, s.previewColMeta]}>Meta</Text>
-          <Text style={[s.headText, s.previewColReps]}>Reps</Text>
           <View style={s.previewColAction} />
         </View>
 
@@ -164,11 +155,11 @@ export function SetTable(p: SetTableProps) {
             const refName = refExerciseId
               ? p.refExerciseName?.(refExerciseId)
               : undefined;
-            const effort =
+            const rawEffort =
               setType === 'normal' || setType === 'drop' || (!setType && !set.isWarmup && !set.isFailure)
                 ? formatTarget(set, p.unit, refName)
                 : '';
-            const repsShort = formatRepsShort(set);
+            const effort = rawEffort.replace(/\s*da anterior$/i, '');
 
             return (
               <View key={set.id} style={s.previewRowWrap}>
@@ -210,7 +201,7 @@ export function SetTable(p: SetTableProps) {
                     </View>
                   </View>
 
-                  {/* 2. META (2 LINHAS) */}
+                  {/* 2. META (Reps em destaque Outfit tabular + Esforço em subtexto) */}
                   <View style={s.previewColMeta}>
                     <Text style={s.previewMetaPrimary} numberOfLines={1}>
                       {repsTarget}
@@ -222,28 +213,22 @@ export function SetTable(p: SetTableProps) {
                     )}
                   </View>
 
-                  {/* 3. REPS (Pill) */}
-                  <View style={s.previewColReps}>
-                    <View style={s.previewRepsPill}>
-                      <Text style={s.previewRepsText} numberOfLines={1}>
-                        {repsShort}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* 4. AÇÃO (⋮) */}
+                  {/* 3. AÇÃO (⋮) */}
                   <View style={s.previewColAction}>
                     <Pressable
                       style={({ pressed }) => [
                         s.previewMenuBtn,
                         pressed && { opacity: 0.6 },
                       ]}
-                      onPress={() => setActiveMenuSetId(set.id)}
-                      hitSlop={8}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        setActiveMenuSetId(set.id);
+                      }}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       accessibilityRole="button"
                       accessibilityLabel={`Opções da série ${badgeLabel}`}
                     >
-                      <MoreVertical size={16} color="#8E8E93" />
+                      <MoreVertical size={18} color="#8E8E93" />
                     </Pressable>
                   </View>
                 </Pressable>
@@ -251,23 +236,6 @@ export function SetTable(p: SetTableProps) {
             );
           })}
         </View>
-
-        {/* Rodapé da prévia (se onAddSet fornecido) */}
-        {Boolean(p.onAddSet) && (
-          <View style={s.footerRow}>
-            <View style={s.footerLeft}>
-              <Pressable
-                onPress={p.onAddSet}
-                style={({ pressed }) => [s.footerBtn, pressed && { opacity: 0.7 }]}
-                accessibilityRole="button"
-                accessibilityLabel="Adicionar série"
-              >
-                <PlusCircle size={15} color="#E5E5EA" strokeWidth={2.2} />
-                <Text style={s.footerBtnText}>Adicionar série</Text>
-              </Pressable>
-            </View>
-          </View>
-        )}
 
         {/* Menu Contextual Modal para Ações da Série (Duplicar, Mover, Remover) */}
         {activeMenuSetId !== null && (
@@ -402,7 +370,7 @@ export function SetTable(p: SetTableProps) {
   }
 
   // ==========================================================================
-  // 2. MODO ATIVO (6 COLUNAS COMPACTAS: Série | Anterior | Meta | kg/lb | Reps | ✓)
+  // 2. MODO ATIVO (5 COLUNAS FOLGADAS: Série | Meta e anterior | kg/lb | Reps | ✓)
   // ==========================================================================
   const states = rowStates(
     p.sets.map((s) => ({ completedAt: s.completedAt ?? null }))
@@ -411,19 +379,20 @@ export function SetTable(p: SetTableProps) {
 
   return (
     <View style={s.tableContainer}>
-      {/* CABEÇALHO DE 6 COLUNAS COMPACTAS */}
+      {/* CABEÇALHO DE 5 COLUNAS FOLGADAS */}
       <View
         style={s.activeHeader}
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
       >
         <Text style={[s.headText, s.activeColSerie]}>Série</Text>
-        <Text style={[s.headText, s.activeColPrev]}>Anterior</Text>
-        <Text style={[s.headText, s.activeColMeta]}>Meta</Text>
+        <Text style={[s.headText, s.activeColMeta]} numberOfLines={1}>
+          Meta e anterior
+        </Text>
         <Text style={[s.headText, s.activeColWeight]}>{p.unit}</Text>
         <Text style={[s.headText, s.activeColReps]}>Reps</Text>
         <View style={s.activeColCheck}>
-          <Check size={12} color="#7C7C80" strokeWidth={2.4} />
+          <Check size={14} color="#B7ADA3" strokeWidth={2.4} />
         </View>
       </View>
 
@@ -451,47 +420,6 @@ export function SetTable(p: SetTableProps) {
             />
           );
         })}
-      </View>
-
-      {/* RODAPÉ DO EXERCÍCIO (STITCH): + Adicionar série, ⇅ Substituir, ••• */}
-      <View style={s.footerRow}>
-        <View style={s.footerLeft}>
-          {Boolean(p.onAddSet) && (
-            <Pressable
-              onPress={p.onAddSet}
-              style={({ pressed }) => [s.footerBtn, pressed && { opacity: 0.7 }]}
-              accessibilityRole="button"
-              accessibilityLabel="Adicionar série"
-            >
-              <PlusCircle size={15} color="#E5E5EA" strokeWidth={2.2} />
-              <Text style={s.footerBtnText}>Adicionar série</Text>
-            </Pressable>
-          )}
-
-          {Boolean(p.onSwapExercise) && (
-            <Pressable
-              onPress={p.onSwapExercise}
-              style={({ pressed }) => [s.footerBtn, pressed && { opacity: 0.7 }]}
-              accessibilityRole="button"
-              accessibilityLabel="Substituir exercício"
-            >
-              <ArrowUpDown size={15} color="#E5E5EA" strokeWidth={2.2} />
-              <Text style={s.footerBtnText}>Substituir</Text>
-            </Pressable>
-          )}
-        </View>
-
-        {Boolean(p.onOpenExerciseOptions) && (
-          <Pressable
-            onPress={p.onOpenExerciseOptions}
-            style={({ pressed }) => [s.moreBtn, pressed && { opacity: 0.7 }]}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Mais opções do exercício"
-          >
-            <MoreHorizontal size={20} color="#8E8E93" />
-          </Pressable>
-        )}
       </View>
     </View>
   );
@@ -524,13 +452,17 @@ const SetRow = memo(function SetRow({
   onActiveChange,
   refExerciseName,
 }: SetRowProps) {
+  const [isWeightFocused, setIsWeightFocused] = useState(false);
+  const [isRepsFocused, setIsRepsFocused] = useState(false);
+  const repsInputRef = useRef<React.ElementRef<typeof TextInput>>(null);
+
   const done = state === 'done';
   const current = state === 'current';
 
   const setType = (set.type ||
     (set.isWarmup ? 'warmup' : set.isFailure ? 'failure' : 'normal')) as string;
 
-  // 1. Anterior: apenas carga × reps, sem RPE
+  // 1. Anterior: apenas carga × reps
   const prevWeight = previous
     ? (previous as any).weightKg ?? (previous as any).weight
     : null;
@@ -539,14 +471,15 @@ const SetRow = memo(function SetRow({
       ? `${formatWeight(prevWeight, unit)} ${unit} × ${previous.reps}`
       : '—';
 
-  // 2. Meta: formatRepsTarget na 1ª linha e formatEffort na 2ª linha
+  // 2. Meta: formatRepsTarget e esforço
   const repsTarget = formatRepsTarget(set);
   const refExerciseId = set.effortRefExerciseId ?? set.effort_ref_exercise_id;
   const refName = refExerciseId ? refExerciseName?.(refExerciseId) : undefined;
-  const effort =
+  const rawEffort =
     setType === 'normal' || setType === 'drop' || (!setType && !set.isWarmup && !set.isFailure)
       ? (setType === 'drop' ? formatTarget(set, unit, refName) : formatEffort(set, unit, refName))
       : '';
+  const effort = rawEffort.replace(/\s*da anterior$/i, '');
 
   const isManualDrop = setType === 'drop' && Boolean(set.manual_weight || (set as any).manualWeight);
   const rawWeight = set.weightKg ?? (set as any).weight;
@@ -572,7 +505,7 @@ const SetRow = memo(function SetRow({
               setType === 'warmup' && s.badgeTextWarmup,
               setType === 'failure' && s.badgeTextFailure,
               setType === 'drop' && s.badgeTextDrop,
-              (setType === 'normal' || (!setType && !set.isWarmup)) && s.badgeTextNormal,
+              (setType === 'normal' || (!setType && !set.isWarmup)) && s.badgeNormal,
             ]}
           >
             {label}
@@ -588,37 +521,42 @@ const SetRow = memo(function SetRow({
         )}
       </View>
 
-      {/* 2. ANTERIOR (Apenas carga × reps, sem RPE realizado) */}
-      <View style={s.activeColPrev}>
-        <Text style={[s.activeStatPrimary, prevText === '—' && s.statEmptyText]} numberOfLines={1}>
-          {prevText}
-        </Text>
-      </View>
-
-      {/* 3. META (1ª linha: reps, 2ª linha: esforço) */}
+      {/* 2. META E ANTERIOR */}
       <View style={s.activeColMeta}>
-        <Text style={s.activeStatPrimary} numberOfLines={1}>
+        <Text style={s.activeStatPrimary} numberOfLines={1} ellipsizeMode="tail">
           {repsTarget}
+          {Boolean(effort) && (
+            <Text style={s.metaEffortInline}>{` • ${effort}`}</Text>
+          )}
         </Text>
-        {Boolean(effort) && (
-          <Text style={s.metaEffortText} numberOfLines={1}>
-            {effort}
-          </Text>
-        )}
+        <Text
+          style={[s.activeStatPrev, prevText === '—' && s.statEmptyText]}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
+          {prevText === '—' ? 'Ant: —' : `Ant: ${prevText}`}
+        </Text>
       </View>
 
-      {/* 4. CARGA (kg ou lb) */}
+      {/* 3. CARGA (kg ou lb) */}
       <View style={s.activeColWeight}>
         <TextInput
           value={displayWeight === '—' ? '' : displayWeight}
           onChangeText={(val) => onActiveChange?.(set.id, 'weight', val)}
-          onFocus={() => onEditWeight?.(set.id)}
+          onFocus={() => {
+            setIsWeightFocused(true);
+            onEditWeight?.(set.id);
+          }}
+          onBlur={() => setIsWeightFocused(false)}
           placeholder="0"
-          placeholderTextColor="#525257"
+          placeholderTextColor="#7D746B"
           keyboardType="decimal-pad"
+          returnKeyType="next"
+          onSubmitEditing={() => repsInputRef.current?.focus()}
           selectTextOnFocus
           style={[
             s.activeBoxInput,
+            isWeightFocused && s.activeBoxInputFocused,
             done && s.activeBoxInputDone,
             isManualDrop && s.activeBoxInputManualDrop,
           ]}
@@ -626,35 +564,54 @@ const SetRow = memo(function SetRow({
         />
       </View>
 
-      {/* 5. REPS (sem mini-badge de RPE) */}
+      {/* 4. REPS */}
       <View style={s.activeColReps}>
         <TextInput
+          ref={repsInputRef}
           value={displayReps}
           onChangeText={(val) => onActiveChange?.(set.id, 'reps', val)}
-          onFocus={() => onEditReps?.(set.id)}
+          onFocus={() => {
+            setIsRepsFocused(true);
+            onEditReps?.(set.id);
+          }}
+          onBlur={() => setIsRepsFocused(false)}
           placeholder="0"
-          placeholderTextColor="#525257"
+          placeholderTextColor="#7D746B"
           keyboardType="numeric"
+          returnKeyType="done"
           selectTextOnFocus
-          style={[s.activeBoxInput, done && s.activeBoxInputDone]}
+          style={[
+            s.activeBoxInput,
+            isRepsFocused && s.activeBoxInputFocused,
+            done && s.activeBoxInputDone,
+          ]}
           accessibilityLabel={`${displayReps} repetições`}
         />
       </View>
 
-      {/* 6. CHECKMARK (Conclusão direta, sem barra de RPE) */}
+      {/* 5. CHECKMARK (Touch target >= 48dp) */}
       <View style={s.activeColCheck}>
         <Pressable
-          style={[s.checkCircle, done ? s.checkCircleDone : s.checkCirclePending]}
-          onPress={() => onToggle?.(set.id)}
+          style={({ pressed }) => [
+            s.checkPressable,
+            pressed && { opacity: 0.75 },
+          ]}
+          hitSlop={{ top: 8, bottom: 8, left: 6, right: 8 }}
+          onPress={() => {
+            triggerHaptic('medium');
+            onToggle?.(set.id);
+          }}
           accessibilityRole="checkbox"
           accessibilityState={{ checked: done }}
           accessibilityLabel={done ? `Desmarcar série ${label}` : `Concluir série ${label}`}
         >
-          <Check
-            size={14}
-            color={done ? '#000000' : '#8E8E93'}
-            strokeWidth={done ? 3 : 2.4}
-          />
+          <View style={[s.checkCircle, done ? s.checkCircleDone : s.checkCirclePending]}>
+            <Check
+              size={17}
+              color={done ? '#1A1715' : '#7D746B'}
+              strokeWidth={done ? 3 : 2.2}
+            />
+          </View>
         </Pressable>
       </View>
     </View>
@@ -667,32 +624,29 @@ const s = StyleSheet.create({
   },
 
   // --------------------------------------------------------------------------
-  // Prévia (4 Colunas)
+  // Prévia (3 Colunas: Série | Meta | Ação)
   // --------------------------------------------------------------------------
   previewHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     height: 24,
-    paddingHorizontal: 6,
+    paddingHorizontal: 4,
     marginBottom: 4,
   },
   previewColSerie: {
-    width: 36,
+    width: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
   previewColMeta: {
     flex: 1,
+    minWidth: 0,
+    overflow: 'hidden',
     paddingHorizontal: 8,
     justifyContent: 'center',
   },
-  previewColReps: {
-    width: 64,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   previewColAction: {
-    width: 36,
+    width: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -705,9 +659,10 @@ const s = StyleSheet.create({
   previewRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 7,
+    paddingVertical: 8,
     paddingHorizontal: 4,
     borderRadius: 8,
+    minHeight: 48,
   },
   previewRowPressed: {
     backgroundColor: 'rgba(255, 255, 255, 0.04)',
@@ -725,71 +680,46 @@ const s = StyleSheet.create({
     fontWeight: '700',
   },
   badgeWarmup: {
-    backgroundColor: 'rgba(255, 122, 89, 0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 122, 89, 0.35)',
+    backgroundColor: 'rgba(255, 122, 89, 0.15)',
   },
   badgeTextWarmup: {
     color: '#FF7A59',
   },
   badgeFailure: {
     backgroundColor: 'rgba(255, 107, 107, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 107, 107, 0.35)',
   },
   badgeTextFailure: {
     color: '#FF6B6B',
   },
   badgeDrop: {
     backgroundColor: 'rgba(192, 132, 252, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(192, 132, 252, 0.35)',
   },
   badgeTextDrop: {
     color: '#C084FC',
   },
   badgeNormal: {
     backgroundColor: '#2D2925',
-    borderWidth: 1,
-    borderColor: '#38332F',
   },
   badgeTextNormal: {
     color: '#F5EFE8',
   },
   previewMetaPrimary: {
-    fontFamily: F.bodyMedium,
-    fontSize: 12.5,
-    fontWeight: '600',
+    fontFamily: F.numberBold,
+    fontSize: 13.5,
+    fontWeight: '700',
     color: '#F5EFE8',
-    lineHeight: 16,
+    lineHeight: 18,
   },
   previewMetaSub: {
     fontFamily: F.body,
-    fontSize: 11,
+    fontSize: 11.5,
     color: '#B7ADA3',
-    lineHeight: 14,
+    lineHeight: 15,
     marginTop: 1,
   },
-  previewRepsPill: {
-    width: '100%',
-    paddingVertical: 4,
-    paddingHorizontal: 4,
-    borderRadius: 8,
-    backgroundColor: '#2D2925',
-    borderWidth: 1,
-    borderColor: '#38332F',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  previewRepsText: {
-    fontFamily: F.bodyMedium,
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#F5EFE8',
-  },
   previewMenuBtn: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -823,6 +753,7 @@ const s = StyleSheet.create({
     gap: 12,
     paddingVertical: 12,
     paddingHorizontal: 16,
+    minHeight: 48,
   },
   menuItemPressed: {
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
@@ -853,13 +784,13 @@ const s = StyleSheet.create({
   },
 
   // --------------------------------------------------------------------------
-  // Ativo (6 Colunas Compactas)
+  // Ativo (5 Colunas Folgadas: Série | Meta e anterior | kg/lb | Reps | ✓)
   // --------------------------------------------------------------------------
   activeHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     height: 24,
-    paddingHorizontal: 2,
+    paddingHorizontal: 4,
     marginBottom: 4,
   },
   activeRowsContainer: {
@@ -869,65 +800,70 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 4,
-    paddingHorizontal: 2,
-    borderRadius: 8,
-    minHeight: 44,
+    paddingHorizontal: 4,
+    borderRadius: 10,
+    minHeight: 50,
   },
   activeRowDone: {
-    backgroundColor: 'rgba(255, 122, 89, 0.08)',
+    backgroundColor: 'rgba(255, 122, 89, 0.05)',
   },
   activeRowCurrent: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    backgroundColor: '#3A251F',
+    borderLeftWidth: 3,
+    borderLeftColor: '#FF7A59',
+    borderRadius: 10,
   },
   activeColSerie: {
-    width: 30,
+    width: 32,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  activeColPrev: {
-    flex: 1,
-    minWidth: 58,
-    paddingHorizontal: 3,
     justifyContent: 'center',
   },
   activeColMeta: {
     flex: 1,
-    minWidth: 58,
-    paddingHorizontal: 3,
+    minWidth: 0,
+    overflow: 'hidden',
+    paddingHorizontal: 6,
     justifyContent: 'center',
   },
   activeColWeight: {
-    width: 52,
+    width: 60,
     paddingHorizontal: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
   activeColReps: {
-    width: 46,
+    width: 52,
     paddingHorizontal: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
   activeColCheck: {
-    width: 32,
+    width: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
   activeStatPrimary: {
-    fontFamily: F.bodyMedium,
-    fontSize: 11,
+    fontFamily: F.numberBold,
+    fontSize: 12.5,
+    fontWeight: '700',
     color: '#F5EFE8',
+    lineHeight: 16,
+  },
+  metaEffortInline: {
+    fontFamily: F.body,
+    fontSize: 11,
+    color: '#B7ADA3',
+    lineHeight: 15,
+  },
+  activeStatPrev: {
+    fontFamily: F.body,
+    fontSize: 11,
+    color: '#B7ADA3',
     lineHeight: 14,
+    marginTop: 2,
   },
   statEmptyText: {
     color: '#7D746B',
-  },
-  metaEffortText: {
-    fontFamily: F.body,
-    fontSize: 10,
-    color: '#B7ADA3',
-    lineHeight: 13,
-    marginTop: 1,
   },
   sessionOnlyTag: {
     fontSize: 8,
@@ -939,100 +875,55 @@ const s = StyleSheet.create({
   },
   activeBoxInput: {
     width: '100%',
-    height: 30,
-    backgroundColor: '#23201D',
+    height: 42,
+    backgroundColor: '#2D2925',
     borderWidth: 1,
-    borderColor: '#38332F',
-    borderRadius: 6,
+    borderColor: 'transparent',
+    borderRadius: 8,
     textAlign: 'center',
-    fontSize: 12,
-    fontFamily: F.number,
-    fontWeight: '600',
+    fontSize: 14,
+    fontFamily: F.numberBold,
+    fontWeight: '700',
     color: '#F5EFE8',
+    fontVariant: ['tabular-nums'],
     paddingVertical: 0,
     paddingHorizontal: 2,
   },
+  activeBoxInputFocused: {
+    borderColor: '#FF7A59',
+    backgroundColor: '#38332F',
+  },
   activeBoxInputDone: {
-    borderColor: 'rgba(255, 122, 89, 0.4)',
+    opacity: 0.85,
   },
   activeBoxInputManualDrop: {
     borderColor: '#C084FC',
     borderWidth: 1.5,
     backgroundColor: 'rgba(192, 132, 252, 0.08)',
   },
-  header: {
-    flexDirection: 'row',
+  checkPressable: {
+    width: 44,
+    height: 44,
     alignItems: 'center',
-    height: 24,
-    paddingHorizontal: 4,
-    marginBottom: 4,
+    justifyContent: 'center',
+  },
+  checkCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkCirclePending: {
+    backgroundColor: '#2D2925',
+  },
+  checkCircleDone: {
+    backgroundColor: '#FF7A59',
   },
   headText: {
     fontFamily: F.bodyMedium,
     fontSize: 11,
-    color: '#7D746B',
-  },
-  colFlex: {
-    flex: 1.1,
-    paddingHorizontal: 4,
-  },
-  rowsContainer: {
-    gap: 6,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: GRID.rowHeight,
-    paddingHorizontal: 4,
-    borderRadius: 8,
-  },
-  rowDone: {
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
-  },
-  rowCurrent: {
-    backgroundColor: 'rgba(255, 122, 89, 0.05)',
-  },
-
-  cellSerie: {
-    width: GRID.serie,
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-  },
-  serieNumText: {
-    fontFamily: F.number,
-    fontSize: 13,
-    color: '#F5EFE8',
-    paddingLeft: 4,
-  },
-  serieNumCurrent: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  warmupBadge: {
-    width: 24,
-    height: 20,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255, 122, 89, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  warmupBadgeText: {
-    fontSize: 11,
-    fontFamily: F.numberBold,
-    color: '#FF7A59',
-  },
-  failureBadge: {
-    width: 24,
-    height: 20,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255, 107, 107, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  failureBadgeText: {
-    fontSize: 11,
-    fontFamily: F.numberBold,
-    color: '#FF6B6B',
+    color: '#B7ADA3',
   },
   prDot: {
     position: 'absolute',
@@ -1042,126 +933,6 @@ const s = StyleSheet.create({
     height: 14,
     borderRadius: 7,
     backgroundColor: '#FFC46B',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  cellPrev: {
-    flex: 1.1,
-    paddingHorizontal: 4,
-    justifyContent: 'center',
-  },
-  cellTarget: {
-    flex: 1.1,
-    paddingHorizontal: 4,
-    justifyContent: 'center',
-  },
-  statPrimaryText: {
-    fontFamily: F.bodyMedium,
-    fontSize: 12,
-    color: '#F5EFE8',
-    lineHeight: 16,
-  },
-  statSubText: {
-    fontFamily: F.body,
-    fontSize: 10.5,
-    color: '#B7ADA3',
-    lineHeight: 14,
-  },
-
-  cellBox: {
-    width: GRID.kg,
-    height: 32,
-    backgroundColor: '#2D2925',
-    borderRadius: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    marginHorizontal: 3,
-  },
-  boxText: {
-    fontFamily: F.numberBold,
-    fontSize: 13,
-    color: '#F5EFE8',
-    fontVariant: ['tabular-nums'],
-  },
-  boxTextDone: {
-    color: '#FFFFFF',
-  },
-
-  rpeMicroBadge: {
-    position: 'absolute',
-    bottom: -3,
-    right: -3,
-    backgroundColor: '#38332F',
-    borderRadius: 8,
-    paddingHorizontal: 3,
-    height: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#2D2925',
-  },
-  rpeMicroText: {
-    fontSize: 8.5,
-    fontFamily: F.numberBold,
-    color: '#B7ADA3',
-  },
-
-  cellCheck: {
-    width: GRID.check,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkCirclePending: {
-    backgroundColor: '#2D2925',
-  },
-  checkCircleCurrent: {
-    backgroundColor: '#2D2925',
-    borderWidth: 1.5,
-    borderColor: '#FF7A59',
-  },
-  checkCircleDone: {
-    backgroundColor: '#FF7A59',
-  },
-
-  footerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 14,
-    paddingBottom: 4,
-    paddingHorizontal: 4,
-  },
-  footerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  footerBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    minHeight: 44,
-  },
-  footerBtnText: {
-    fontFamily: F.bodyMedium,
-    fontSize: 13,
-    color: '#F5EFE8',
-  },
-  moreBtn: {
-    padding: 8,
-    minWidth: 44,
-    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },

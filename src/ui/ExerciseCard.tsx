@@ -6,6 +6,7 @@ import {
   TextInput,
   StyleSheet,
   Modal,
+  Alert,
 } from 'react-native';
 import {
   Clock,
@@ -189,6 +190,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
               styles.restBadgeBtn,
               pressed && { opacity: 0.75 },
             ]}
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
             accessibilityRole="button"
             accessibilityLabel={`Descanso ${formatRestShort(restSeconds)}. Tocar para alternar.`}
           >
@@ -203,7 +205,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
               styles.headerMoreBtn,
               pressed && { opacity: 0.7 },
             ]}
-            hitSlop={8}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             accessibilityRole="button"
             accessibilityLabel={`Mais opções para ${exercise.name}`}
           >
@@ -254,6 +256,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
                   styles.footerActionBtn,
                   pressed && { opacity: 0.7 },
                 ]}
+                hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                 accessibilityRole="button"
                 accessibilityLabel="Adicionar série"
               >
@@ -270,6 +273,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
                   styles.footerActionBtn,
                   pressed && { opacity: 0.7 },
                 ]}
+                hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                 accessibilityRole="button"
                 accessibilityLabel="Substituir exercício"
               >
@@ -287,6 +291,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
                     styles.footerActionBtn,
                     pressed && { opacity: 0.7 },
                   ]}
+                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                   accessibilityRole="button"
                   accessibilityLabel="Calculadora de anilhas"
                 >
@@ -302,7 +307,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
                 styles.moreBtn,
                 pressed && { opacity: 0.7 },
               ]}
-              hitSlop={8}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               accessibilityRole="button"
               accessibilityLabel={`Mais opções para ${exercise.name}`}
             >
@@ -379,7 +384,18 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
                 ]}
                 onPress={() => {
                   setExerciseMenuVisible(false);
-                  onRemoveExercise?.(exercise.id);
+                  Alert.alert(
+                    'Remover exercício',
+                    `Deseja realmente remover "${exercise.name}" do treino?`,
+                    [
+                      { text: 'Cancelar', style: 'cancel' },
+                      {
+                        text: 'Remover',
+                        style: 'destructive',
+                        onPress: () => onRemoveExercise?.(exercise.id),
+                      },
+                    ]
+                  );
                 }}
               >
                 <Trash2 size={16} color="#FF453A" />
@@ -400,7 +416,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#23201D',
     borderWidth: 1,
     borderColor: '#2D2925',
-    borderRadius: 16,
+    borderRadius: 24,
     padding: 14,
     marginBottom: 12,
   },
@@ -423,6 +439,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     minWidth: 0,
+    minHeight: 40,
   },
   headerTitleWrap: {
     flex: 1,
@@ -473,8 +490,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     backgroundColor: '#2D2925',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
     borderRadius: 8,
   },
   restBadgeText: {
@@ -508,6 +525,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
+    paddingVertical: 6,
+    minHeight: 40,
   },
   addSetText: {
     fontSize: 12,
