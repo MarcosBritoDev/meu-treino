@@ -147,9 +147,9 @@ export function SetTable(p: SetTableProps) {
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
         >
-          <Text style={[s.headText, s.previewColSerie]}>SÉRIE</Text>
-          <Text style={[s.headText, s.previewColMeta]}>META</Text>
-          <Text style={[s.headText, s.previewColReps]}>REPS</Text>
+          <Text style={[s.headText, s.previewColSerie]}>Série</Text>
+          <Text style={[s.headText, s.previewColMeta]}>Meta</Text>
+          <Text style={[s.headText, s.previewColReps]}>Reps</Text>
           <View style={s.previewColAction} />
         </View>
 
@@ -725,17 +725,17 @@ const s = StyleSheet.create({
     fontWeight: '700',
   },
   badgeWarmup: {
-    backgroundColor: 'rgba(245, 196, 0, 0.15)',
+    backgroundColor: 'rgba(255, 122, 89, 0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(245, 196, 0, 0.4)',
+    borderColor: 'rgba(255, 122, 89, 0.35)',
   },
   badgeTextWarmup: {
-    color: '#F5C400',
+    color: '#FF7A59',
   },
   badgeFailure: {
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    backgroundColor: 'rgba(255, 107, 107, 0.15)',
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.4)',
+    borderColor: 'rgba(255, 107, 107, 0.35)',
   },
   badgeTextFailure: {
     color: '#FF6B6B',
@@ -743,24 +743,24 @@ const s = StyleSheet.create({
   badgeDrop: {
     backgroundColor: 'rgba(192, 132, 252, 0.15)',
     borderWidth: 1,
-    borderColor: 'rgba(192, 132, 252, 0.4)',
+    borderColor: 'rgba(192, 132, 252, 0.35)',
   },
   badgeTextDrop: {
     color: '#C084FC',
   },
   badgeNormal: {
-    backgroundColor: '#2C2C2E',
+    backgroundColor: '#2D2925',
     borderWidth: 1,
-    borderColor: '#3E3E42',
+    borderColor: '#38332F',
   },
   badgeTextNormal: {
-    color: '#E5E5EA',
+    color: '#F5EFE8',
   },
   previewMetaPrimary: {
     fontFamily: F.bodyMedium,
     fontSize: 12.5,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: '#F5EFE8',
     lineHeight: 16,
   },
   previewMetaSub: {
@@ -775,9 +775,9 @@ const s = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 4,
     borderRadius: 8,
-    backgroundColor: '#121212',
+    backgroundColor: '#2D2925',
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#38332F',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -785,7 +785,7 @@ const s = StyleSheet.create({
     fontFamily: F.bodyMedium,
     fontSize: 11,
     fontWeight: '600',
-    color: '#D1D1D6',
+    color: '#F5EFE8',
   },
   previewMenuBtn: {
     width: 32,
@@ -806,10 +806,10 @@ const s = StyleSheet.create({
   },
   menuModalContent: {
     width: 220,
-    backgroundColor: '#252528',
+    backgroundColor: '#23201D',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#3A3A3D',
+    borderColor: '#38332F',
     paddingVertical: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
@@ -833,18 +833,18 @@ const s = StyleSheet.create({
   menuItemText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#E5E5EA',
+    color: '#F5EFE8',
   },
   menuItemTextDisabled: {
-    color: '#525257',
+    color: '#7D746B',
   },
   menuDivider: {
     height: 1,
-    backgroundColor: '#3A3A3D',
+    backgroundColor: '#2D2925',
     marginVertical: 4,
   },
   menuItemDangerPressed: {
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    backgroundColor: 'rgba(255, 107, 107, 0.15)',
   },
   menuItemDangerText: {
     fontSize: 13,
@@ -874,7 +874,7 @@ const s = StyleSheet.create({
     minHeight: 44,
   },
   activeRowDone: {
-    backgroundColor: 'rgba(245, 196, 0, 0.07)',
+    backgroundColor: 'rgba(255, 122, 89, 0.08)',
   },
   activeRowCurrent: {
     backgroundColor: 'rgba(255, 255, 255, 0.03)',
@@ -916,11 +916,11 @@ const s = StyleSheet.create({
   activeStatPrimary: {
     fontFamily: F.bodyMedium,
     fontSize: 11,
-    color: '#E4E4E7',
+    color: '#F5EFE8',
     lineHeight: 14,
   },
   statEmptyText: {
-    color: '#71717A',
+    color: '#7D746B',
   },
   metaEffortText: {
     fontFamily: F.body,
@@ -940,20 +940,20 @@ const s = StyleSheet.create({
   activeBoxInput: {
     width: '100%',
     height: 30,
-    backgroundColor: '#121212',
+    backgroundColor: '#23201D',
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#38332F',
     borderRadius: 6,
     textAlign: 'center',
     fontSize: 12,
     fontFamily: F.number,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: '#F5EFE8',
     paddingVertical: 0,
     paddingHorizontal: 2,
   },
   activeBoxInputDone: {
-    borderColor: 'rgba(245, 196, 0, 0.4)',
+    borderColor: 'rgba(255, 122, 89, 0.4)',
   },
   activeBoxInputManualDrop: {
     borderColor: '#C084FC',
@@ -970,7 +970,7 @@ const s = StyleSheet.create({
   headText: {
     fontFamily: F.bodyMedium,
     fontSize: 11,
-    color: '#7C7C80',
+    color: '#7D746B',
   },
   colFlex: {
     flex: 1.1,
@@ -990,7 +990,7 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.02)',
   },
   rowCurrent: {
-    backgroundColor: 'rgba(245, 166, 35, 0.05)',
+    backgroundColor: 'rgba(255, 122, 89, 0.05)',
   },
 
   cellSerie: {
@@ -1001,7 +1001,7 @@ const s = StyleSheet.create({
   serieNumText: {
     fontFamily: F.number,
     fontSize: 13,
-    color: '#E5E5EA',
+    color: '#F5EFE8',
     paddingLeft: 4,
   },
   serieNumCurrent: {
@@ -1012,27 +1012,27 @@ const s = StyleSheet.create({
     width: 24,
     height: 20,
     borderRadius: 4,
-    backgroundColor: '#423414',
+    backgroundColor: 'rgba(255, 122, 89, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   warmupBadgeText: {
     fontSize: 11,
     fontFamily: F.numberBold,
-    color: '#F5C451',
+    color: '#FF7A59',
   },
   failureBadge: {
     width: 24,
     height: 20,
     borderRadius: 4,
-    backgroundColor: '#4E2424',
+    backgroundColor: 'rgba(255, 107, 107, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   failureBadgeText: {
     fontSize: 11,
     fontFamily: F.numberBold,
-    color: '#FF8585',
+    color: '#FF6B6B',
   },
   prDot: {
     position: 'absolute',
@@ -1041,7 +1041,7 @@ const s = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: '#F5A623',
+    backgroundColor: '#FFC46B',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1059,20 +1059,20 @@ const s = StyleSheet.create({
   statPrimaryText: {
     fontFamily: F.bodyMedium,
     fontSize: 12,
-    color: '#E5E5EA',
+    color: '#F5EFE8',
     lineHeight: 16,
   },
   statSubText: {
     fontFamily: F.body,
     fontSize: 10.5,
-    color: '#8E8E93',
+    color: '#B7ADA3',
     lineHeight: 14,
   },
 
   cellBox: {
     width: GRID.kg,
     height: 32,
-    backgroundColor: '#242426',
+    backgroundColor: '#2D2925',
     borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1082,7 +1082,7 @@ const s = StyleSheet.create({
   boxText: {
     fontFamily: F.numberBold,
     fontSize: 13,
-    color: '#E5E5EA',
+    color: '#F5EFE8',
     fontVariant: ['tabular-nums'],
   },
   boxTextDone: {
@@ -1093,19 +1093,19 @@ const s = StyleSheet.create({
     position: 'absolute',
     bottom: -3,
     right: -3,
-    backgroundColor: '#3A3A3C',
+    backgroundColor: '#38332F',
     borderRadius: 8,
     paddingHorizontal: 3,
     height: 13,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#242426',
+    borderColor: '#2D2925',
   },
   rpeMicroText: {
     fontSize: 8.5,
     fontFamily: F.numberBold,
-    color: '#D1D1D6',
+    color: '#B7ADA3',
   },
 
   cellCheck: {
@@ -1121,15 +1121,15 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   checkCirclePending: {
-    backgroundColor: '#272729',
+    backgroundColor: '#2D2925',
   },
   checkCircleCurrent: {
-    backgroundColor: '#272729',
+    backgroundColor: '#2D2925',
     borderWidth: 1.5,
-    borderColor: C.goldAccent,
+    borderColor: '#FF7A59',
   },
   checkCircleDone: {
-    backgroundColor: '#F5A623',
+    backgroundColor: '#FF7A59',
   },
 
   footerRow: {
@@ -1156,7 +1156,7 @@ const s = StyleSheet.create({
   footerBtnText: {
     fontFamily: F.bodyMedium,
     fontSize: 13,
-    color: '#E5E5EA',
+    color: '#F5EFE8',
   },
   moreBtn: {
     padding: 8,

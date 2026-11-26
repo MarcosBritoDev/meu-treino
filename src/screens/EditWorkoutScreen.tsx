@@ -593,7 +593,7 @@ export const EditWorkoutScreen: React.FC = () => {
           accessibilityRole="button"
           accessibilityLabel="Iniciar treino"
         >
-          <Play size={12} fill="#F5C400" color="#F5C400" />
+          <Play size={12} fill="#FF7A59" color="#FF7A59" />
           <Text style={styles.startBtnText}>Iniciar</Text>
         </Pressable>
       </View>
@@ -646,7 +646,7 @@ export const EditWorkoutScreen: React.FC = () => {
           accessibilityRole="button"
           accessibilityLabel="Adicionar exercício"
         >
-          <Plus size={18} color="#FF6B57" strokeWidth={2.4} />
+          <Plus size={18} color="#FF7A59" strokeWidth={2.4} />
           <Text style={styles.addExerciseButtonText}>Adicionar exercício</Text>
         </Pressable>
       </ScrollView>
@@ -806,7 +806,7 @@ export const EditWorkoutScreen: React.FC = () => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: '#1A1715',
   },
   header: {
     flexDirection: 'row',
@@ -815,8 +815,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#2C2C2E',
-    backgroundColor: '#121212',
+    borderBottomColor: '#23201D',
+    backgroundColor: '#1A1715',
   },
   headerLeft: {
     flex: 1,
@@ -833,7 +833,7 @@ const styles = StyleSheet.create({
     marginLeft: -4,
   },
   headerTitleFallback: {
-    color: '#FFFFFF',
+    color: '#F5EFE8',
     fontSize: 16,
     fontWeight: '700',
     marginLeft: 8,
@@ -842,13 +842,13 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     fontSize: 16,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: '#F5EFE8',
     paddingVertical: 2,
     paddingHorizontal: 0,
     minWidth: 80,
   },
   codeBadge: {
-    backgroundColor: '#2C2C2E',
+    backgroundColor: '#2D2925',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
@@ -856,13 +856,13 @@ const styles = StyleSheet.create({
   codeBadgeText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#F5C400',
+    color: '#FF7A59',
   },
   startBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#2C2C2E',
+    backgroundColor: '#2D2925',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
@@ -870,7 +870,7 @@ const styles = StyleSheet.create({
   startBtnText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: '#F5EFE8',
   },
   scrollContent: {
     padding: 14,
@@ -882,9 +882,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     paddingVertical: 14,
-    backgroundColor: '#1C1C1E',
+    backgroundColor: '#23201D',
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#38332F',
     borderStyle: 'dashed',
     borderRadius: 14,
     marginTop: 4,
@@ -892,16 +892,16 @@ const styles = StyleSheet.create({
   addExerciseButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#FF6B57',
+    color: '#FF7A59',
   },
   fixedFooter: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(28, 28, 30, 0.96)',
+    backgroundColor: 'rgba(35, 32, 29, 0.96)',
     borderTopWidth: 1,
-    borderTopColor: '#2C2C2E',
+    borderTopColor: '#2D2925',
     paddingHorizontal: 16,
     paddingTop: 10,
     paddingBottom: 16,
@@ -918,7 +918,7 @@ const styles = StyleSheet.create({
   },
   footerStatsBold: {
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: '#F5EFE8',
   },
   unsavedIndicator: {
     flexDirection: 'row',
@@ -929,26 +929,26 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#F5C400',
+    backgroundColor: '#FF7A59',
   },
   unsavedText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#F5C400',
+    color: '#FF7A59',
   },
   saveButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#FF6B57',
+    backgroundColor: '#FF7A59',
     paddingVertical: 12,
     borderRadius: 12,
   },
   saveButtonText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: '#1A1715',
   },
   modalOverlay: {
     flex: 1,
@@ -960,16 +960,16 @@ const styles = StyleSheet.create({
   unsavedModalCard: {
     width: '100%',
     maxWidth: 340,
-    backgroundColor: '#1C1C1E',
+    backgroundColor: '#23201D',
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#2D2925',
     padding: 20,
   },
   unsavedModalTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: '#F5EFE8',
     marginBottom: 6,
   },
   unsavedModalDesc: {
@@ -983,7 +983,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   modalPrimaryBtn: {
-    backgroundColor: '#FF6B57',
+    backgroundColor: '#FF7A59',
     paddingVertical: 11,
     borderRadius: 12,
     alignItems: 'center',
@@ -991,10 +991,10 @@ const styles = StyleSheet.create({
   modalPrimaryBtnText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: '#1A1715',
   },
   modalSecondaryBtn: {
-    backgroundColor: '#2C2C2E',
+    backgroundColor: '#2D2925',
     paddingVertical: 11,
     borderRadius: 12,
     alignItems: 'center',
@@ -1002,7 +1002,7 @@ const styles = StyleSheet.create({
   modalSecondaryBtnText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#E5E5EA',
+    color: '#F5EFE8',
   },
   modalCancelBtn: {
     paddingVertical: 8,

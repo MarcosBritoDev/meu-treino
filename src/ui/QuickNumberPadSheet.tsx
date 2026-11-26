@@ -256,10 +256,8 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 14,
-    color: '#8E8E93',
+    color: '#B7ADA3',
     fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
   },
   closeBtn: {
     padding: 4,

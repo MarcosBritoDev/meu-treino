@@ -476,7 +476,7 @@ export const SetEditSheet: React.FC<SetEditSheetProps> = ({
 
               {isFailureLike ? (
                 <View style={styles.failureNotice}>
-                  <Flame size={16} color="#FF6B57" />
+                  <Flame size={16} color="#FF7A59" />
                   <Text style={styles.failureNoticeText}>
                     Até a falha (faixa desabilitada para {getTypeLabel(type)})
                   </Text>
@@ -810,7 +810,7 @@ export const SetEditSheet: React.FC<SetEditSheetProps> = ({
                           <Text
                             style={[
                               styles.stepperValueCompact,
-                              { color: '#F5C400', minWidth: 50 },
+                              { color: '#FF7A59', minWidth: 50 },
                             ]}
                           >
                             {formatDecimalBR(effortVal)}%
@@ -1008,11 +1008,11 @@ const styles = StyleSheet.create({
   },
   sheetContainer: {
     width: '100%',
-    backgroundColor: '#1C1C1E',
+    backgroundColor: '#23201D',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     borderTopWidth: 1,
-    borderTopColor: '#2C2C2E',
+    borderTopColor: '#2D2925',
     paddingHorizontal: 20,
     paddingTop: 10,
     paddingBottom: 24,
@@ -1025,7 +1025,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#3E3E42',
+    backgroundColor: '#38332F',
   },
   header: {
     flexDirection: 'row',
@@ -1037,13 +1037,13 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: '#F5EFE8',
   },
   closeBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#2C2C2E',
+    backgroundColor: '#2D2925',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1054,11 +1054,9 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   sectionLabel: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
     color: '#B7ADA3',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
     marginBottom: 8,
   },
   chipsRow: {
@@ -1074,46 +1072,46 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   chipBtnSelected: {
-    backgroundColor: '#F5C400',
-    borderColor: '#F5C400',
+    backgroundColor: '#FF7A59',
+    borderColor: '#FF7A59',
   },
   chipBtnUnselected: {
-    backgroundColor: '#121212',
-    borderColor: '#2C2C2E',
+    backgroundColor: '#2D2925',
+    borderColor: '#38332F',
   },
   chipBtnText: {
     fontSize: 12,
     fontWeight: '700',
   },
   chipBtnTextSelected: {
-    color: '#000000',
+    color: '#1A1715',
   },
   chipBtnTextUnselected: {
-    color: '#D1D1D6',
+    color: '#B7ADA3',
   },
   failureNotice: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#121212',
+    backgroundColor: '#2D2925',
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#38332F',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
   failureNoticeText: {
     fontSize: 12,
-    color: '#D1D1D6',
+    color: '#F5EFE8',
     flex: 1,
   },
   controlsGroup: {
     gap: 10,
   },
   stepperCard: {
-    backgroundColor: '#121212',
+    backgroundColor: '#2D2925',
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#38332F',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -1131,7 +1129,7 @@ const styles = StyleSheet.create({
   },
   stepperSubtext: {
     fontSize: 11,
-    color: '#8E8E93',
+    color: '#7D746B',
     marginTop: 2,
   },
   stepperControls: {
@@ -1143,14 +1141,14 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 8,
-    backgroundColor: '#2C2C2E',
+    backgroundColor: '#38332F',
     alignItems: 'center',
     justifyContent: 'center',
   },
   stepperBtnText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: '#F5EFE8',
     lineHeight: 18,
   },
   stepperValue: {
@@ -1158,14 +1156,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 14,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: '#F5EFE8',
   },
   stepperValueCompact: {
     minWidth: 34,
     textAlign: 'center',
     fontSize: 13,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: '#F5EFE8',
   },
   stepperGrid: {
     flexDirection: 'row',
@@ -1173,9 +1171,9 @@ const styles = StyleSheet.create({
   },
   stepperGridCard: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: '#2D2925',
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#38332F',
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 10,
@@ -1195,23 +1193,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   smallChipSelected: {
-    backgroundColor: '#F5C400',
-    borderColor: '#F5C400',
+    backgroundColor: '#FF7A59',
+    borderColor: '#FF7A59',
   },
   smallChipUnselected: {
-    backgroundColor: '#121212',
-    borderColor: '#2C2C2E',
+    backgroundColor: '#2D2925',
+    borderColor: '#38332F',
   },
   smallChipText: {
     fontSize: 12,
     fontWeight: '600',
   },
   smallChipTextSelected: {
-    color: '#000000',
+    color: '#1A1715',
     fontWeight: '700',
   },
   smallChipTextUnselected: {
-    color: '#D1D1D6',
+    color: '#B7ADA3',
   },
   incrementRow: {
     flexDirection: 'row',
@@ -1221,17 +1219,17 @@ const styles = StyleSheet.create({
   plusSymbol: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#F5C400',
+    color: '#FF7A59',
   },
   incrementTextInput: {
     width: 68,
     height: 32,
     textAlign: 'center',
     borderRadius: 8,
-    backgroundColor: '#1C1C1E',
+    backgroundColor: '#38332F',
     borderWidth: 1,
-    borderColor: '#2C2C2E',
-    color: '#FFFFFF',
+    borderColor: '#2D2925',
+    color: '#F5EFE8',
     fontSize: 13,
     fontWeight: '700',
     paddingVertical: 0,
@@ -1239,7 +1237,7 @@ const styles = StyleSheet.create({
   },
   unitSuffix: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: '#B7ADA3',
   },
   actionsFooter: {
     gap: 8,
@@ -1249,22 +1247,22 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingVertical: 13,
     borderRadius: 14,
-    backgroundColor: '#FF6B57',
+    backgroundColor: '#FF7A59',
     alignItems: 'center',
     justifyContent: 'center',
   },
   applyBtnText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: '#1A1715',
   },
   removeBtn: {
     width: '100%',
     paddingVertical: 10,
     borderRadius: 14,
-    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    backgroundColor: 'rgba(255, 107, 107, 0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderColor: 'rgba(255, 107, 107, 0.3)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1277,15 +1275,15 @@ const styles = StyleSheet.create({
   },
   chipBtnDisabled: {
     opacity: 0.4,
-    borderColor: '#242426',
-    backgroundColor: '#121214',
+    borderColor: '#23201D',
+    backgroundColor: '#1F1B19',
   },
   chipBtnTextDisabled: {
-    color: '#636366',
+    color: '#7D746B',
   },
   discreetNoticeText: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: '#B7ADA3',
     marginTop: 8,
     lineHeight: 16,
   },
@@ -1303,9 +1301,9 @@ const styles = StyleSheet.create({
   dropCustomInputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1C1C1E',
+    backgroundColor: '#38332F',
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#2D2925',
     borderRadius: 8,
     paddingHorizontal: 8,
     height: 34,
@@ -1313,7 +1311,7 @@ const styles = StyleSheet.create({
   dropCustomTextInput: {
     width: 48,
     textAlign: 'center',
-    color: '#FFFFFF',
+    color: '#F5EFE8',
     fontSize: 14,
     fontWeight: '700',
     paddingVertical: 0,
@@ -1322,6 +1320,6 @@ const styles = StyleSheet.create({
   dropCustomInputSuffix: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#8E8E93',
+    color: '#B7ADA3',
   },
 });

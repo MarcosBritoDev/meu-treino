@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   adjustRest, calcularVolume, cycleRest, detectarPR, displayToKg, formatClock,
   formatWeight, kgToDisplay, parseNumber, previousForSet, rowStates, setLabels,
-  formatDecimalBR, formatRepsTarget, formatRepsShort, formatEffort,
+  formatDecimalBR, formatRepsTarget, formatRepsShort, formatEffort, formatTarget,
   suggestDropWeightKg, suggest1RmWeightKg, getSetDisplayLabel, sanitizePlannedSet,
+  canAddDropAtEnd, canSetBeDrop, calcDropFromWeightKg, recalculateDropCascade,
   RPE_OPTIONS, RIR_OPTIONS, REPS_MODE_OPTIONS, EFFORT_MODE_OPTIONS,
 } from '../domain/sessionMath';
 import { GRID, GRID_FIXED_WIDTH, anteriorWidth } from '../ui/session/grid';
@@ -491,6 +492,123 @@ describe('ETAPA 2 — Regras de Volume e PR', () => {
     const normalSet = { weight: 80, reps: 10, type: 'normal' as const };
     const prResult = detectarPR(history, normalSet);
     expect(prResult.isPrWeight).toBe(true);
+  });
+});
+
+describe('ETAPA 4.5 — Drop Set (% livre, numeração sem pular, bloqueio na 1ª linha)', () => {
+  describe('Numeração visual sem pular', () => {
+    it('warmup -> A, failure -> F, drop -> D, normal -> contagem sequencial ignorando warmup e drop', () => {
+      const sets = [
+        { type: 'warmup' }, // A
+        { type: 'normal' }, // 1
+        { type: 'drop' },   // D
+        { type: 'drop' },   // D
+        { type: 'normal' }, // 2 (não pula para 4!)
+        { type: 'failure' },// F
+        { type: 'normal' }, // 4 (contando normais/falhas anteriores: norm1, norm2, fail, norm -> 4)
+      ];
+
+      expect(getSetDisplayLabel(sets, 0)).toBe('A');
+      expect(getSetDisplayLabel(sets, 1)).toBe('1');
+      expect(getSetDisplayLabel(sets, 2)).toBe('D');
+      expect(getSetDisplayLabel(sets, 3)).toBe('D');
+      expect(getSetDisplayLabel(sets, 4)).toBe('2');
+      expect(getSetDisplayLabel(sets, 5)).toBe('F');
+      expect(getSetDisplayLabel(sets, 6)).toBe('4');
+    });
+  });
+
+  describe('Validação de posição do Drop', () => {
+    it('canAddDropAtEnd: true somente se existir ao menos uma série com type !== "warmup"', () => {
+      expect(canAddDropAtEnd([])).toBe(false);
+      expect(canAddDropAtEnd([{ type: 'warmup' }])).toBe(false);
+      expect(canAddDropAtEnd([{ type: 'warmup' }, { type: 'warmup' }])).toBe(false);
+      expect(canAddDropAtEnd([{ type: 'normal' }])).toBe(true);
+      expect(canAddDropAtEnd([{ type: 'warmup' }, { type: 'normal' }])).toBe(true);
+      expect(canAddDropAtEnd([{ type: 'failure' }])).toBe(true);
+    });
+
+    it('canSetBeDrop: true somente se index > 0 e existir ao menos uma série com type !== "warmup" antes de index', () => {
+      expect(canSetBeDrop([], 0)).toBe(false);
+      expect(canSetBeDrop([{ type: 'normal' }], 0)).toBe(false); // índice 0 nunca pode ser drop
+      expect(canSetBeDrop([{ type: 'warmup' }, { type: 'normal' }], 0)).toBe(false);
+      expect(canSetBeDrop([{ type: 'warmup' }, { type: 'normal' }], 1)).toBe(false); // antes do índice 1 só há warmup
+      expect(canSetBeDrop([{ type: 'normal' }, { type: 'normal' }], 1)).toBe(true);  // antes do índice 1 há normal
+      expect(canSetBeDrop([{ type: 'warmup' }, { type: 'normal' }, { type: 'normal' }], 2)).toBe(true);
+    });
+  });
+
+  describe('Cálculo em cascata', () => {
+    it('calcDropFromWeightKg: limita dropPercent entre 1 e 90, calcula baseKg * (1 - dropPercent/100) e arredonda para incrementKg', () => {
+      // 80 kg com -20% = 64 -> arredonda para múltiplo de 2.5 = 65 kg
+      expect(calcDropFromWeightKg(80, 20, 2.5)).toBe(65);
+
+      // 65 kg com -25% = 48.75 -> arredonda para múltiplo de 2.5 = 50 kg
+      expect(calcDropFromWeightKg(65, 25, 2.5)).toBe(50);
+
+      // Clamping: < 1 limita a 1
+      expect(calcDropFromWeightKg(100, 0, 2.5)).toBe(100); // 100 * (1 - 0.01) = 99 -> 100
+      // Clamping: > 90 limita a 90
+      expect(calcDropFromWeightKg(100, 95, 2.5)).toBe(10); // 100 * (1 - 0.90) = 10
+
+      // Retorna null se baseKg == null ou baseKg <= 0
+      expect(calcDropFromWeightKg(null, 20)).toBeNull();
+      expect(calcDropFromWeightKg(undefined, 20)).toBeNull();
+      expect(calcDropFromWeightKg(0, 20)).toBeNull();
+      expect(calcDropFromWeightKg(-10, 20)).toBeNull();
+    });
+
+    it('recalculateDropCascade: percorre os drops consecutivos após changedIndex e para se manual_weight === true', () => {
+      const sets = [
+        { id: '1', type: 'normal', weight: 100 },
+        { id: '2', type: 'drop', drop_percent: 20, weight: 80 },
+        { id: '3', type: 'drop', drop_percent: 25, weight: 60 },
+        { id: '4', type: 'drop', drop_percent: 15, weight: 50 },
+      ];
+
+      // Altera a série base (índice 0) para 80 kg
+      sets[0].weight = 80;
+      const cascaded = recalculateDropCascade(sets, 0, 2.5);
+
+      // Drop 1 (-20% de 80): 65 kg
+      expect(cascaded[1].weight).toBe(65);
+      // Drop 2 (-25% de 65): 50 kg
+      expect(cascaded[2].weight).toBe(50);
+      // Drop 3 (-15% de 50): 42.5 kg
+      expect(cascaded[3].weight).toBe(42.5);
+
+      // Com manual_weight no meio:
+      const setsWithManual = [
+        { id: '1', type: 'normal', weight: 80 },
+        { id: '2', type: 'drop', drop_percent: 20, weight: 65 },
+        { id: '3', type: 'drop', drop_percent: 25, weight: 55, manual_weight: true },
+        { id: '4', type: 'drop', drop_percent: 15, weight: 40 },
+      ];
+      // Altera a série base para 100
+      setsWithManual[0].weight = 100;
+      const cascadedManual = recalculateDropCascade(setsWithManual, 0, 2.5);
+
+      // Drop 1 recalcula (-20% de 100) = 80 kg
+      expect(cascadedManual[1].weight).toBe(80);
+      // Drop 2 tem manual_weight -> cascata para aqui e mantém 55 kg
+      expect(cascadedManual[2].weight).toBe(55);
+      // Drop 3 abaixo do manual não é recalculado pela cascata iniciada em 0
+      expect(cascadedManual[3].weight).toBe(40);
+    });
+  });
+
+  describe('Formatação de meta para Drop', () => {
+    it('formatTarget exibe -{drop_percent}% da anterior com vírgula decimal quando necessário', () => {
+      expect(formatTarget({ type: 'drop', drop_percent: 20 })).toBe('-20% da anterior');
+      expect(formatTarget({ type: 'drop', drop_percent: 15 })).toBe('-15% da anterior');
+      expect(formatTarget({ type: 'drop', drop_percent: 12.5 })).toBe('-12,5% da anterior');
+      expect(formatTarget({ type: 'drop', drop_percent: 33.33 })).toBe('-33,33% da anterior');
+      expect(formatTarget({ type: 'drop' })).toBe('-20% da anterior'); // padrão 20%
+    });
+
+    it('formatRepsTarget exibe até a falha para type=drop', () => {
+      expect(formatRepsTarget({ type: 'drop' })).toBe('até a falha');
+    });
   });
 });
 

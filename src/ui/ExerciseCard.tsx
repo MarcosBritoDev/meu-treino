@@ -189,7 +189,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
             accessibilityRole="button"
             accessibilityLabel={`Descanso ${formatRestShort(restSeconds)}. Tocar para alternar.`}
           >
-            <Clock size={13} color="#F5C400" strokeWidth={2.2} />
+            <Clock size={13} color="#FF7A59" strokeWidth={2.2} />
             <Text style={styles.restBadgeText}>{formatRestShort(restSeconds)}</Text>
           </Pressable>
 
@@ -254,7 +254,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
                 accessibilityRole="button"
                 accessibilityLabel="Adicionar série"
               >
-                <Plus size={15} color="#FF6B57" strokeWidth={2.4} />
+                <Plus size={15} color="#FF7A59" strokeWidth={2.4} />
                 <Text style={styles.addSetText}>Adicionar série</Text>
               </Pressable>
 
@@ -376,9 +376,9 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
 
 const styles = StyleSheet.create({
   cardContainer: {
-    backgroundColor: '#1C1C1E',
+    backgroundColor: '#23201D',
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#2D2925',
     borderRadius: 16,
     padding: 14,
     marginBottom: 12,
@@ -388,7 +388,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   cardContainerComplete: {
-    borderColor: 'rgba(245, 166, 35, 0.4)',
+    borderColor: 'rgba(255, 122, 89, 0.4)',
   },
   headerRow: {
     flexDirection: 'row',
@@ -415,22 +415,22 @@ const styles = StyleSheet.create({
   },
   collapsedSubtitleText: {
     fontSize: 11.5,
-    color: '#8E8E93',
+    color: '#B7ADA3',
     marginTop: 2,
   },
   collapsedSubtitleTextComplete: {
-    color: '#F5A623',
+    color: '#FF7A59',
   },
   indexText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#A1A1AA',
+    color: '#B7ADA3',
     marginRight: 6,
   },
   exerciseNameText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#F5C400',
+    color: '#F5EFE8',
     flexShrink: 1,
   },
   chevron: {
@@ -451,7 +451,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#2C2C2E',
+    backgroundColor: '#2D2925',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
@@ -459,7 +459,7 @@ const styles = StyleSheet.create({
   restBadgeText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#E5E5EA',
+    color: '#F5EFE8',
   },
   noteInput: {
     fontSize: 12,
@@ -476,7 +476,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(44, 44, 46, 0.8)',
+    borderTopColor: '#2D2925',
   },
   footerActionsLeft: {
     flexDirection: 'row',
@@ -491,12 +491,12 @@ const styles = StyleSheet.create({
   addSetText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#E5E5EA',
+    color: '#F5EFE8',
   },
   swapText: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#8E8E93',
+    color: '#B7ADA3',
   },
   moreBtn: {
     padding: 4,
@@ -511,10 +511,10 @@ const styles = StyleSheet.create({
   menuContent: {
     width: '100%',
     maxWidth: 320,
-    backgroundColor: '#1C1C1E',
+    backgroundColor: '#23201D',
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#2D2925',
     padding: 14,
   },
   menuHeader: {
@@ -524,12 +524,12 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     marginBottom: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#2C2C2E',
+    borderBottomColor: '#2D2925',
   },
   menuTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#F5C400',
+    color: '#F5EFE8',
     flex: 1,
     marginRight: 8,
   },
@@ -542,11 +542,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   menuItemPressed: {
-    backgroundColor: '#2C2C2E',
+    backgroundColor: '#2D2925',
   },
   menuItemText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#E5E5EA',
+    color: '#F5EFE8',
   },
 });

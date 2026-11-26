@@ -1134,7 +1134,6 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '700',
     fontSize: 11,
-    textTransform: 'uppercase',
   },
   groupHeaderButtons: {
     flexDirection: 'row',

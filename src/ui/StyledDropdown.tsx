@@ -93,7 +93,7 @@ export const StyledDropdown: React.FC<StyledDropdownProps> = ({
                     {opt.label}
                   </Text>
                   {isSelected && (
-                    <Check size={16} color="#000000" strokeWidth={2.8} />
+                    <Check size={16} color="#1A1715" strokeWidth={2.8} />
                   )}
                 </Pressable>
               );
@@ -116,9 +116,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     minHeight: 44,
     borderRadius: 12,
-    backgroundColor: '#121212',
+    backgroundColor: '#2D2925',
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#38332F',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: '#F5EFE8',
     marginRight: 8,
   },
   placeholderText: {
@@ -146,9 +146,9 @@ const styles = StyleSheet.create({
   dropdownMenu: {
     marginTop: 6,
     borderRadius: 16,
-    backgroundColor: '#1F1F22',
+    backgroundColor: '#23201D',
     borderWidth: 1,
-    borderColor: '#323236',
+    borderColor: '#38332F',
     maxHeight: 220,
     overflow: 'hidden',
   },
@@ -168,20 +168,20 @@ const styles = StyleSheet.create({
   },
   optionItemBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(44, 44, 46, 0.8)',
+    borderBottomColor: '#2D2925',
   },
   optionItemSelected: {
-    backgroundColor: '#F5C400',
+    backgroundColor: '#FF7A59',
   },
   optionText: {
     flex: 1,
     fontSize: 13,
     fontWeight: '500',
-    color: '#E5E5EA',
+    color: '#F5EFE8',
     marginRight: 8,
   },
   optionTextSelected: {
-    color: '#000000',
+    color: '#1A1715',
     fontWeight: '700',
   },
 });
