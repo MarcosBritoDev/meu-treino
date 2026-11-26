@@ -63,6 +63,7 @@ interface ActiveExerciseItem {
   name: string;
   muscleGroup: string;
   equipment: string;
+  defaultIncrement?: number;
   targetSets: number;
   repMin: number;
   repMax: number;
@@ -171,6 +172,7 @@ export const ActiveSessionScreen: React.FC = () => {
         name: string;
         muscle_group: string;
         equipment: string;
+        default_increment: number | null;
         target_sets: number;
         rep_min: number;
         rep_max: number;
@@ -183,6 +185,7 @@ export const ActiveSessionScreen: React.FC = () => {
           e.name,
           e.muscle_group,
           e.equipment,
+          e.default_increment,
           se.target_sets,
           se.rep_min,
           se.rep_max,
@@ -276,6 +279,7 @@ export const ActiveSessionScreen: React.FC = () => {
           name: ex.name,
           muscleGroup: ex.muscle_group,
           equipment: ex.equipment,
+          defaultIncrement: ex.default_increment ?? defaultIncrement,
           targetSets: ex.target_sets,
           repMin: ex.rep_min,
           repMax: ex.rep_max,
@@ -647,18 +651,62 @@ export const ActiveSessionScreen: React.FC = () => {
     repMin: number;
     repMax: number;
     restS: number;
+    increment: number;
   }) => {
     if (!selectedExerciseForAction) return;
     try {
       const rawDb = getExpoDb();
+      // 1. Atualiza apenas session_exercises (nunca workout_exercises)
       rawDb.runSync(
         `UPDATE session_exercises 
          SET target_sets = ?, rep_min = ?, rep_max = ?, rest_s = ?
          WHERE id = ?`,
         [data.targetSets, data.repMin, data.repMax, data.restS, selectedExerciseForAction.id]
       );
+
+      // 2. Se mudou o incremento padrão, persiste no exercício
+      if (data.increment) {
+        rawDb.runSync(`UPDATE exercises SET default_increment = ? WHERE id = ?`, [
+          data.increment,
+          selectedExerciseForAction.exerciseId,
+        ]);
+      }
+
+      // 3. Ajuste de séries na tabela sets da sessão atual:
+      // Se aumentou (ex: de 3 para 5 séries), adiciona linhas novas na hora
+      const currentSets = selectedExerciseForAction.sets;
+      const diff = data.targetSets - currentSets.length;
+      if (diff > 0) {
+        const lastSet = currentSets[currentSets.length - 1];
+        const weight = lastSet ? lastSet.weight : 20.0;
+        const reps = lastSet ? lastSet.reps : data.repMin;
+        for (let i = 1; i <= diff; i++) {
+          const nextIdx = currentSets.length + i;
+          const newSetId = `set_${Date.now()}_${nextIdx}_${Math.random().toString(36).substring(2, 6)}`;
+          rawDb.runSync(
+            `INSERT INTO sets (id, session_exercise_id, "index", weight, reps, is_warmup, is_pr_weight, is_pr_volume)
+             VALUES (?, ?, ?, ?, ?, 0, 0, 0)`,
+            [newSetId, selectedExerciseForAction.id, nextIdx, weight, reps]
+          );
+        }
+      } else if (diff < 0) {
+        // Se diminuiu (sempre respeitando as que já foram concluídas)
+        const completedCount = currentSets.filter((s) => s.completedAt !== null).length;
+        const targetCount = Math.max(completedCount, data.targetSets);
+        rawDb.runSync(
+          `DELETE FROM sets 
+           WHERE session_exercise_id = ? AND "index" > ? AND completed_at IS NULL`,
+          [selectedExerciseForAction.id, targetCount]
+        );
+      }
+
+      triggerHaptic('success');
+      setToastMessage('Exercício atualizado');
+      setToastVisible(true);
       loadSession();
-    } catch {}
+    } catch (err) {
+      console.warn('Erro ao atualizar exercício da sessão:', err);
+    }
   };
 
   // 6. FINALIZAR SESSÃO
@@ -1294,7 +1342,16 @@ export const ActiveSessionScreen: React.FC = () => {
         initialRepMin={selectedExerciseForAction?.repMin}
         initialRepMax={selectedExerciseForAction?.repMax}
         initialRestS={selectedExerciseForAction?.restS}
+        initialIncrement={selectedExerciseForAction?.defaultIncrement}
+        completedSetsCount={
+          selectedExerciseForAction?.sets.filter((s) => s.completedAt !== null).length || 0
+        }
         onSave={handleSaveEditedExercise}
+        onRemove={() => {
+          handleRemoveExercise();
+          setToastMessage('Exercício removido deste treino');
+          setToastVisible(true);
+        }}
       />
 
       {/* MODAL DE CONFIRMAÇÃO DE CONCLUSÃO */}
