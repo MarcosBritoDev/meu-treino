@@ -131,6 +131,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
         mode={mode}
         sets={exercise.sets || []}
         unit={unit}
+        previous={(exercise.sets || []).map((s: any) => s.previous ?? null)}
         onRowClick={(set, badgeLabel) => onRowClick?.(exercise, set, badgeLabel)}
         onMenuAction={(action, setId) => onMenuAction?.(exercise.id, action, setId)}
         onToggle={(setId) => {
@@ -139,6 +140,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
         }}
         onEditWeight={(setId) => onActiveChange?.(exercise.id, setId, 'weight', null)}
         onEditReps={(setId) => onActiveChange?.(exercise.id, setId, 'reps', null)}
+        onActiveChange={(setId, field, val) => onActiveChange?.(exercise.id, setId, field, val)}
       />
 
       {/* 4. RODAPÉ DO CARD: + Adicionar série, Substituir, ••• */}

@@ -20,4 +20,5 @@ export {
   sanitizePlannedSet,
   canGeneratePR,
   isSetInVolume,
+  defaultRestFor,
 } from './sessionMath';

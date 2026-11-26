@@ -547,6 +547,24 @@ export function formatRestShort(seconds?: number | null): string {
   return `${seconds}s`;
 }
 
+/**
+ * Retorna o descanso padrão conforme o tipo da série:
+ * warmup: 60s, failure: 120s, drop: 30s, normal: 90s.
+ */
+export function defaultRestFor(type?: string): number {
+  switch (type) {
+    case 'warmup':
+      return 60;
+    case 'failure':
+      return 120;
+    case 'drop':
+      return 30;
+    case 'normal':
+    default:
+      return 90;
+  }
+}
+
 export const getEffortModeOptions = (
   unit: Unit
 ): Array<{ value: string; label: string }> => [

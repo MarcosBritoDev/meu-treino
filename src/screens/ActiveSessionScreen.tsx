@@ -45,6 +45,8 @@ import { PlateCalculatorSheet } from '../ui/PlateCalculatorSheet';
 import { ActiveExerciseActionSheet } from '../ui/ActiveExerciseActionSheet';
 import { EditSessionExerciseSheet } from '../ui/EditSessionExerciseSheet';
 import { QuickNumberPadSheet } from '../ui/QuickNumberPadSheet';
+import { ExerciseCard } from '../ui/ExerciseCard';
+import { SetTypeSheet, SetTypeOptionKey } from '../ui/SetTypeSheet';
 import { triggerHaptic } from '../ui/haptics';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { getExpoDb } from '../db/client';
@@ -58,6 +60,12 @@ import {
   detectarPR,
   cycleRest,
   adjustRest,
+  defaultRestFor,
+  suggestDropWeightKg,
+  canGeneratePR,
+  SetType,
+  RepsMode,
+  EffortMode,
 } from '../domain/sessionMath';
 
 type RouteParams = RouteProp<RootStackParamList, 'ActiveSession'>;
@@ -74,6 +82,16 @@ interface SetItem {
   completedAt: number | null;
   isPrWeight: boolean;
   isPrVolume: boolean;
+  type: SetType;
+  repsMode: RepsMode;
+  minReps?: number | null;
+  maxReps?: number | null;
+  effortMode: EffortMode;
+  effortValue?: number | null;
+  effortValueMax?: number | null;
+  effortRefExerciseId?: string | null;
+  restS?: number | null;
+  is_session_only: boolean;
 }
 
 interface ActiveExerciseItem {
@@ -146,6 +164,10 @@ export const ActiveSessionScreen: React.FC = () => {
 
   // Linha de RPE aberta para a série selecionada
   const [activeRpeSetId, setActiveRpeSetId] = useState<string | null>(null);
+
+  // Sheet de Adicionar Série (SetTypeSheet com 6 opções)
+  const [setTypeSheetVisible, setSetTypeSheetVisible] = useState(false);
+  const [addSetExerciseId, setAddSetExerciseId] = useState<string | null>(null);
 
   // Menu de opções da série (toque longo: aquecimento / remover)
   const [setMenuVisible, setSetMenuVisible] = useState(false);
@@ -288,8 +310,19 @@ export const ActiveSessionScreen: React.FC = () => {
           completed_at: number | null;
           is_pr_weight: number;
           is_pr_volume: number;
+          type?: string;
+          reps_mode?: string;
+          min_reps?: number | null;
+          max_reps?: number | null;
+          effort_mode?: string;
+          effort_value?: number | null;
+          effort_value_max?: number | null;
+          effort_ref_exercise_id?: string | null;
+          rest_s?: number | null;
+          is_session_only?: number;
         }>(
-          `SELECT id, session_exercise_id, "index", weight, reps, rpe, is_warmup, completed_at, is_pr_weight, is_pr_volume
+          `SELECT id, session_exercise_id, "index", weight, reps, rpe, is_warmup, completed_at, is_pr_weight, is_pr_volume,
+                  type, reps_mode, min_reps, max_reps, effort_mode, effort_value, effort_value_max, effort_ref_exercise_id, rest_s, is_session_only
            FROM sets
            WHERE session_exercise_id = ?
            ORDER BY "index" ASC`,
@@ -305,14 +338,15 @@ export const ActiveSessionScreen: React.FC = () => {
           for (let idx = 1; idx <= setsCount; idx++) {
             const newSetId = `set_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`;
             rawDb.runSync(
-              `INSERT INTO sets (id, session_exercise_id, "index", weight, reps, is_warmup, is_pr_weight, is_pr_volume)
-               VALUES (?, ?, ?, ?, ?, 0, 0, 0)`,
-              [newSetId, ex.id, idx, initialWeight, initialReps]
+              `INSERT INTO sets (id, session_exercise_id, "index", weight, reps, is_warmup, is_pr_weight, is_pr_volume, type, reps_mode, min_reps, max_reps, effort_mode, is_session_only)
+               VALUES (?, ?, ?, ?, ?, 0, 0, 0, 'normal', 'reps_range', ?, ?, 'none', 0)`,
+              [newSetId, ex.id, idx, initialWeight, initialReps, ex.rep_min || 8, ex.rep_max || 12]
             );
           }
 
           setRows = rawDb.getAllSync(
-            `SELECT id, session_exercise_id, "index", weight, reps, rpe, is_warmup, completed_at, is_pr_weight, is_pr_volume
+            `SELECT id, session_exercise_id, "index", weight, reps, rpe, is_warmup, completed_at, is_pr_weight, is_pr_volume,
+                    type, reps_mode, min_reps, max_reps, effort_mode, effort_value, effort_value_max, effort_ref_exercise_id, rest_s, is_session_only
              FROM sets
              WHERE session_exercise_id = ?
              ORDER BY "index" ASC`,
@@ -327,10 +361,20 @@ export const ActiveSessionScreen: React.FC = () => {
           weight: r.weight,
           reps: r.reps,
           rpe: r.rpe,
-          isWarmup: Boolean(r.is_warmup),
+          isWarmup: Boolean(r.is_warmup || r.type === 'warmup'),
           completedAt: r.completed_at,
           isPrWeight: Boolean(r.is_pr_weight),
           isPrVolume: Boolean(r.is_pr_volume),
+          type: (r.type as SetType) || (r.is_warmup ? 'warmup' : 'normal'),
+          repsMode: (r.reps_mode as RepsMode) || 'reps_range',
+          minReps: r.min_reps,
+          maxReps: r.max_reps,
+          effortMode: (r.effort_mode as EffortMode) || 'none',
+          effortValue: r.effort_value,
+          effortValueMax: r.effort_value_max,
+          effortRefExerciseId: r.effort_ref_exercise_id,
+          restS: r.rest_s,
+          is_session_only: Boolean(r.is_session_only),
         }));
 
         items.push({
@@ -508,93 +552,81 @@ export const ActiveSessionScreen: React.FC = () => {
         )
       );
     } else {
-      // Conclui a série
+      // Conclui a série imediatamente (sem RPE realizado)
       const completedTime = Date.now();
 
-      if (setItem.isWarmup) {
-        // Aquecimento não conta no volume nem em PR
-        rawDb.runSync(
-          `UPDATE sets SET completed_at = ?, is_pr_weight = 0, is_pr_volume = 0 WHERE id = ?`,
-          [completedTime, setItem.id]
-        );
-        triggerHaptic('light');
+      // Regra de PR: Warmup e Drop NUNCA geram PR
+      let isPrW = false;
+      let isPrV = false;
 
-        setExercises((prev) =>
-          prev.map((ex) =>
-            ex.id === exercise.id
-              ? {
-                  ...ex,
-                  sets: ex.sets.map((s) =>
-                    s.id === setItem.id
-                      ? {
-                          ...s,
-                          completedAt: completedTime,
-                          isPrWeight: false,
-                          isPrVolume: false,
-                        }
-                      : s
-                  ),
-                }
-              : ex
-          )
-        );
-      } else {
-        // Série regular: calcula PR
-        const historyRows = rawDb.getAllSync<{ weight: number; reps: number }>(
-          `SELECT st.weight, st.reps
+      if (canGeneratePR(setItem)) {
+        const historyRows = rawDb.getAllSync<{ weight: number; reps: number; is_warmup: number; type?: string }>(
+          `SELECT st.weight, st.reps, st.is_warmup, st.type
            FROM sets st
            JOIN session_exercises se ON st.session_exercise_id = se.id
            WHERE se.exercise_id = ? AND st.completed_at IS NOT NULL AND st.id != ? AND st.is_warmup = 0`,
           [exercise.exerciseId, setItem.id]
         );
 
-        const pr = detectarPR(historyRows, {
-          weight: setItem.weight,
-          reps: setItem.reps,
-        });
-
-        rawDb.runSync(
-          `UPDATE sets 
-           SET completed_at = ?, is_pr_weight = ?, is_pr_volume = ?
-           WHERE id = ?`,
-          [completedTime, pr.isPrWeight ? 1 : 0, pr.isPrVolume ? 1 : 0, setItem.id]
+        const pr = detectarPR(
+          historyRows.map((h) => ({
+            weight: h.weight,
+            reps: h.reps,
+            isWarmup: Boolean(h.is_warmup),
+            type: h.type,
+          })),
+          {
+            weight: setItem.weight,
+            reps: setItem.reps,
+            type: setItem.type,
+            isWarmup: setItem.isWarmup,
+          }
         );
-
-        if (pr.isPrWeight || pr.isPrVolume) {
-          triggerHaptic('success');
-          setToastMessage(`Novo recorde: ${formatWeight(setItem.weight, unit)} ${unit} × ${setItem.reps}`);
-          setToastVisible(true);
-        } else {
-          triggerHaptic('light');
-        }
-
-        setExercises((prev) =>
-          prev.map((ex) =>
-            ex.id === exercise.id
-              ? {
-                  ...ex,
-                  sets: ex.sets.map((s) =>
-                    s.id === setItem.id
-                      ? {
-                          ...s,
-                          completedAt: completedTime,
-                          isPrWeight: pr.isPrWeight,
-                          isPrVolume: pr.isPrVolume,
-                        }
-                      : s
-                  ),
-                }
-              : ex
-          )
-        );
+        isPrW = pr.isPrWeight;
+        isPrV = pr.isPrVolume;
       }
 
-      // Linha de RPE só aparece ao tocar na série concluída (não ao marcar check)
+      rawDb.runSync(
+        `UPDATE sets 
+         SET completed_at = ?, is_pr_weight = ?, is_pr_volume = ?
+         WHERE id = ?`,
+        [completedTime, isPrW ? 1 : 0, isPrV ? 1 : 0, setItem.id]
+      );
+
+      if (isPrW || isPrV) {
+        triggerHaptic('success');
+        setToastMessage(`Novo recorde: ${formatWeight(setItem.weight, unit)} ${unit} × ${setItem.reps}`);
+        setToastVisible(true);
+      } else {
+        triggerHaptic('light');
+      }
+
+      setExercises((prev) =>
+        prev.map((ex) =>
+          ex.id === exercise.id
+            ? {
+                ...ex,
+                sets: ex.sets.map((s) =>
+                  s.id === setItem.id
+                    ? {
+                        ...s,
+                        completedAt: completedTime,
+                        isPrWeight: isPrW,
+                        isPrVolume: isPrV,
+                      }
+                    : s
+                ),
+              }
+            : ex
+        )
+      );
+
       setActiveRpeSetId(null);
 
-      // Inicia descanso automático se habilitado
-      if (autoRestTimer) {
-        startRestTimer(exercise.restS || defaultRestS || 90);
+      // Dispara o cronômetro de descanso: set.rest_s ?? session_exercise.rest_s ?? defaultRestFor(set.type)
+      const restTime = setItem.restS ?? exercise.restS ?? defaultRestFor(setItem.type);
+      if (restTime > 0) {
+        startRestTimer(restTime);
       }
 
       // Se todas as séries deste exercício forem concluídas, expande o próximo
@@ -608,6 +640,234 @@ export const ActiveSessionScreen: React.FC = () => {
           setExpandedExerciseId(exercises[currentIdx + 1].id);
         }
       }
+    }
+  };
+
+  // Alteração direta de carga ou repetições
+  const handleActiveChange = (exerciseId: string, setId: string, field: string, value: any) => {
+    const rawDb = getExpoDb();
+    if (field === 'weight') {
+      const parsed = typeof value === 'number' ? value : parseNumber(String(value));
+      if (parsed !== null) {
+        const kg = unit === 'kg' ? parsed : displayToKg(parsed, unit);
+        rawDb.runSync(`UPDATE sets SET weight = ? WHERE id = ?`, [kg, setId]);
+        setExercises((prev) =>
+          prev.map((ex) =>
+            ex.id === exerciseId
+              ? {
+                  ...ex,
+                  sets: ex.sets.map((s) => (s.id === setId ? { ...s, weight: kg } : s)),
+                }
+              : ex
+          )
+        );
+      }
+    } else if (field === 'reps') {
+      const parsed = typeof value === 'number' ? value : parseInt(String(value), 10);
+      if (!isNaN(parsed) && parsed >= 0) {
+        rawDb.runSync(`UPDATE sets SET reps = ? WHERE id = ?`, [parsed, setId]);
+        setExercises((prev) =>
+          prev.map((ex) =>
+            ex.id === exerciseId
+              ? {
+                  ...ex,
+                  sets: ex.sets.map((s) => (s.id === setId ? { ...s, reps: parsed } : s)),
+                }
+              : ex
+          )
+        );
+      }
+    }
+  };
+
+  // Adicionar série via SetTypeSheet (com isolamento: is_session_only = 1)
+  const handleAddSetFromOption = (optionKey: SetTypeOptionKey) => {
+    if (!addSetExerciseId) return;
+    const targetExercise = exercises.find((e) => e.id === addSetExerciseId);
+    if (!targetExercise) return;
+
+    const rawDb = getExpoDb();
+    const nextIdx = targetExercise.sets.length + 1;
+    const newSetId = `set_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+
+    let setType: SetType = 'normal';
+    let repsMode: RepsMode = 'reps_range';
+    let minReps: number | null = targetExercise.repMin || 8;
+    let maxReps: number | null = targetExercise.repMax || 10;
+    let effortMode: EffortMode = 'none';
+    let effortValue: number | null = null;
+    let initialKg: number | null = null;
+
+    if (optionKey === 'warmup') {
+      setType = 'warmup';
+      minReps = 8;
+      maxReps = 12;
+      initialKg = 20.0;
+    } else if (optionKey === 'rpe') {
+      effortMode = 'rpe';
+      effortValue = 8;
+    } else if (optionKey === 'rir') {
+      effortMode = 'rir';
+      effortValue = 2;
+    } else if (optionKey === 'failure') {
+      setType = 'failure';
+      repsMode = 'reps_max';
+      minReps = null;
+      maxReps = null;
+    } else if (optionKey === 'drop') {
+      setType = 'drop';
+      repsMode = 'reps_max';
+      minReps = null;
+      maxReps = null;
+      initialKg = suggestDropWeightKg(targetExercise.sets, targetExercise.defaultIncrement ?? 2.5);
+    }
+
+    if (initialKg === null) {
+      const lastNonWarmup = [...targetExercise.sets].reverse().find((s) => !s.isWarmup && s.weight > 0);
+      initialKg = lastNonWarmup?.weight ?? (targetExercise.previousSets?.[0]?.weight || 20.0);
+    }
+
+    const initialReps = minReps ?? (targetExercise.previousSets?.[0]?.reps || 10);
+
+    rawDb.runSync(
+      `INSERT INTO sets (
+         id, session_exercise_id, "index", weight, reps, rpe, is_warmup,
+         completed_at, is_pr_weight, is_pr_volume, type, reps_mode,
+         min_reps, max_reps, effort_mode, effort_value, effort_value_max,
+         effort_ref_exercise_id, rest_s, is_session_only
+       ) VALUES (?, ?, ?, ?, ?, NULL, ?, NULL, 0, 0, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 1)`,
+      [
+        newSetId,
+        targetExercise.id,
+        nextIdx,
+        initialKg,
+        initialReps,
+        setType === 'warmup' ? 1 : 0,
+        setType,
+        repsMode,
+        minReps,
+        maxReps,
+        effortMode,
+        effortValue,
+      ]
+    );
+
+    triggerHaptic('light');
+    setToastMessage('Série adicionada à sessão');
+    setToastVisible(true);
+    setSetTypeSheetVisible(false);
+    setAddSetExerciseId(null);
+    loadSession();
+  };
+
+  const handleRemoveExerciseById = (sessionExerciseId: string) => {
+    try {
+      const rawDb = getExpoDb();
+      rawDb.runSync(`DELETE FROM session_exercises WHERE id = ?`, [sessionExerciseId]);
+      triggerHaptic('medium');
+      setToastMessage('Exercício removido deste treino');
+      setToastVisible(true);
+      loadSession();
+    } catch (err) {
+      console.warn('Erro ao remover exercício:', err);
+    }
+  };
+
+  const handleUpdateExerciseNote = (sessionExerciseId: string, note: string) => {
+    try {
+      const rawDb = getExpoDb();
+      rawDb.runSync(`UPDATE session_exercises SET note = ? WHERE id = ?`, [note, sessionExerciseId]);
+      setExercises((prev) =>
+        prev.map((e) => (e.id === sessionExerciseId ? { ...e, note } : e))
+      );
+    } catch {}
+  };
+
+  const handleMoveExercise = (sessionExerciseId: string, direction: 'up' | 'down') => {
+    const idx = exercises.findIndex((e) => e.id === sessionExerciseId);
+    if (idx === -1) return;
+    const rawDb = getExpoDb();
+    if (direction === 'up' && idx > 0) {
+      const cur = exercises[idx];
+      const prev = exercises[idx - 1];
+      rawDb.runSync(`UPDATE session_exercises SET position = ? WHERE id = ?`, [idx - 1, cur.id]);
+      rawDb.runSync(`UPDATE session_exercises SET position = ? WHERE id = ?`, [idx, prev.id]);
+      triggerHaptic('light');
+      loadSession();
+    } else if (direction === 'down' && idx < exercises.length - 1) {
+      const cur = exercises[idx];
+      const next = exercises[idx + 1];
+      rawDb.runSync(`UPDATE session_exercises SET position = ? WHERE id = ?`, [idx + 1, cur.id]);
+      rawDb.runSync(`UPDATE session_exercises SET position = ? WHERE id = ?`, [idx, next.id]);
+      triggerHaptic('light');
+      loadSession();
+    }
+  };
+
+  const handleMenuAction = (exerciseId: string, action: string, setId: string) => {
+    const rawDb = getExpoDb();
+    const ex = exercises.find((e) => e.id === exerciseId);
+    if (!ex) return;
+    const idx = ex.sets.findIndex((s) => s.id === setId);
+    if (idx === -1) return;
+
+    if (action === 'remove') {
+      rawDb.runSync(`DELETE FROM sets WHERE id = ?`, [setId]);
+      const remaining = ex.sets.filter((s) => s.id !== setId);
+      remaining.forEach((s, i) => {
+        rawDb.runSync(`UPDATE sets SET "index" = ? WHERE id = ?`, [i + 1, s.id]);
+      });
+      triggerHaptic('medium');
+      setToastMessage('Série removida');
+      setToastVisible(true);
+      loadSession();
+    } else if (action === 'duplicate') {
+      const src = ex.sets[idx];
+      const newId = `set_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      const nextIdx = ex.sets.length + 1;
+      rawDb.runSync(
+        `INSERT INTO sets (
+           id, session_exercise_id, "index", weight, reps, rpe, is_warmup,
+           completed_at, is_pr_weight, is_pr_volume, type, reps_mode,
+           min_reps, max_reps, effort_mode, effort_value, effort_value_max,
+           effort_ref_exercise_id, rest_s, is_session_only
+         ) VALUES (?, ?, ?, ?, ?, NULL, ?, NULL, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+        [
+          newId,
+          ex.id,
+          nextIdx,
+          src.weight,
+          src.reps,
+          src.isWarmup ? 1 : 0,
+          src.type,
+          src.repsMode,
+          src.minReps ?? null,
+          src.maxReps ?? null,
+          src.effortMode,
+          src.effortValue ?? null,
+          src.effortValueMax ?? null,
+          src.effortRefExerciseId ?? null,
+          src.restS ?? null,
+        ]
+      );
+      triggerHaptic('light');
+      setToastMessage('Série duplicada');
+      setToastVisible(true);
+      loadSession();
+    } else if (action === 'up' && idx > 0) {
+      const cur = ex.sets[idx];
+      const prev = ex.sets[idx - 1];
+      rawDb.runSync(`UPDATE sets SET "index" = ? WHERE id = ?`, [idx, cur.id]);
+      rawDb.runSync(`UPDATE sets SET "index" = ? WHERE id = ?`, [idx + 1, prev.id]);
+      triggerHaptic('light');
+      loadSession();
+    } else if (action === 'down' && idx < ex.sets.length - 1) {
+      const cur = ex.sets[idx];
+      const next = ex.sets[idx + 1];
+      rawDb.runSync(`UPDATE sets SET "index" = ? WHERE id = ?`, [idx + 2, cur.id]);
+      rawDb.runSync(`UPDATE sets SET "index" = ? WHERE id = ?`, [idx + 1, next.id]);
+      triggerHaptic('light');
+      loadSession();
     }
   };
 
@@ -696,6 +956,12 @@ export const ActiveSessionScreen: React.FC = () => {
       completedAt: null,
       isPrWeight: false,
       isPrVolume: false,
+      type: 'normal',
+      repsMode: 'reps_range',
+      minReps: exercise.repMin || 8,
+      maxReps: exercise.repMax || 12,
+      effortMode: 'none',
+      is_session_only: true,
     };
 
     setExercises((prev) =>
@@ -1149,126 +1415,83 @@ export const ActiveSessionScreen: React.FC = () => {
           </Card>
         ) : (
           <View style={styles.exercisesList}>
-            {exercises.map((exercise, exIndex) => {
-              const isExpanded = expandedExerciseId === exercise.id;
-
-              return (
-                <View key={exercise.id} style={styles.exerciseBlockContainer}>
-                  {isExpanded ? (
-                    /* ================= BLOCO EXPANDIDO ================= */
-                    <View style={styles.expandedBlock}>
-                      {/* Topo do Exercício Expandido (Stitch) */}
-                      <View style={styles.stitchExerciseHeader}>
-                        <View style={styles.stitchExerciseTitleRow}>
-                          <Text style={styles.stitchExerciseIndex}>{exIndex + 1}</Text>
-                          <Pressable
-                            onPress={() => {
-                              triggerHaptic('light');
-                              setExpandedExerciseId(null);
-                            }}
-                            style={styles.stitchExerciseNameBtn}
-                            accessibilityRole="button"
-                            accessibilityLabel={`Recolher exercício ${exercise.name}`}
-                          >
-                            <Text style={styles.stitchExerciseNameText}>
-                              {exercise.name}
-                            </Text>
-                            <ChevronRight size={18} color="#F5A623" strokeWidth={2.5} />
-                          </Pressable>
-                        </View>
-
-                        {/* Botão de descanso do exercício */}
-                        <Pressable
-                          onPress={() => handleCycleExerciseRest(exercise)}
-                          style={styles.exerciseTimerBtn}
-                          hitSlop={10}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Descanso atual: ${exercise.restS}s. Toque para ajustar`}
-                        >
-                          <Clock size={16} color="#8E8E93" strokeWidth={2} />
-                        </Pressable>
-                      </View>
-
-                      {/* Tabela de Séries (6 Colunas) */}
-                      <SetTable
-                        sets={exercise.sets.map((x) => ({
-                          id: x.id,
-                          weightKg: x.weight,
-                          reps: x.reps,
-                          rpe: x.rpe,
-                          isWarmup: x.isWarmup,
-                          isFailure: x.rpe === 10,
-                          completedAt: x.completedAt,
-                          isPr: x.isPrWeight || x.isPrVolume,
-                        }))}
-                        previous={(exercise.previousSets || []).map((p) =>
-                          p ? { weightKg: p.weight, reps: p.reps, rpe: null } : null
-                        )}
-                        targets={exercise.sets.map(() => ({
-                          weightKg: exercise.sets[0]?.weight,
-                          repsMin: exercise.repMin,
-                          repsMax: exercise.repMax,
-                          note: exercise.defaultIncrement ? `+${exercise.defaultIncrement} ${unit}` : `${exercise.repMin}-${exercise.repMax} reps`,
-                        }))}
-                        unit={unit}
-                        openRpeId={activeRpeSetId}
-                        onToggle={(id) => handleToggleSetCheck(exercise, findSet(exercise, id))}
-                        onEditWeight={(id) => openNumberModal('weight', exercise, id)}
-                        onEditReps={(id) => openNumberModal('reps', exercise, id)}
-                        onOpenMenu={(id) => openSetMenu(exercise, id)}
-                        onToggleRpe={(id) => setActiveRpeSetId((p) => (p === id ? null : id))}
-                        onCloseRpe={() => setActiveRpeSetId(null)}
-                        onChangeRpe={(id, v) => {
-                          handleUpdateRpe(exercise.id, id, v);
-                          setActiveRpeSetId(null);
-                        }}
-                        onAddSet={() => handleAddSet(exercise)}
-                        onSwapExercise={() => {
-                          navigation.navigate('AddExercises', {
-                            sessionId,
-                            existingExerciseIds: exercises.map((e) => e.exerciseId),
-                            fromScreen: 'ActiveSession',
-                          });
-                        }}
-                        onOpenExerciseOptions={() => handleOpenActionMenu(exercise)}
-                      />
-                    </View>
-                  ) : (
-                    /* ================= BLOCO RECOLHIDO (STITCH) ================= */
-                    <View style={styles.stitchCollapsedBlock}>
-                      <View style={styles.stitchExerciseTitleRow}>
-                        <Text style={styles.stitchExerciseIndex}>{exIndex + 1}</Text>
-                        <Pressable
-                          onPress={() => {
-                            triggerHaptic('light');
-                            setExpandedExerciseId(exercise.id);
-                          }}
-                          style={styles.stitchExerciseNameBtn}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Expandir exercício ${exercise.name}`}
-                        >
-                          <Text style={styles.stitchExerciseNameText}>
-                            {exercise.name}
-                          </Text>
-                          <ChevronRight size={18} color="#F5A623" strokeWidth={2.5} />
-                        </Pressable>
-                      </View>
-
-                      <Pressable
-                        onPress={() => handleCycleExerciseRest(exercise)}
-                        style={styles.exerciseTimerBtn}
-                        hitSlop={10}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Descanso atual: ${exercise.restS}s. Toque para ajustar`}
-                      >
-                        <Clock size={16} color="#8E8E93" strokeWidth={2} />
-                      </Pressable>
-                    </View>
-                  )}
-                  {exIndex < exercises.length - 1 && <View style={styles.stitchDivider} />}
-                </View>
-              );
-            })}
+            {exercises.map((exercise, exIndex) => (
+              <View key={exercise.id} style={styles.exerciseBlockContainer}>
+                <ExerciseCard
+                  index={exIndex}
+                  exercise={{
+                    id: exercise.id,
+                    exerciseId: exercise.exerciseId,
+                    name: exercise.name,
+                    restS: exercise.restS,
+                    defaultRest: exercise.restS,
+                    defaultRestS: exercise.restS,
+                    note: exercise.note,
+                    sets: exercise.sets.map((s, sIdx) => ({
+                      id: s.id,
+                      weightKg: s.weight,
+                      reps: s.reps,
+                      rpe: s.rpe,
+                      isWarmup: s.isWarmup,
+                      isFailure: s.type === 'failure',
+                      completedAt: s.completedAt,
+                      isPr: s.isPrWeight || s.isPrVolume,
+                      type: s.type,
+                      repsMode: s.repsMode,
+                      minReps: s.minReps,
+                      maxReps: s.maxReps,
+                      effortMode: s.effortMode,
+                      effortValue: s.effortValue,
+                      effortValueMax: s.effortValueMax,
+                      effortRefExerciseId: s.effortRefExerciseId,
+                      rest_s: s.restS,
+                      is_session_only: s.is_session_only,
+                      completed: s.completedAt !== null,
+                      previous: exercise.previousSets?.[sIdx]
+                        ? { weightKg: exercise.previousSets[sIdx].weight, reps: exercise.previousSets[sIdx].reps }
+                        : null,
+                    })),
+                  }}
+                  mode="active"
+                  unit={unit}
+                  canMoveUp={exIndex > 0}
+                  canMoveDown={exIndex < exercises.length - 1}
+                  onCycleRest={() => handleCycleExerciseRest(exercise)}
+                  onUpdateNote={(exId, note) => handleUpdateExerciseNote(exId, note)}
+                  onOpenAddSet={() => {
+                    setAddSetExerciseId(exercise.id);
+                    setSetTypeSheetVisible(true);
+                  }}
+                  onSwapExercise={() => {
+                    navigation.navigate('AddExercises', {
+                      sessionId,
+                      replaceTargetWorkoutExerciseId: exercise.id,
+                      existingExerciseIds: exercises
+                        .map((e) => e.exerciseId)
+                        .filter((id) => id !== exercise.exerciseId),
+                      fromScreen: 'ActiveSession',
+                    });
+                  }}
+                  onRemoveExercise={() => handleRemoveExerciseById(exercise.id)}
+                  onMoveUp={() => handleMoveExercise(exercise.id, 'up')}
+                  onMoveDown={() => handleMoveExercise(exercise.id, 'down')}
+                  onToggleComplete={(exId, setVm) => {
+                    const found = exercise.sets.find((s) => s.id === setVm.id);
+                    if (found) handleToggleSetCheck(exercise, found);
+                  }}
+                  onActiveChange={(exId, setId, field, val) => {
+                    handleActiveChange(exId, setId, field, val);
+                  }}
+                  onHeaderPress={() => {
+                    setSelectedExerciseForAction(exercise);
+                    setActionSheetVisible(true);
+                  }}
+                  onMenuAction={(exId, action, setId) => {
+                    handleMenuAction(exId, action, setId);
+                  }}
+                />
+              </View>
+            ))}
 
             {/* BOTÃO PARA ADICIONAR EXERCÍCIO ADICIONAL AO TREINO */}
             <Pressable
@@ -1346,6 +1569,22 @@ export const ActiveSessionScreen: React.FC = () => {
           setToastMessage('Exercício removido deste treino');
           setToastVisible(true);
         }}
+      />
+
+      {/* 6. MODAL SELETOR DE TIPO DE SÉRIE (+ Adicionar Série com isolamento) */}
+      <SetTypeSheet
+        visible={setTypeSheetVisible}
+        mode="active"
+        unit={unit}
+        suggestedDropKg={(() => {
+          const targetEx = exercises.find((e) => e.id === addSetExerciseId);
+          return targetEx ? suggestDropWeightKg(targetEx.sets, targetEx.defaultIncrement ?? 2.5) : null;
+        })()}
+        onClose={() => {
+          setSetTypeSheetVisible(false);
+          setAddSetExerciseId(null);
+        }}
+        onSelect={(optKey) => handleAddSetFromOption(optKey)}
       />
 
       {/* MODAL DE CONFIRMAÇÃO DE CONCLUSÃO */}

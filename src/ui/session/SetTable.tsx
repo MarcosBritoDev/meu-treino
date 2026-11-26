@@ -5,6 +5,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import {
@@ -69,8 +70,9 @@ export interface SetVM {
   rest?: number | null;
   rest_s?: number | null;
   position?: number;
-  is_session_only?: boolean;
+  is_session_only?: boolean | number;
   completed?: boolean;
+  previous?: PreviousVM | { weightKg?: number; weight?: number; reps: number; rpe?: number | null } | null;
 }
 
 export interface PreviousVM {
@@ -106,6 +108,7 @@ export interface SetTableProps {
   onToggle?: (setId: string) => void;
   onEditWeight?: (setId: string) => void;
   onEditReps?: (setId: string) => void;
+  onActiveChange?: (setId: string, field: 'weight' | 'reps', value: any) => void;
   onOpenMenu?: (setId: string) => void;
   onToggleRpe?: (setId: string) => void;
   onCloseRpe?: () => void;
@@ -377,73 +380,55 @@ export function SetTable(p: SetTableProps) {
   }
 
   // ==========================================================================
-  // 2. MODO ATIVO (6 COLUNAS: Série | Anterior | Alvo | kg/lb | Reps | ✓)
+  // 2. MODO ATIVO (6 COLUNAS COMPACTAS: Série | Anterior | Meta | kg/lb | Reps | ✓)
   // ==========================================================================
-  const labels = setLabels(p.sets);
   const states = rowStates(
     p.sets.map((s) => ({ completedAt: s.completedAt ?? null }))
   );
   const previousList = p.previous ?? [];
-  const targetsList = p.targets ?? [];
 
   return (
     <View style={s.tableContainer}>
-      {/* CABEÇALHO DE 6 COLUNAS (STITCH) */}
+      {/* CABEÇALHO DE 6 COLUNAS COMPACTAS */}
       <View
-        style={s.header}
+        style={s.activeHeader}
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
       >
-        <Text style={[s.headText, { width: GRID.serie }]}>Série</Text>
-        <Text style={[s.headText, s.colFlex]}>Anterior</Text>
-        <Text style={[s.headText, s.colFlex]}>Alvo</Text>
-        <Text style={[s.headText, { width: GRID.kg, textAlign: 'center' }]}>
-          {p.unit}
-        </Text>
-        <Text style={[s.headText, { width: GRID.reps, textAlign: 'center' }]}>
-          Reps
-        </Text>
-        <View style={{ width: GRID.check, alignItems: 'center' }}>
-          <Check size={13} color={C.headerText} strokeWidth={2.4} />
+        <Text style={[s.headText, s.activeColSerie]}>Série</Text>
+        <Text style={[s.headText, s.activeColPrev]}>Anterior</Text>
+        <Text style={[s.headText, s.activeColMeta]}>Meta</Text>
+        <Text style={[s.headText, s.activeColWeight]}>{p.unit}</Text>
+        <Text style={[s.headText, s.activeColReps]}>Reps</Text>
+        <View style={s.activeColCheck}>
+          <Check size={12} color="#7C7C80" strokeWidth={2.4} />
         </View>
       </View>
 
       {/* LINHAS DA TABELA */}
-      <View style={s.rowsContainer}>
-        {p.sets.map((set, i) => (
-          <View key={set.id}>
+      <View style={s.activeRowsContainer}>
+        {p.sets.map((set, i) => {
+          const badgeLabel = getSetDisplayLabel(p.sets, i);
+          const prevItem = previousList[i] ?? (set as any).previous ?? null;
+
+          return (
             <SetRow
+              key={set.id}
               set={set}
-              label={labels[i]}
+              label={badgeLabel}
               state={states[i]}
-              previous={previousList[i] ?? null}
-              target={targetsList[i] ?? null}
+              previous={prevItem}
+              target={null}
               unit={p.unit}
               onToggle={p.onToggle}
               onEditWeight={p.onEditWeight}
               onEditReps={p.onEditReps}
+              onActiveChange={p.onActiveChange}
               onOpenMenu={p.onOpenMenu}
-              onToggleRpe={p.onToggleRpe}
+              refExerciseName={p.refExerciseName}
             />
-
-            {/* FAIXA DE RPE (QUANDO EXPANDIDA MANUALMENTE) */}
-            {Boolean(
-              p.openRpeId &&
-                p.openRpeId === set.id &&
-                set.completedAt !== null &&
-                p.onChangeRpe
-            ) && (
-              <RpeStrip
-                value={set.rpe ?? null}
-                onChange={(v) => {
-                  p.onChangeRpe?.(set.id, v);
-                  p.onCloseRpe ? p.onCloseRpe() : p.onToggleRpe?.(set.id);
-                }}
-                onClose={() => (p.onCloseRpe ? p.onCloseRpe() : p.onToggleRpe?.(set.id))}
-              />
-            )}
-          </View>
-        ))}
+          );
+        })}
       </View>
 
       {/* RODAPÉ DO EXERCÍCIO (STITCH): + Adicionar série, ⇅ Substituir, ••• */}
@@ -494,14 +479,15 @@ interface SetRowProps {
   set: SetVM;
   label: string;
   state: RowState;
-  previous: PreviousVM | null;
-  target: TargetVM | null;
+  previous: PreviousVM | { weightKg?: number; weight?: number; reps: number; rpe?: number | null } | null;
+  target?: TargetVM | null;
   unit: Unit;
   onToggle?: (id: string) => void;
   onEditWeight?: (id: string) => void;
   onEditReps?: (id: string) => void;
+  onActiveChange?: (setId: string, field: 'weight' | 'reps', value: any) => void;
   onOpenMenu?: (id: string) => void;
-  onToggleRpe?: (id: string) => void;
+  refExerciseName?: (refExId: string) => string | undefined;
 }
 
 const SetRow = memo(function SetRow({
@@ -509,136 +495,140 @@ const SetRow = memo(function SetRow({
   label,
   state,
   previous,
-  target,
   unit,
   onToggle,
   onEditWeight,
   onEditReps,
-  onOpenMenu,
-  onToggleRpe,
+  onActiveChange,
+  refExerciseName,
 }: SetRowProps) {
   const done = state === 'done';
   const current = state === 'current';
 
-  const prevPrimary = previous
-    ? `${formatWeight(previous.weightKg, unit)} ${unit} × ${previous.reps}`
-    : '—';
-  const prevSub = previous?.rpe ? `RPE ${formatRpe(previous.rpe)}` : previous ? '—' : '';
+  const setType = (set.type ||
+    (set.isWarmup ? 'warmup' : set.isFailure ? 'failure' : 'normal')) as string;
 
-  const targetWeight = target?.weightKg !== undefined ? target.weightKg : (set.weightKg ?? 0);
-  const targetReps = target?.reps !== undefined ? target.reps : (set.reps ?? 0);
-  const targetPrimary = `${formatWeight(targetWeight, unit)} ${unit} × ${targetReps}`;
-  const targetSub =
-    target?.note ||
-    (target?.repsMin && target?.repsMax
-      ? `${target.repsMin}-${target.repsMax} reps`
-      : '');
+  // 1. Anterior: apenas carga × reps, sem RPE
+  const prevWeight = previous
+    ? (previous as any).weightKg ?? (previous as any).weight
+    : null;
+  const prevText =
+    previous && prevWeight !== null && prevWeight !== undefined
+      ? `${formatWeight(prevWeight, unit)} ${unit} × ${previous.reps}`
+      : '—';
+
+  // 2. Meta: formatRepsTarget na 1ª linha e formatEffort na 2ª linha
+  const repsTarget = formatRepsTarget(set);
+  const refExerciseId = set.effortRefExerciseId ?? set.effort_ref_exercise_id;
+  const refName = refExerciseId ? refExerciseName?.(refExerciseId) : undefined;
+  const effort =
+    setType === 'normal' || (!setType && !set.isWarmup && !set.isFailure)
+      ? formatEffort(set, unit, refName)
+      : '';
+
+  const displayWeight = formatWeight(set.weightKg ?? 0, unit);
+  const displayReps = set.reps !== null && set.reps !== undefined ? String(set.reps) : '';
 
   return (
-    <View style={[s.row, done && s.rowDone, current && s.rowCurrent]}>
-      {/* 1. SÉRIE (Badge ou Número) */}
-      <Pressable
-        style={s.cellSerie}
-        onPress={() => done && onToggleRpe?.(set.id)}
-        onLongPress={() => onOpenMenu?.(set.id)}
-        delayLongPress={350}
-        accessibilityRole="button"
-        accessibilityLabel={set.isWarmup ? 'Série de aquecimento' : `Série ${label}`}
-        accessibilityHint="Toque longo para opções da série"
-      >
-        {set.isWarmup ? (
-          <View style={s.warmupBadge}>
-            <Text style={s.warmupBadgeText}>W</Text>
-          </View>
-        ) : set.isFailure ? (
-          <View style={s.failureBadge}>
-            <Text style={s.failureBadgeText}>F</Text>
-          </View>
-        ) : (
-          <Text style={[s.serieNumText, current && s.serieNumCurrent]}>{label}</Text>
+    <View style={[s.activeRow, done && s.activeRowDone, current && s.activeRowCurrent]}>
+      {/* 1. SÉRIE BADGE */}
+      <View style={s.activeColSerie}>
+        <View
+          style={[
+            s.previewBadgeBase,
+            setType === 'warmup' && s.badgeWarmup,
+            setType === 'failure' && s.badgeFailure,
+            setType === 'drop' && s.badgeDrop,
+            (setType === 'normal' || (!setType && !set.isWarmup)) && s.badgeNormal,
+          ]}
+        >
+          <Text
+            style={[
+              s.previewBadgeText,
+              setType === 'warmup' && s.badgeTextWarmup,
+              setType === 'failure' && s.badgeTextFailure,
+              setType === 'drop' && s.badgeTextDrop,
+              (setType === 'normal' || (!setType && !set.isWarmup)) && s.badgeTextNormal,
+            ]}
+          >
+            {label}
+          </Text>
+        </View>
+        {Boolean(set.is_session_only) && (
+          <Text style={s.sessionOnlyTag}>sessão</Text>
         )}
-
-        {set.isPr && (
+        {Boolean(set.isPr) && (
           <View style={s.prDot} accessibilityLabel="Novo recorde">
             <Trophy size={9} color="#000000" strokeWidth={2.6} />
           </View>
         )}
-      </Pressable>
+      </View>
 
-      {/* 2. ANTERIOR (2 linhas) */}
-      <Pressable style={s.cellPrev} onPress={() => done && onToggleRpe?.(set.id)}>
-        <Text style={s.statPrimaryText} numberOfLines={1}>
-          {prevPrimary}
+      {/* 2. ANTERIOR (Apenas carga × reps, sem RPE realizado) */}
+      <View style={s.activeColPrev}>
+        <Text style={[s.activeStatPrimary, prevText === '—' && s.statEmptyText]} numberOfLines={1}>
+          {prevText}
         </Text>
-        {Boolean(prevSub) && (
-          <Text style={s.statSubText} numberOfLines={1}>
-            {prevSub}
-          </Text>
-        )}
-      </Pressable>
+      </View>
 
-      {/* 3. ALVO (2 linhas) */}
-      <View style={s.cellTarget}>
-        <Text style={s.statPrimaryText} numberOfLines={1}>
-          {targetPrimary}
+      {/* 3. META (1ª linha: reps, 2ª linha: esforço) */}
+      <View style={s.activeColMeta}>
+        <Text style={s.activeStatPrimary} numberOfLines={1}>
+          {repsTarget}
         </Text>
-        {Boolean(targetSub) && (
-          <Text style={s.statSubText} numberOfLines={1}>
-            {targetSub}
+        {Boolean(effort) && (
+          <Text style={s.metaEffortText} numberOfLines={1}>
+            {effort}
           </Text>
         )}
       </View>
 
-      {/* 4. CARGA (Caixa de input #242426) */}
-      <Pressable
-        style={s.cellBox}
-        onPress={() => onEditWeight?.(set.id)}
-        accessibilityRole="button"
-        accessibilityLabel={`Carga ${formatWeight(set.weightKg ?? 0, unit)} ${unit}. Toque para alterar`}
-      >
-        <Text style={[s.boxText, done && s.boxTextDone]}>
-          {formatWeight(set.weightKg ?? 0, unit)}
-        </Text>
-      </Pressable>
+      {/* 4. CARGA (kg ou lb) */}
+      <View style={s.activeColWeight}>
+        <TextInput
+          value={displayWeight === '—' ? '' : displayWeight}
+          onChangeText={(val) => onActiveChange?.(set.id, 'weight', val)}
+          onFocus={() => onEditWeight?.(set.id)}
+          placeholder="0"
+          placeholderTextColor="#525257"
+          keyboardType="decimal-pad"
+          selectTextOnFocus
+          style={[s.activeBoxInput, done && s.activeBoxInputDone]}
+          accessibilityLabel={`Carga ${displayWeight} ${unit}`}
+        />
+      </View>
 
-      {/* 5. REPS (Caixa de input #242426 com Micro-Badge RPE) */}
-      <Pressable
-        style={s.cellBox}
-        onPress={() => onEditReps?.(set.id)}
-        accessibilityRole="button"
-        accessibilityLabel={`${set.reps ?? 0} repetições. Toque para alterar`}
-      >
-        <Text style={[s.boxText, done && s.boxTextDone]}>{set.reps ?? 0}</Text>
+      {/* 5. REPS (sem mini-badge de RPE) */}
+      <View style={s.activeColReps}>
+        <TextInput
+          value={displayReps}
+          onChangeText={(val) => onActiveChange?.(set.id, 'reps', val)}
+          onFocus={() => onEditReps?.(set.id)}
+          placeholder="0"
+          placeholderTextColor="#525257"
+          keyboardType="numeric"
+          selectTextOnFocus
+          style={[s.activeBoxInput, done && s.activeBoxInputDone]}
+          accessibilityLabel={`${displayReps} repetições`}
+        />
+      </View>
 
-        {/* Micro-badge no canto inferior direito */}
-        {set.rpe !== null && set.rpe !== undefined && (
-          <View style={s.rpeMicroBadge}>
-            <Text style={s.rpeMicroText}>{formatRpe(set.rpe)}</Text>
-          </View>
-        )}
-      </Pressable>
-
-      {/* 6. CHECKMARK (Círculo 28x28 Stitch) */}
-      <Pressable
-        style={s.cellCheck}
-        onPress={() => onToggle?.(set.id)}
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: done }}
-        accessibilityLabel={done ? `Desmarcar série ${label}` : `Concluir série ${label}`}
-      >
-        <View
-          style={[
-            s.checkCircle,
-            done ? s.checkCircleDone : s.checkCirclePending,
-          ]}
+      {/* 6. CHECKMARK (Conclusão direta, sem barra de RPE) */}
+      <View style={s.activeColCheck}>
+        <Pressable
+          style={[s.checkCircle, done ? s.checkCircleDone : s.checkCirclePending]}
+          onPress={() => onToggle?.(set.id)}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: done }}
+          accessibilityLabel={done ? `Desmarcar série ${label}` : `Concluir série ${label}`}
         >
           <Check
-            size={15}
-            color={done ? '#000000' : '#525257'}
+            size={14}
+            color={done ? '#000000' : '#8E8E93'}
             strokeWidth={done ? 3 : 2.4}
           />
-        </View>
-      </Pressable>
+        </Pressable>
+      </View>
     </View>
   );
 });
@@ -886,8 +876,108 @@ const s = StyleSheet.create({
   },
 
   // --------------------------------------------------------------------------
-  // Ativo (6 Colunas)
+  // Ativo (6 Colunas Compactas)
   // --------------------------------------------------------------------------
+  activeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 24,
+    paddingHorizontal: 2,
+    marginBottom: 4,
+  },
+  activeRowsContainer: {
+    gap: 4,
+  },
+  activeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+    borderRadius: 8,
+    minHeight: 44,
+  },
+  activeRowDone: {
+    backgroundColor: 'rgba(245, 196, 0, 0.07)',
+  },
+  activeRowCurrent: {
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+  },
+  activeColSerie: {
+    width: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeColPrev: {
+    flex: 1,
+    minWidth: 58,
+    paddingHorizontal: 3,
+    justifyContent: 'center',
+  },
+  activeColMeta: {
+    flex: 1,
+    minWidth: 58,
+    paddingHorizontal: 3,
+    justifyContent: 'center',
+  },
+  activeColWeight: {
+    width: 52,
+    paddingHorizontal: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeColReps: {
+    width: 46,
+    paddingHorizontal: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeColCheck: {
+    width: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeStatPrimary: {
+    fontFamily: F.bodyMedium,
+    fontSize: 11,
+    color: '#E4E4E7',
+    lineHeight: 14,
+  },
+  statEmptyText: {
+    color: '#71717A',
+  },
+  metaEffortText: {
+    fontFamily: F.body,
+    fontSize: 10,
+    color: '#B7ADA3',
+    lineHeight: 13,
+    marginTop: 1,
+  },
+  sessionOnlyTag: {
+    fontSize: 8,
+    fontFamily: F.bodyMedium,
+    color: '#38BDF8',
+    fontWeight: '700',
+    marginTop: 1,
+    textAlign: 'center',
+  },
+  activeBoxInput: {
+    width: '100%',
+    height: 30,
+    backgroundColor: '#121212',
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
+    borderRadius: 6,
+    textAlign: 'center',
+    fontSize: 12,
+    fontFamily: F.number,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    paddingVertical: 0,
+    paddingHorizontal: 2,
+  },
+  activeBoxInputDone: {
+    borderColor: 'rgba(245, 196, 0, 0.4)',
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -176,8 +176,8 @@ export const AddExercisesScreen: React.FC = () => {
           for (let s = 1; s <= 3; s++) {
             const setId = `set_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
             rawDb.runSync(
-              `INSERT INTO sets (id, session_exercise_id, "index", weight, reps, is_warmup, is_pr_weight, is_pr_volume)
-               VALUES (?, ?, ?, 20.0, 10, 0, 0, 0)`,
+              `INSERT INTO sets (id, session_exercise_id, "index", weight, reps, is_warmup, is_pr_weight, is_pr_volume, type, reps_mode, min_reps, max_reps, effort_mode, is_session_only)
+               VALUES (?, ?, ?, 20.0, 10, 0, 0, 0, 'normal', 'reps_range', 8, 12, 'none', 1)`,
               [setId, seId, s]
             );
           }

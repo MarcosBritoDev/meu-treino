@@ -5,6 +5,7 @@ import {
   calculateNextScheduledWorkoutIndex,
 } from '../domain/workouts';
 import { PlannedSet, SetType, RepsMode, EffortMode, Unit } from '../domain/types';
+import { suggestDropWeightKg, suggest1RmWeightKg } from '../domain/sessionMath';
 
 export { formatTempoRelativoLog, calculateNextScheduledWorkoutIndex };
 export type { PlannedSet, SetType, RepsMode, EffortMode, Unit };
@@ -559,7 +560,40 @@ export function discardInProgressSession(): void {
 }
 
 /**
+ * Estima a carga de 1RM do exercício a partir das séries concluídas no histórico.
+ * Utiliza a fórmula de Epley: 1RM = peso * (1 + reps / 30).
+ */
+export function getExerciseEstimated1Rm(exerciseId: string): number | null {
+  try {
+    const rawDb = getExpoDb();
+    const rows = rawDb.getAllSync<{ weight: number; reps: number }>(
+      `SELECT st.weight, st.reps
+       FROM sets st
+       JOIN session_exercises se ON st.session_exercise_id = se.id
+       JOIN sessions s ON se.session_id = s.id
+       WHERE se.exercise_id = ? AND s.status = 'completed' AND st.completed_at IS NOT NULL AND st.is_warmup = 0 AND st.weight > 0 AND st.reps > 0`,
+      [exerciseId]
+    );
+    if (rows.length === 0) return null;
+    let max1Rm = 0;
+    for (const r of rows) {
+      const e1rm = r.reps === 1 ? r.weight : r.weight * (1 + r.reps / 30);
+      if (e1rm > max1Rm) max1Rm = e1rm;
+    }
+    return max1Rm > 0 ? Math.round(max1Rm * 10) / 10 : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Inicia uma nova sessão de treino e popula seus exercícios conforme o treino selecionado.
+ * Clona workout_exercises -> session_exercises e cada linha de workout_exercise_sets -> sets,
+ * aplicando as regras de pré-preenchimento de carga inicial:
+ * 1. % de 1RM com 1RM estimado disponível
+ * 2. Drop set (-20% da última série não-aquecimento)
+ * 3. Carga da última sessão concluída (+ incremento se last_week_plus/last_session_plus)
+ * 4. Fallback padrão caso não haja histórico
  */
 export function startWorkoutSession(workoutId?: string, workoutName?: string): string {
   const rawDb = getExpoDb();
@@ -574,6 +608,7 @@ export function startWorkoutSession(workoutId?: string, workoutName?: string): s
 
   if (workoutId) {
     const exRows = rawDb.getAllSync<{
+      id: string;
       exerciseId: string;
       position: number;
       targetSets: number;
@@ -581,21 +616,206 @@ export function startWorkoutSession(workoutId?: string, workoutName?: string): s
       repMax: number;
       restS: number;
       note: string | null;
+      defaultIncrement: number | null;
     }>(
-      `SELECT exercise_id AS exerciseId, position, target_sets AS targetSets, rep_min AS repMin, rep_max AS repMax, rest_s AS restS, note
-       FROM workout_exercises
-       WHERE workout_id = ?
-       ORDER BY position ASC`,
+      `SELECT we.id, we.exercise_id AS exerciseId, we.position, we.target_sets AS targetSets,
+              we.rep_min AS repMin, we.rep_max AS repMax, we.rest_s AS restS, we.note,
+              e.default_increment AS defaultIncrement
+       FROM workout_exercises we
+       JOIN exercises e ON we.exercise_id = e.id
+       WHERE we.workout_id = ?
+       ORDER BY we.position ASC`,
       [workoutId]
     );
 
     for (const ex of exRows) {
       const seId = `se_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
       rawDb.runSync(
-        `INSERT INTO session_exercises (id, session_id, exercise_id, position, target_sets, rep_min, rep_max, rest_s, note)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO session_exercises (id, session_id, exercise_id, position, target_sets, rep_min, rep_max, rest_s, note, is_session_only)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
         [seId, sessionId, ex.exerciseId, ex.position, ex.targetSets, ex.repMin, ex.repMax, ex.restS, ex.note]
       );
+
+      // Clona cada linha de workout_exercise_sets para sets
+      const plannedSets = rawDb.getAllSync<{
+        id: string;
+        position: number;
+        type: string;
+        reps_mode: string;
+        min_reps: number | null;
+        max_reps: number | null;
+        effort_mode: string;
+        effort_value: number | null;
+        effort_value_max: number | null;
+        effort_ref_exercise_id: string | null;
+        rest_s: number | null;
+      }>(
+        `SELECT id, position, type, reps_mode, min_reps, max_reps, effort_mode,
+                effort_value, effort_value_max, effort_ref_exercise_id, rest_s
+         FROM workout_exercise_sets
+         WHERE workout_exercise_id = ?
+         ORDER BY position ASC`,
+        [ex.id]
+      );
+
+      // Buscar séries da última sessão concluída do mesmo exercício
+      const lastCompleted = rawDb.getAllSync<{ id: string }>(
+        `SELECT s.id
+         FROM sessions s
+         JOIN session_exercises se ON se.session_id = s.id
+         WHERE se.exercise_id = ? AND s.status = 'completed'
+         ORDER BY s.ended_at DESC
+         LIMIT 1`,
+        [ex.exerciseId]
+      );
+
+      let prevSets: Array<{ weight: number; reps: number; isWarmup: boolean }> = [];
+      if (lastCompleted.length > 0) {
+        const rows = rawDb.getAllSync<{
+          weight: number;
+          reps: number;
+          is_warmup: number;
+          type?: string;
+        }>(
+          `SELECT st.weight, st.reps, st.is_warmup, st.type
+           FROM sets st
+           JOIN session_exercises se ON st.session_exercise_id = se.id
+           WHERE se.exercise_id = ? AND se.session_id = ? AND st.completed_at IS NOT NULL
+           ORDER BY st."index" ASC`,
+          [ex.exerciseId, lastCompleted[0].id]
+        );
+        prevSets = rows.map((r) => ({
+          weight: r.weight,
+          reps: r.reps,
+          isWarmup: Boolean(r.is_warmup || r.type === 'warmup'),
+        }));
+      }
+
+      const estimated1Rm = getExerciseEstimated1Rm(ex.exerciseId);
+      const initializedSets: Array<{ type: string; isWarmup: boolean; weight: number | null }> = [];
+
+      if (plannedSets.length > 0) {
+        let normalIdx = 0;
+        let warmupIdx = 0;
+
+        for (let p = 0; p < plannedSets.length; p++) {
+          const ps = plannedSets[p];
+          const isWarmup = ps.type === 'warmup';
+          let initialKg: number | null = null;
+
+          // Regra 1: Se effort_mode for percent_1rm ou percent_1rm_exercise e houver 1RM estimado disponível
+          if (
+            (ps.effort_mode === 'percent_1rm' || ps.effort_mode === 'percent_1rm_exercise') &&
+            ps.effort_value !== null &&
+            ps.effort_value !== undefined &&
+            ps.effort_value > 0
+          ) {
+            let ref1Rm = estimated1Rm;
+            if (ps.effort_mode === 'percent_1rm_exercise' && ps.effort_ref_exercise_id) {
+              ref1Rm = getExerciseEstimated1Rm(ps.effort_ref_exercise_id) ?? estimated1Rm ?? 100;
+            } else if (!ref1Rm) {
+              ref1Rm = 100;
+            }
+            if (ref1Rm && ref1Rm > 0) {
+              initialKg = suggest1RmWeightKg(ref1Rm, ps.effort_value, ex.defaultIncrement ?? 2.5);
+            }
+          }
+          // Regra 2: Se type === 'drop', calcular -20% da última série não-aquecimento já inicializada
+          else if (ps.type === 'drop') {
+            initialKg = suggestDropWeightKg(initializedSets, ex.defaultIncrement ?? 2.5);
+          }
+          // Regra 3: Buscar na última sessão completed carga compatível
+          else {
+            if (isWarmup) {
+              const prevWarmups = prevSets.filter((s) => s.isWarmup);
+              const prevW = prevWarmups[warmupIdx] ?? prevWarmups[prevWarmups.length - 1];
+              if (prevW) {
+                initialKg = prevW.weight;
+              }
+            } else {
+              const prevNormals = prevSets.filter((s) => !s.isWarmup);
+              const prevN = prevNormals[normalIdx] ?? prevNormals[prevNormals.length - 1];
+              if (prevN) {
+                initialKg = prevN.weight;
+                if (
+                  (ps.effort_mode === 'last_week_plus' || ps.effort_mode === 'last_session_plus') &&
+                  ps.effort_value
+                ) {
+                  initialKg = Number((initialKg + ps.effort_value).toFixed(2));
+                }
+              }
+            }
+          }
+
+          // Regra 4: Fallback se não houver histórico
+          if (initialKg === null || initialKg === undefined || Number.isNaN(initialKg)) {
+            initialKg = 20.0;
+          }
+
+          const initialReps =
+            ps.min_reps ??
+            (isWarmup
+              ? 10
+              : prevSets.filter((s) => !s.isWarmup)[normalIdx]?.reps ?? ex.repMin ?? 10);
+
+          const setId = `set_${Date.now()}_${p}_${Math.random().toString(36).substring(2, 6)}`;
+          rawDb.runSync(
+            `INSERT INTO sets (
+               id, session_exercise_id, "index", weight, reps, rpe, is_warmup,
+               completed_at, is_pr_weight, is_pr_volume, type, reps_mode,
+               min_reps, max_reps, effort_mode, effort_value, effort_value_max,
+               effort_ref_exercise_id, rest_s, is_session_only
+             ) VALUES (?, ?, ?, ?, ?, NULL, ?, NULL, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+            [
+              setId,
+              seId,
+              p + 1,
+              initialKg,
+              initialReps,
+              isWarmup ? 1 : 0,
+              ps.type,
+              ps.reps_mode,
+              ps.min_reps,
+              ps.max_reps,
+              ps.effort_mode,
+              ps.effort_value,
+              ps.effort_value_max,
+              ps.effort_ref_exercise_id,
+              ps.rest_s,
+            ]
+          );
+
+          initializedSets.push({
+            type: ps.type,
+            isWarmup,
+            weight: initialKg,
+          });
+
+          if (isWarmup) {
+            warmupIdx++;
+          } else {
+            normalIdx++;
+          }
+        }
+      } else {
+        // Fallback para exercícios sem workout_exercise_sets
+        const targetCount = ex.targetSets || 3;
+        const prevNormals = prevSets.filter((s) => !s.isWarmup);
+        const initialWeight = prevNormals.length > 0 ? prevNormals[0].weight : 20.0;
+        const initialReps = prevNormals.length > 0 ? prevNormals[0].reps : ex.repMin || 10;
+
+        for (let idx = 1; idx <= targetCount; idx++) {
+          const setId = `set_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`;
+          rawDb.runSync(
+            `INSERT INTO sets (
+               id, session_exercise_id, "index", weight, reps, rpe, is_warmup,
+               completed_at, is_pr_weight, is_pr_volume, type, reps_mode,
+               min_reps, max_reps, effort_mode, is_session_only
+             ) VALUES (?, ?, ?, ?, ?, NULL, 0, NULL, 0, 0, 'normal', 'reps_range', ?, ?, 'none', 0)`,
+            [setId, seId, idx, initialWeight, initialReps, ex.repMin, ex.repMax]
+          );
+        }
+      }
     }
   }
 
