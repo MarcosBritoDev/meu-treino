@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { X } from 'lucide-react-native';
 import { triggerHaptic } from './haptics';
-import { formatWeight, Unit } from '../domain/sessionMath';
+import { formatWeight, Unit, SetType, canAddDropAtEnd } from '../domain/sessionMath';
 
 export type SetTypeOptionKey = 'warmup' | 'normal' | 'rpe' | 'rir' | 'failure' | 'drop';
 
@@ -20,6 +20,7 @@ export interface SetTypeSheetProps {
   onSelect: (typeKey: SetTypeOptionKey) => void;
   suggestedDropKg?: number | null;
   unit?: Unit;
+  sets?: Array<{ type?: SetType | string; isWarmup?: boolean }>;
 }
 
 export const SetTypeSheet: React.FC<SetTypeSheetProps> = ({
@@ -29,13 +30,17 @@ export const SetTypeSheet: React.FC<SetTypeSheetProps> = ({
   onSelect,
   suggestedDropKg,
   unit = 'kg',
+  sets,
 }) => {
   const { width } = useWindowDimensions();
 
   if (!visible) return null;
 
-  const dropDesc =
-    mode === 'active'
+  const canDrop = sets !== undefined ? canAddDropAtEnd(sets) : true;
+
+  const dropDesc = !canDrop
+    ? 'Adicione uma série antes'
+    : mode === 'active'
       ? suggestedDropKg
         ? `Até a falha · Sugestão ${formatWeight(suggestedDropKg, unit)} ${unit} (-20%)`
         : 'Até a falha · -20% da anterior'
@@ -49,6 +54,7 @@ export const SetTypeSheet: React.FC<SetTypeSheetProps> = ({
     badgeBorder: string;
     title: string;
     desc: string;
+    disabled?: boolean;
   }> = [
     {
       key: 'warmup',
@@ -98,11 +104,12 @@ export const SetTypeSheet: React.FC<SetTypeSheetProps> = ({
     {
       key: 'drop',
       badge: 'D',
-      badgeBg: 'rgba(192, 132, 252, 0.15)',
-      badgeColor: '#C084FC',
-      badgeBorder: 'rgba(192, 132, 252, 0.4)',
+      badgeBg: canDrop ? 'rgba(192, 132, 252, 0.15)' : 'rgba(192, 132, 252, 0.05)',
+      badgeColor: canDrop ? '#C084FC' : '#7D619B',
+      badgeBorder: canDrop ? 'rgba(192, 132, 252, 0.4)' : 'rgba(192, 132, 252, 0.15)',
       title: 'Drop',
       desc: dropDesc,
+      disabled: !canDrop,
     },
   ];
 
@@ -144,42 +151,60 @@ export const SetTypeSheet: React.FC<SetTypeSheetProps> = ({
 
           {/* Grade 2x3 */}
           <View style={styles.grid}>
-            {options.map((opt) => (
-              <Pressable
-                key={opt.key}
-                onPress={() => handleSelect(opt.key)}
-                style={({ pressed }) => [
-                  styles.optionCard,
-                  { width: cardWidth },
-                  pressed && styles.optionCardPressed,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel={`${opt.title}, ${opt.desc}`}
-              >
-                <View
-                  style={[
-                    styles.badge,
-                    {
-                      backgroundColor: opt.badgeBg,
-                      borderColor: opt.badgeBorder,
-                    },
+            {options.map((opt) => {
+              const isDisabled = Boolean(opt.disabled);
+              return (
+                <Pressable
+                  key={opt.key}
+                  disabled={isDisabled}
+                  onPress={() => !isDisabled && handleSelect(opt.key)}
+                  style={({ pressed }) => [
+                    styles.optionCard,
+                    { width: cardWidth },
+                    isDisabled && styles.optionCardDisabled,
+                    pressed && !isDisabled && styles.optionCardPressed,
                   ]}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: isDisabled }}
+                  accessibilityLabel={`${opt.title}, ${opt.desc}`}
                 >
-                  <Text style={[styles.badgeText, { color: opt.badgeColor }]}>
-                    {opt.badge}
-                  </Text>
-                </View>
+                  <View
+                    style={[
+                      styles.badge,
+                      {
+                        backgroundColor: opt.badgeBg,
+                        borderColor: opt.badgeBorder,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.badgeText, { color: opt.badgeColor }]}>
+                      {opt.badge}
+                    </Text>
+                  </View>
 
-                <View style={styles.optionContent}>
-                  <Text style={styles.optionTitle} numberOfLines={1}>
-                    {opt.title}
-                  </Text>
-                  <Text style={styles.optionDesc} numberOfLines={2}>
-                    {opt.desc}
-                  </Text>
-                </View>
-              </Pressable>
-            ))}
+                  <View style={styles.optionContent}>
+                    <Text
+                      style={[
+                        styles.optionTitle,
+                        isDisabled && styles.optionTitleDisabled,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {opt.title}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.optionDesc,
+                        isDisabled && styles.optionDescDisabled,
+                      ]}
+                      numberOfLines={2}
+                    >
+                      {opt.desc}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
           </View>
         </View>
       </View>
@@ -259,6 +284,11 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 107, 87, 0.6)',
     backgroundColor: '#18181A',
   },
+  optionCardDisabled: {
+    opacity: 0.45,
+    borderColor: '#222224',
+    backgroundColor: '#101012',
+  },
   badge: {
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -281,9 +311,15 @@ const styles = StyleSheet.create({
     color: '#F5EFE8',
     marginBottom: 2,
   },
+  optionTitleDisabled: {
+    color: '#636366',
+  },
   optionDesc: {
     fontSize: 11,
     color: '#B7ADA3',
     lineHeight: 14,
+  },
+  optionDescDisabled: {
+    color: '#636366',
   },
 });

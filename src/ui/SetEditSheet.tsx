@@ -26,7 +26,11 @@ import {
   formatWeight,
   suggest1RmWeightKg,
   sanitizePlannedSet,
+  canSetBeDrop,
+  DROP_PERCENT_PRESETS,
 } from '../domain/sessionMath';
+
+export { DROP_PERCENT_PRESETS };
 
 export const SET_REST_OPTIONS: readonly (number | null)[] = [
   null,
@@ -96,6 +100,8 @@ const DEFAULT_CATALOG: CatalogExerciseItem[] = [
 export interface SetEditSheetProps {
   visible: boolean;
   set: Record<string, any> | null;
+  sets?: Array<{ type?: SetType | string; isWarmup?: boolean }>;
+  setIndex?: number;
   exercise?: {
     id?: string;
     name?: string;
@@ -115,6 +121,8 @@ export interface SetEditSheetProps {
 export const SetEditSheet: React.FC<SetEditSheetProps> = ({
   visible,
   set,
+  sets,
+  setIndex,
   exercise,
   badgeLabel,
   unit = 'kg',
@@ -136,7 +144,18 @@ export const SetEditSheet: React.FC<SetEditSheetProps> = ({
   const [effortRefExId, setEffortRefExId] = useState<string>(catalog[0]?.id || 'ex-1');
   const [incrementInput, setIncrementInput] = useState<string>('2,5');
 
+  const [dropPercent, setDropPercent] = useState<number>(20);
+  const [dropPercentInput, setDropPercentInput] = useState<string>('20');
+
   const [rest, setRest] = useState<number | null>(null);
+
+  const effectiveIndex =
+    setIndex !== undefined
+      ? setIndex
+      : sets && set
+      ? sets.findIndex((s: any) => s.id === set.id)
+      : -1;
+  const canDrop = sets && effectiveIndex >= 0 ? canSetBeDrop(sets, effectiveIndex) : true;
 
   useEffect(() => {
     if (set && visible) {
@@ -176,6 +195,14 @@ export const SetEditSheet: React.FC<SetEditSheetProps> = ({
         setIncrementInput(formatDecimalBR(disp));
       }
 
+      const rawDrop = set.drop_percent ?? set.dropPercent;
+      const initialDrop =
+        rawDrop !== null && rawDrop !== undefined && !Number.isNaN(Number(rawDrop))
+          ? Math.min(90, Math.max(1, Number(rawDrop)))
+          : 20;
+      setDropPercent(initialDrop);
+      setDropPercentInput(String(initialDrop));
+
       const rawRest = set.rest ?? set.rest_s ?? null;
       setRest(rawRest);
     }
@@ -205,6 +232,39 @@ export const SetEditSheet: React.FC<SetEditSheetProps> = ({
       setMaxVal(12);
     } else if (newType === 'failure' || newType === 'drop') {
       setEffortMode('none');
+      if (newType === 'drop') {
+        setDropPercent((prev) => prev || 20);
+        setDropPercentInput((prev) => prev || '20');
+      }
+    }
+  };
+
+  const handleDropPercentInputChange = (text: string) => {
+    const clean = text.replace(/[^0-9]/g, '');
+    setDropPercentInput(clean);
+    if (clean !== '') {
+      const parsed = parseInt(clean, 10);
+      if (!Number.isNaN(parsed)) {
+        if (parsed > 90) {
+          setDropPercent(90);
+        } else if (parsed < 1) {
+          setDropPercent(1);
+        } else {
+          setDropPercent(parsed);
+        }
+      }
+    }
+  };
+
+  const handleDropPercentInputBlur = () => {
+    if (!dropPercentInput || parseInt(dropPercentInput, 10) < 1) {
+      setDropPercent(20);
+      setDropPercentInput('20');
+    } else if (parseInt(dropPercentInput, 10) > 90) {
+      setDropPercent(90);
+      setDropPercentInput('90');
+    } else {
+      setDropPercentInput(String(dropPercent));
     }
   };
 
@@ -287,6 +347,9 @@ export const SetEditSheet: React.FC<SetEditSheetProps> = ({
           : displayToKg(parsedDisplay, unit);
     }
 
+    const finalDropPercent =
+      type === 'drop' ? Math.min(90, Math.max(1, dropPercent || 20)) : null;
+
     const payload = sanitizePlannedSet({
       ...set,
       type,
@@ -308,6 +371,8 @@ export const SetEditSheet: React.FC<SetEditSheetProps> = ({
       rest_s: rest,
       isWarmup: type === 'warmup',
       isFailure: type === 'failure',
+      drop_percent: finalDropPercent,
+      dropPercent: finalDropPercent,
     });
 
     onApply(payload);
@@ -368,16 +433,19 @@ export const SetEditSheet: React.FC<SetEditSheetProps> = ({
               <View style={styles.chipsRow}>
                 {(['warmup', 'normal', 'failure', 'drop'] as const).map((t) => {
                   const isSelected = type === t;
+                  const isDropDisabled = t === 'drop' && !canDrop;
                   return (
                     <Pressable
                       key={t}
-                      onPress={() => handleTypeChange(t)}
+                      disabled={isDropDisabled}
+                      onPress={() => !isDropDisabled && handleTypeChange(t)}
                       style={[
                         styles.chipBtn,
                         isSelected ? styles.chipBtnSelected : styles.chipBtnUnselected,
+                        isDropDisabled && styles.chipBtnDisabled,
                       ]}
                       accessibilityRole="button"
-                      accessibilityState={{ selected: isSelected }}
+                      accessibilityState={{ selected: isSelected, disabled: isDropDisabled }}
                       accessibilityLabel={getTypeLabel(t)}
                     >
                       <Text
@@ -386,6 +454,7 @@ export const SetEditSheet: React.FC<SetEditSheetProps> = ({
                           isSelected
                             ? styles.chipBtnTextSelected
                             : styles.chipBtnTextUnselected,
+                          isDropDisabled && styles.chipBtnTextDisabled,
                         ]}
                       >
                         {getTypeLabel(t)}
@@ -394,6 +463,11 @@ export const SetEditSheet: React.FC<SetEditSheetProps> = ({
                   );
                 })}
               </View>
+              {!canDrop && (
+                <Text style={styles.discreetNoticeText}>
+                  Drop exige uma série de trabalho antes dele
+                </Text>
+              )}
             </View>
 
             {/* 2. Meta de Reps / Tempo */}
@@ -778,6 +852,69 @@ export const SetEditSheet: React.FC<SetEditSheetProps> = ({
               </View>
             )}
 
+            {/* Seção Drop Set: Redução automática da carga (%) */}
+            {type === 'drop' && (
+              <View style={styles.section}>
+                <Text style={styles.sectionLabel}>Redução automática da carga (%)</Text>
+
+                {/* Chips de atalho rápido */}
+                <View style={styles.wrapRow}>
+                  {DROP_PERCENT_PRESETS.map((pct) => {
+                    const isSelected = dropPercent === pct;
+                    return (
+                      <Pressable
+                        key={pct}
+                        onPress={() => {
+                          triggerHaptic('selection');
+                          setDropPercent(pct);
+                          setDropPercentInput(String(pct));
+                        }}
+                        style={[
+                          styles.smallChip,
+                          isSelected
+                            ? styles.smallChipSelected
+                            : styles.smallChipUnselected,
+                        ]}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isSelected }}
+                        accessibilityLabel={`-${pct}%`}
+                      >
+                        <Text
+                          style={[
+                            styles.smallChipText,
+                            isSelected
+                              ? styles.smallChipTextSelected
+                              : styles.smallChipTextUnselected,
+                          ]}
+                        >
+                          -{pct}%
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                {/* Campo numérico livre (1 a 90%) */}
+                <View style={styles.dropCustomInputRow}>
+                  <Text style={styles.dropCustomInputLabel}>Personalizado (1 a 90%):</Text>
+                  <View style={styles.dropCustomInputWrap}>
+                    <TextInput
+                      value={dropPercentInput}
+                      onChangeText={handleDropPercentInputChange}
+                      onBlur={handleDropPercentInputBlur}
+                      keyboardType="numeric"
+                      maxLength={3}
+                      style={styles.dropCustomTextInput}
+                      accessibilityLabel="Porcentagem personalizada de redução de carga"
+                      placeholder="20"
+                      placeholderTextColor="#636366"
+                    />
+                    <Text style={styles.dropCustomInputSuffix}>%</Text>
+                  </View>
+                </View>
+              </View>
+            )}
+
             {/* 4. Descanso individual desta série */}
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>Descanso desta série</Text>
@@ -815,6 +952,11 @@ export const SetEditSheet: React.FC<SetEditSheetProps> = ({
                   );
                 })}
               </View>
+              {type === 'drop' && (
+                <Text style={styles.discreetNoticeText}>
+                  Pausa zero se houver outro Drop abaixo; o descanso só inicia após o último Drop.
+                </Text>
+              )}
             </View>
           </ScrollView>
 
@@ -1132,5 +1274,54 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#FF6B6B',
+  },
+  chipBtnDisabled: {
+    opacity: 0.4,
+    borderColor: '#242426',
+    backgroundColor: '#121214',
+  },
+  chipBtnTextDisabled: {
+    color: '#636366',
+  },
+  discreetNoticeText: {
+    fontSize: 12,
+    color: '#8E8E93',
+    marginTop: 8,
+    lineHeight: 16,
+  },
+  dropCustomInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 12,
+  },
+  dropCustomInputLabel: {
+    fontSize: 13,
+    color: '#B7ADA3',
+    fontWeight: '500',
+  },
+  dropCustomInputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1C1C1E',
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    height: 34,
+  },
+  dropCustomTextInput: {
+    width: 48,
+    textAlign: 'center',
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    paddingVertical: 0,
+    paddingHorizontal: 2,
+  },
+  dropCustomInputSuffix: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#8E8E93',
   },
 });

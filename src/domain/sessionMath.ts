@@ -15,6 +15,8 @@ export const RPE_OPTIONS = [6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10] as const;
 
 export const RIR_OPTIONS = [0, 1, 2, 3, 4, 5] as const;
 
+export const DROP_PERCENT_PRESETS = [10, 15, 20, 25, 30, 40] as const;
+
 export const REPS_MODE_OPTIONS = [
   'reps',
   'reps_range',
@@ -451,6 +453,135 @@ export function setLabels(sets: Array<{ isWarmup?: boolean; type?: SetType | str
 }
 
 /**
+ * Verifica se uma lista de séries é válida com relação às regras de Drop:
+ * Nenhum drop pode violar canSetBeDrop(sets, index).
+ */
+export function areSetsDropValid(
+  sets: Array<{ type?: SetType | string; isWarmup?: boolean }>
+): boolean {
+  if (!sets || sets.length === 0) return true;
+  for (let i = 0; i < sets.length; i++) {
+    const s = sets[i];
+    const type = s.type || (s.isWarmup ? 'warmup' : 'normal');
+    if (type === 'drop') {
+      if (!canSetBeDrop(sets, i)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+/**
+ * Verifica se uma ação de reordenação ('up', 'down') ou remoção ('remove') é permitida
+ * sem violar as regras de Drop sets subsequentes.
+ */
+export function canPerformSetAction(
+  sets: Array<{ type?: SetType | string; isWarmup?: boolean }>,
+  action: 'up' | 'down' | 'remove' | 'duplicate',
+  index: number
+): boolean {
+  if (!sets || index < 0 || index >= sets.length) return false;
+
+  if (action === 'duplicate') {
+    const candidate = [...sets];
+    candidate.splice(index + 1, 0, { ...sets[index] });
+    return areSetsDropValid(candidate);
+  }
+
+  if (action === 'up') {
+    if (index <= 0) return false;
+    const candidate = [...sets];
+    const temp = candidate[index];
+    candidate[index] = candidate[index - 1];
+    candidate[index - 1] = temp;
+    return areSetsDropValid(candidate);
+  }
+
+  if (action === 'down') {
+    if (index >= sets.length - 1) return false;
+    const candidate = [...sets];
+    const temp = candidate[index];
+    candidate[index] = candidate[index + 1];
+    candidate[index + 1] = temp;
+    return areSetsDropValid(candidate);
+  }
+
+  if (action === 'remove') {
+    const candidate = sets.filter((_, i) => i !== index);
+    return areSetsDropValid(candidate);
+  }
+
+  return true;
+}
+
+/**
+ * Cria uma série planejada padronizada a partir de uma opção do SetTypeSheet.
+ */
+export function createPlannedSetFromOption(
+  optionKey: 'warmup' | 'normal' | 'rpe' | 'rir' | 'failure' | 'drop',
+  defaults: { repMin?: number; repMax?: number } = {},
+  baseSet?: Partial<PlannedSet>
+): PlannedSet {
+  const repMin = defaults.repMin ?? 8;
+  const repMax = defaults.repMax ?? 10;
+  let set: PlannedSet = {
+    id: baseSet?.id || `wes_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    workoutExerciseId: baseSet?.workoutExerciseId || '',
+    position: baseSet?.position ?? 0,
+    type: 'normal',
+    repsMode: 'reps_range',
+    minReps: repMin,
+    maxReps: repMax,
+    effortMode: 'none',
+    effortValue: null,
+    effortValueMax: null,
+    effortRefExerciseId: null,
+    restS: null,
+    drop_percent: null,
+    ...baseSet,
+  };
+
+  if (optionKey === 'warmup') {
+    set.type = 'warmup';
+    set.minReps = 8;
+    set.maxReps = 12;
+    set.effortMode = 'none';
+    set.effortValue = null;
+    set.drop_percent = null;
+  } else if (optionKey === 'rpe') {
+    set.type = 'normal';
+    set.effortMode = 'rpe';
+    set.effortValue = 8;
+    set.drop_percent = null;
+  } else if (optionKey === 'rir') {
+    set.type = 'normal';
+    set.effortMode = 'rir';
+    set.effortValue = 2;
+    set.drop_percent = null;
+  } else if (optionKey === 'failure') {
+    set.type = 'failure';
+    set.repsMode = 'reps_max';
+    set.minReps = null;
+    set.maxReps = null;
+    set.effortMode = 'none';
+    set.effortValue = null;
+    set.drop_percent = null;
+  } else if (optionKey === 'drop') {
+    set.type = 'drop';
+    set.repsMode = 'reps_max';
+    set.minReps = null;
+    set.maxReps = null;
+    set.effortMode = 'none';
+    set.effortValue = null;
+    set.drop_percent = 20;
+    set.dropPercent = 20;
+  }
+
+  return sanitizePlannedSet(set);
+}
+
+/**
  * Garante invariantes de uma série planejada:
  * - Se warmup, failure ou drop: força effort_mode = 'none' e limpa valores de esforço.
  * - Se failure ou drop: limpa min_reps e max_reps.
@@ -476,6 +607,19 @@ export function sanitizePlannedSet<T extends Record<string, any>>(set: T): T {
     if ('min_reps' in s) (s as any).min_reps = null;
     s.maxReps = null;
     if ('max_reps' in s) (s as any).max_reps = null;
+  }
+
+  if (type === 'drop') {
+    const rawDrop = s.drop_percent ?? s.dropPercent;
+    if (rawDrop !== null && rawDrop !== undefined && !Number.isNaN(Number(rawDrop))) {
+      const numDrop = Number(rawDrop);
+      const clampedDrop = Number.isFinite(numDrop) ? Math.min(90, Math.max(1, numDrop)) : 20;
+      s.drop_percent = clampedDrop;
+      if ('dropPercent' in s) s.dropPercent = clampedDrop;
+    }
+  } else {
+    if ('drop_percent' in s) s.drop_percent = null;
+    if ('dropPercent' in s) s.dropPercent = null;
   }
 
   if (type === 'normal') {

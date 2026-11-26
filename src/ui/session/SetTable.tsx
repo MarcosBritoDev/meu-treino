@@ -35,7 +35,9 @@ import {
   formatRepsTarget,
   formatRepsShort,
   formatEffort,
+  formatTarget,
   getSetDisplayLabel,
+  canPerformSetAction,
 } from '../../domain/sessionMath';
 import { triggerHaptic } from '../haptics';
 
@@ -123,6 +125,14 @@ export function SetTable(p: SetTableProps) {
     const activeMenuIndex = activeMenuSetId
       ? p.sets.findIndex((s) => s.id === activeMenuSetId)
       : -1;
+    const canMoveUp =
+      activeMenuIndex > 0 && canPerformSetAction(p.sets, 'up', activeMenuIndex);
+    const canMoveDown =
+      activeMenuIndex >= 0 &&
+      activeMenuIndex < p.sets.length - 1 &&
+      canPerformSetAction(p.sets, 'down', activeMenuIndex);
+    const canRemove =
+      activeMenuIndex >= 0 && canPerformSetAction(p.sets, 'remove', activeMenuIndex);
 
     return (
       <View style={s.tableContainer}>
@@ -150,8 +160,8 @@ export function SetTable(p: SetTableProps) {
               ? p.refExerciseName?.(refExerciseId)
               : undefined;
             const effort =
-              setType === 'normal' || (!setType && !set.isWarmup && !set.isFailure)
-                ? formatEffort(set, p.unit, refName)
+              setType === 'normal' || setType === 'drop' || (!setType && !set.isWarmup && !set.isFailure)
+                ? formatTarget(set, p.unit, refName)
                 : '';
             const repsShort = formatRepsShort(set);
 
@@ -285,28 +295,30 @@ export function SetTable(p: SetTableProps) {
                 </Pressable>
 
                 <Pressable
-                  disabled={activeMenuIndex <= 0}
+                  disabled={!canMoveUp}
                   style={({ pressed }) => [
                     s.menuItem,
-                    activeMenuIndex <= 0 && s.menuItemDisabled,
-                    pressed && activeMenuIndex > 0 && s.menuItemPressed,
+                    !canMoveUp && s.menuItemDisabled,
+                    pressed && canMoveUp && s.menuItemPressed,
                   ]}
                   onPress={() => {
+                    if (!canMoveUp) return;
                     triggerHaptic('light');
                     p.onMenuAction?.('up', activeMenuSetId);
                     setActiveMenuSetId(null);
                   }}
                   accessibilityRole="button"
+                  accessibilityState={{ disabled: !canMoveUp }}
                   accessibilityLabel="Mover série para cima"
                 >
                   <ArrowUp
                     size={16}
-                    color={activeMenuIndex <= 0 ? '#525257' : '#E5E5EA'}
+                    color={!canMoveUp ? '#525257' : '#E5E5EA'}
                   />
                   <Text
                     style={[
                       s.menuItemText,
-                      activeMenuIndex <= 0 && s.menuItemTextDisabled,
+                      !canMoveUp && s.menuItemTextDisabled,
                     ]}
                   >
                     Mover acima
@@ -314,33 +326,30 @@ export function SetTable(p: SetTableProps) {
                 </Pressable>
 
                 <Pressable
-                  disabled={activeMenuIndex >= p.sets.length - 1}
+                  disabled={!canMoveDown}
                   style={({ pressed }) => [
                     s.menuItem,
-                    activeMenuIndex >= p.sets.length - 1 && s.menuItemDisabled,
-                    pressed &&
-                      activeMenuIndex < p.sets.length - 1 &&
-                      s.menuItemPressed,
+                    !canMoveDown && s.menuItemDisabled,
+                    pressed && canMoveDown && s.menuItemPressed,
                   ]}
                   onPress={() => {
+                    if (!canMoveDown) return;
                     triggerHaptic('light');
                     p.onMenuAction?.('down', activeMenuSetId);
                     setActiveMenuSetId(null);
                   }}
                   accessibilityRole="button"
+                  accessibilityState={{ disabled: !canMoveDown }}
                   accessibilityLabel="Mover série para baixo"
                 >
                   <ArrowDown
                     size={16}
-                    color={
-                      activeMenuIndex >= p.sets.length - 1 ? '#525257' : '#E5E5EA'
-                    }
+                    color={!canMoveDown ? '#525257' : '#E5E5EA'}
                   />
                   <Text
                     style={[
                       s.menuItemText,
-                      activeMenuIndex >= p.sets.length - 1 &&
-                        s.menuItemTextDisabled,
+                      !canMoveDown && s.menuItemTextDisabled,
                     ]}
                   >
                     Mover abaixo
@@ -350,20 +359,34 @@ export function SetTable(p: SetTableProps) {
                 <View style={s.menuDivider} />
 
                 <Pressable
+                  disabled={!canRemove}
                   style={({ pressed }) => [
                     s.menuItem,
-                    pressed && s.menuItemDangerPressed,
+                    !canRemove && s.menuItemDisabled,
+                    pressed && canRemove && s.menuItemDangerPressed,
                   ]}
                   onPress={() => {
+                    if (!canRemove) return;
                     triggerHaptic('medium');
                     p.onMenuAction?.('remove', activeMenuSetId);
                     setActiveMenuSetId(null);
                   }}
                   accessibilityRole="button"
+                  accessibilityState={{ disabled: !canRemove }}
                   accessibilityLabel="Remover série"
                 >
-                  <Trash2 size={16} color="#FF6B6B" />
-                  <Text style={s.menuItemDangerText}>Remover</Text>
+                  <Trash2
+                    size={16}
+                    color={!canRemove ? '#525257' : '#FF6B6B'}
+                  />
+                  <Text
+                    style={[
+                      s.menuItemDangerText,
+                      !canRemove && s.menuItemTextDisabled,
+                    ]}
+                  >
+                    Remover
+                  </Text>
                 </Pressable>
               </View>
             </Pressable>

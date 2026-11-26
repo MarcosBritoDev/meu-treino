@@ -8,6 +8,7 @@ export * from './workouts';
 export {
   RPE_OPTIONS,
   RIR_OPTIONS,
+  DROP_PERCENT_PRESETS,
   REPS_MODE_OPTIONS,
   EFFORT_MODE_OPTIONS,
   formatDecimalBR,
@@ -21,6 +22,9 @@ export {
   recalculateDropCascade,
   canAddDropAtEnd,
   canSetBeDrop,
+  areSetsDropValid,
+  canPerformSetAction,
+  createPlannedSetFromOption,
   getSetDisplayLabel,
   sanitizePlannedSet,
   canGeneratePR,

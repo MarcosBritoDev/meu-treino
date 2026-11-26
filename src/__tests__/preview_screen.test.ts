@@ -159,6 +159,8 @@ describe('ETAPA 4 — Reconstrução da EditWorkoutScreen como Prévia e Exercis
           set.repsMode = 'reps_max';
           set.minReps = null;
           set.maxReps = null;
+          set.effortMode = 'none';
+          set.drop_percent = 20;
         }
 
         return sanitizePlannedSet(set);
@@ -205,6 +207,7 @@ describe('ETAPA 4 — Reconstrução da EditWorkoutScreen como Prévia e Exercis
       expect(drop.minReps).toBeNull();
       expect(drop.maxReps).toBeNull();
       expect(drop.effortMode).toBe('none');
+      expect(drop.drop_percent).toBe(20);
     });
 
     it('substitui o exercício mantendo todas as séries planejadas intactas', () => {

@@ -33,6 +33,7 @@ import {
   PlannedSet,
   sanitizePlannedSet,
   serializeExercisesForDirtyCheck,
+  canPerformSetAction,
 } from '../domain/sessionMath';
 import {
   getWorkoutForEdit,
@@ -410,6 +411,8 @@ export const EditWorkoutScreen: React.FC = () => {
       newSet.maxReps = null;
       newSet.effortMode = 'none';
       newSet.effortValue = null;
+      newSet.drop_percent = 20;
+      newSet.dropPercent = 20;
     }
 
     newSet = sanitizePlannedSet(newSet);
@@ -444,6 +447,12 @@ export const EditWorkoutScreen: React.FC = () => {
         const sets = [...(ex.sets || [])];
         const idx = sets.findIndex((s) => s.id === setId);
         if (idx === -1) return ex;
+
+        if (!canPerformSetAction(sets, action, idx)) {
+          setToastMessage('Ação inválida: Drop exige uma série de trabalho antes dele');
+          setToastVisible(true);
+          return ex;
+        }
 
         if (action === 'duplicate') {
           const original = sets[idx];
@@ -498,11 +507,19 @@ export const EditWorkoutScreen: React.FC = () => {
     triggerHaptic('medium');
     const targetExId = editingTarget.exercise.id;
 
+    const currentSets = editingTarget.exercise.sets || [];
+    const idx = currentSets.findIndex((s: any) => s.id === setId);
+    if (idx !== -1 && !canPerformSetAction(currentSets, 'remove', idx)) {
+      setToastMessage('Ação inválida: Drop exige uma série de trabalho antes dele');
+      setToastVisible(true);
+      return;
+    }
+
     setExercises((prev) =>
       prev.map((ex) => {
         if (ex.id !== targetExId) return ex;
         const filtered = (ex.sets || []).filter((s) => s.id !== setId);
-        const reindexed = filtered.map((s, idx) => ({ ...s, position: idx }));
+        const reindexed = filtered.map((s, pIdx) => ({ ...s, position: pIdx }));
         return { ...ex, targetSets: reindexed.length, sets: reindexed };
       })
     );
@@ -658,6 +675,7 @@ export const EditWorkoutScreen: React.FC = () => {
         visible={Boolean(addSetExerciseId)}
         mode="preview"
         unit={unit}
+        sets={exercises.find((e) => e.id === addSetExerciseId)?.sets || []}
         onClose={() => setAddSetExerciseId(null)}
         onSelect={handleAddSetOption}
       />
@@ -666,6 +684,8 @@ export const EditWorkoutScreen: React.FC = () => {
       <SetEditSheet
         visible={Boolean(editingTarget)}
         set={editingTarget?.set || null}
+        sets={editingTarget?.exercise?.sets || []}
+        setIndex={editingTarget?.exercise?.sets?.findIndex((s: any) => s.id === editingTarget?.set?.id)}
         exercise={editingTarget?.exercise ? {
           id: editingTarget.exercise.exerciseId,
           name: editingTarget.exercise.name,

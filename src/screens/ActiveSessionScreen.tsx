@@ -716,6 +716,8 @@ export const ActiveSessionScreen: React.FC = () => {
       repsMode = 'reps_max';
       minReps = null;
       maxReps = null;
+      effortMode = 'none';
+      effortValue = null;
       initialKg = suggestDropWeightKg(targetExercise.sets, targetExercise.defaultIncrement ?? 2.5);
     }
 
@@ -730,13 +732,15 @@ export const ActiveSessionScreen: React.FC = () => {
       maxReps ??
       (targetExercise.previousSets?.[0]?.reps || 10);
 
+    const dropPercent = setType === 'drop' ? 20 : null;
+
     rawDb.runSync(
       `INSERT INTO sets (
          id, session_exercise_id, "index", weight, reps, rpe, is_warmup,
          completed_at, is_pr_weight, is_pr_volume, type, reps_mode,
          min_reps, max_reps, effort_mode, effort_value, effort_value_max,
-         effort_ref_exercise_id, rest_s, is_session_only
-       ) VALUES (?, ?, ?, ?, ?, NULL, ?, NULL, 0, 0, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 1)`,
+         effort_ref_exercise_id, rest_s, is_session_only, drop_percent
+       ) VALUES (?, ?, ?, ?, ?, NULL, ?, NULL, 0, 0, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 1, ?)`,
       [
         newSetId,
         targetExercise.id,
@@ -750,6 +754,7 @@ export const ActiveSessionScreen: React.FC = () => {
         maxReps,
         effortMode,
         effortValue,
+        dropPercent,
       ]
     );
 
@@ -1577,6 +1582,7 @@ export const ActiveSessionScreen: React.FC = () => {
         visible={setTypeSheetVisible}
         mode="active"
         unit={unit}
+        sets={exercises.find((e) => e.id === addSetExerciseId)?.sets || []}
         suggestedDropKg={(() => {
           const targetEx = exercises.find((e) => e.id === addSetExerciseId);
           return targetEx ? suggestDropWeightKg(targetEx.sets, targetEx.defaultIncrement ?? 2.5) : null;
