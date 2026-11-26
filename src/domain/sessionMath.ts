@@ -1,4 +1,5 @@
 import { PlannedSet, SetType, RepsMode, EffortMode } from './types';
+export type { PlannedSet, SetType, RepsMode, EffortMode } from './types';
 
 export type Unit = 'kg' | 'lb';
 
@@ -513,4 +514,50 @@ export function formatClock(totalSeconds: number): string {
 }
 
 export const formatRpe = (v: number): string => String(v).replace('.', ',');
+
+export const SET_REST_OPTIONS: readonly (number | null)[] = [
+  null,
+  0,
+  30,
+  60,
+  90,
+  120,
+  180,
+];
+
+export function getTypeLabel(type?: string): string {
+  switch (type) {
+    case 'warmup':
+      return 'Aquecimento';
+    case 'normal':
+      return 'Normal';
+    case 'failure':
+      return 'Falha';
+    case 'drop':
+      return 'Drop';
+    default:
+      return 'Normal';
+  }
+}
+
+export function formatRestShort(seconds?: number | null): string {
+  if (seconds === null || seconds === undefined) return 'Herdar';
+  if (seconds === 0) return '0s';
+  if (seconds >= 60 && seconds % 60 === 0) return `${seconds / 60} min`;
+  return `${seconds}s`;
+}
+
+export const getEffortModeOptions = (
+  unit: Unit
+): Array<{ value: string; label: string }> => [
+  { value: 'none', label: 'Nenhum' },
+  { value: 'rpe', label: 'RPE' },
+  { value: 'rpe_range', label: 'Faixa de RPE (RPE Range)' },
+  { value: 'rir', label: 'RIR' },
+  { value: 'percent_1rm', label: '% de 1RM' },
+  { value: 'percent_1rm_exercise', label: '% de 1RM de X Exercício' },
+  { value: 'last_week_plus', label: `Semana passada + X ${unit}` },
+  { value: 'last_session_plus', label: `Sessão passada + X ${unit}` },
+];
+
 

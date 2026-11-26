@@ -7,6 +7,7 @@ import {
   TouchableWithoutFeedback,
   PanResponder,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
 import { colors, radii, spacing } from '../theme';
 import { Text } from './Text';
@@ -27,6 +28,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   children,
   heightPercent,
 }) => {
+  const insets = useSafeAreaInsets();
   const panResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: (_, gestureState) => gestureState.dy > 10,
@@ -63,6 +65,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
         <View
           style={[
             styles.sheetContainer,
+            { paddingBottom: Math.max(spacing.xl, insets.bottom + 16) },
             heightPercent ? { height: `${heightPercent}%`, maxHeight: `${heightPercent}%` } : undefined,
           ]}
         >
