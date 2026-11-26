@@ -11,6 +11,7 @@ import {
   Trash2,
   X,
   Info,
+  Calculator,
 } from 'lucide-react-native';
 import { colors, radii } from '../theme';
 import { Text } from './Text';
@@ -24,6 +25,7 @@ export interface ActiveExerciseActionSheetProps {
   onSkipExercise: () => void;
   onReplaceExercise: () => void;
   onRemoveExercise: () => void;
+  onOpenPlateCalculator?: () => void;
 }
 
 export const ActiveExerciseActionSheet: React.FC<ActiveExerciseActionSheetProps> = ({
@@ -34,6 +36,7 @@ export const ActiveExerciseActionSheet: React.FC<ActiveExerciseActionSheetProps>
   onSkipExercise,
   onReplaceExercise,
   onRemoveExercise,
+  onOpenPlateCalculator,
 }) => {
   return (
     <BottomSheet visible={visible} onClose={onClose}>
@@ -86,6 +89,31 @@ export const ActiveExerciseActionSheet: React.FC<ActiveExerciseActionSheetProps>
               </Text>
             </View>
           </Pressable>
+
+          {/* Calculadora de anilhas */}
+          {Boolean(onOpenPlateCalculator) && (
+            <Pressable
+              onPress={() => {
+                onClose();
+                onOpenPlateCalculator?.();
+              }}
+              style={styles.actionItem}
+              accessibilityRole="button"
+              accessibilityLabel="Calculadora de anilhas"
+            >
+              <View style={styles.actionIconCircle}>
+                <Calculator size={18} color={colors.primary} strokeWidth={2} />
+              </View>
+              <View style={styles.actionTextContainer}>
+                <Text variant="bodyLarge" style={styles.actionTitle}>
+                  Calculadora de anilhas
+                </Text>
+                <Text variant="bodySmall" color="secondary">
+                  Calcular combinação de anilhas na barra para este exercício
+                </Text>
+              </View>
+            </Pressable>
+          )}
 
           {/* 2. Pular exercício hoje */}
           <Pressable

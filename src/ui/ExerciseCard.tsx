@@ -18,6 +18,7 @@ import {
   ArrowUp,
   ArrowDown,
   X,
+  Calculator,
 } from 'lucide-react-native';
 import { SetTable, SetVM, SetMenuAction } from './session/SetTable';
 import { Unit, formatRestShort } from '../domain/sessionMath';
@@ -53,6 +54,7 @@ export interface ExerciseCardProps {
   onMenuAction?: (exerciseId: string, action: SetMenuAction, setId: string) => void;
   onHeaderPress?: (exerciseId: string) => void;
   onOpenExerciseOptions?: (exerciseId: string) => void;
+  onOpenPlateCalculator?: (exerciseId: string) => void;
   // Callbacks para modo ativo (Etapa 5)
   onToggleComplete?: (exerciseId: string, set: SetVM) => void;
   onActiveChange?: (exerciseId: string, setId: string, field: string, value: any) => void;
@@ -79,6 +81,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
   onMenuAction,
   onHeaderPress,
   onOpenExerciseOptions,
+  onOpenPlateCalculator,
   onToggleComplete,
   onActiveChange,
 }) => {
@@ -273,6 +276,24 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
                 <RefreshCw size={13} color="#8E8E93" strokeWidth={2} />
                 <Text style={styles.swapText}>Substituir</Text>
               </Pressable>
+
+              {Boolean(onOpenPlateCalculator) && (
+                <Pressable
+                  onPress={() => {
+                    triggerHaptic('light');
+                    onOpenPlateCalculator?.(exercise.id);
+                  }}
+                  style={({ pressed }) => [
+                    styles.footerActionBtn,
+                    pressed && { opacity: 0.7 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Calculadora de anilhas"
+                >
+                  <Calculator size={13} color="#8E8E93" strokeWidth={2} />
+                  <Text style={styles.swapText}>Anilhas</Text>
+                </Pressable>
+              )}
             </View>
 
             <Pressable

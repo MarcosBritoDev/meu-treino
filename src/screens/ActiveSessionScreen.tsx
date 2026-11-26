@@ -658,7 +658,7 @@ export const ActiveSessionScreen: React.FC = () => {
         setToastVisible(true);
       } else {
         const restTime = setItem.restS ?? exercise.restS ?? defaultRestFor(setItem.type);
-        if (restTime > 0) {
+        if (autoRestTimer && restTime > 0) {
           startRestTimer(restTime);
         }
       }
@@ -1433,7 +1433,7 @@ export const ActiveSessionScreen: React.FC = () => {
           </Pressable>
         </View>
 
-        {/* Direita: Pílula de Tempo + Botão Finalizar Dourado */}
+        {/* Direita: Pílula de Tempo + Botão Finalizar Coral */}
         <View style={styles.topBarRightControls}>
           <Pressable
             onPress={handleTogglePause}
@@ -1442,7 +1442,7 @@ export const ActiveSessionScreen: React.FC = () => {
             accessibilityLabel={isPaused ? 'Retomar treino' : 'Pausar treino'}
           >
             {isPaused ? (
-              <Play size={12} color="#F5A623" fill="#F5A623" />
+              <Play size={12} color="#FF7A59" fill="#FF7A59" />
             ) : (
               <Pause size={12} color="#FFFFFF" strokeWidth={2.4} />
             )}
@@ -1451,11 +1451,11 @@ export const ActiveSessionScreen: React.FC = () => {
 
           <Pressable
             onPress={() => setFinishModalVisible(true)}
-            style={styles.finishGoldButton}
+            style={styles.finishCoralButton}
             accessibilityRole="button"
             accessibilityLabel="Finalizar treino"
           >
-            <Text style={styles.finishGoldText}>Finalizar</Text>
+            <Text style={styles.finishCoralText}>Finalizar</Text>
           </Pressable>
         </View>
       </View>
@@ -1472,6 +1472,22 @@ export const ActiveSessionScreen: React.FC = () => {
           <Text style={styles.workoutMetaTitle} numberOfLines={2}>
             {sessionName}
           </Text>
+
+          <Text style={styles.workoutMetaSubtitle}>
+            {groupName
+              ? `${groupName} · ${completedExercisesCount} de ${exercises.length} exercícios`
+              : `${completedExercisesCount} de ${exercises.length} exercícios`}
+          </Text>
+
+          {/* Barra de progresso fina coral */}
+          <View style={styles.progressBarTrack}>
+            <View
+              style={[
+                styles.progressBarFill,
+                { width: `${Math.round(progressRatio * 100)}%` },
+              ]}
+            />
+          </View>
 
           <Pressable
             onPress={() => {
@@ -1497,7 +1513,7 @@ export const ActiveSessionScreen: React.FC = () => {
         {exercises.length === 0 ? (
           /* Sessão livre avulsa sem exercícios */
           <Card variant="surface" style={styles.emptySessionCard}>
-            <Dumbbell size={36} color="#F5A623" strokeWidth={1.75} style={{ marginBottom: 8 }} />
+            <Dumbbell size={36} color="#FF7A59" strokeWidth={1.75} style={{ marginBottom: 8 }} />
             <Text variant="headline" style={styles.emptySessionTitle}>
               Nenhum exercício adicionado
             </Text>
@@ -1515,7 +1531,7 @@ export const ActiveSessionScreen: React.FC = () => {
                   fromScreen: 'ActiveSession',
                 })
               }
-              style={{ marginTop: 12, height: 48, borderRadius: radii.pill, backgroundColor: '#F5A623' }}
+              style={{ marginTop: 12, height: 48, borderRadius: radii.pill, backgroundColor: '#FF7A59' }}
             />
           </Card>
         ) : (
@@ -1552,6 +1568,9 @@ export const ActiveSessionScreen: React.FC = () => {
                       rest_s: s.restS,
                       is_session_only: s.is_session_only,
                       completed: s.completedAt !== null,
+                      manual_weight: s.manual_weight,
+                      drop_percent: s.drop_percent,
+                      dropPercent: s.drop_percent,
                       previous: exercise.previousSets?.[sIdx]
                         ? { weightKg: exercise.previousSets[sIdx].weight, reps: exercise.previousSets[sIdx].reps }
                         : null,
@@ -1582,6 +1601,13 @@ export const ActiveSessionScreen: React.FC = () => {
                   onRemoveExercise={() => handleRemoveExerciseById(exercise.id)}
                   onMoveUp={() => handleMoveExercise(exercise.id, 'up')}
                   onMoveDown={() => handleMoveExercise(exercise.id, 'down')}
+                  onOpenPlateCalculator={(exId) => {
+                    const ex = exercises.find((e) => e.id === exId);
+                    const currentSet = ex?.sets.find((s) => s.completedAt === null) || ex?.sets[0];
+                    setPlateExerciseName(ex?.name || 'Exercício com barra');
+                    setPlateInitialWeight(currentSet ? currentSet.weight : 60);
+                    setPlateSheetVisible(true);
+                  }}
                   onToggleComplete={(exId, setVm) => {
                     const found = exercise.sets.find((s) => s.id === setVm.id);
                     if (found) handleToggleSetCheck(exercise, found);
@@ -1616,7 +1642,7 @@ export const ActiveSessionScreen: React.FC = () => {
               accessibilityRole="button"
               accessibilityLabel="Adicionar exercício a este treino"
             >
-              <Plus size={18} color="#F5A623" strokeWidth={2.4} />
+              <Plus size={18} color="#FF7A59" strokeWidth={2.4} />
               <Text variant="bodyMedium" style={styles.addExerciseFooterText}>
                 Adicionar exercício
               </Text>
@@ -1656,6 +1682,16 @@ export const ActiveSessionScreen: React.FC = () => {
         onSkipExercise={handleSkipExercise}
         onReplaceExercise={handleReplaceExercise}
         onRemoveExercise={handleRemoveExercise}
+        onOpenPlateCalculator={() => {
+          if (selectedExerciseForAction) {
+            const currentSet =
+              selectedExerciseForAction.sets.find((s) => s.completedAt === null) ||
+              selectedExerciseForAction.sets[0];
+            setPlateExerciseName(selectedExerciseForAction.name);
+            setPlateInitialWeight(currentSet ? currentSet.weight : 60);
+            setPlateSheetVisible(true);
+          }
+        }}
       />
 
       <EditSessionExerciseSheet
@@ -1706,9 +1742,11 @@ export const ActiveSessionScreen: React.FC = () => {
         }
         confirmLabel="Concluir treino"
         cancelLabel="Continuar treinando"
+        discardLabel="Descartar treino"
         isDanger={false}
         onConfirm={handleConfirmFinish}
         onCancel={() => setFinishModalVisible(false)}
+        onDiscard={handleConfirmDiscard}
       />
 
       {/* MODAL DE CONFIRMAÇÃO DE DESCARTE */}
@@ -1808,7 +1846,7 @@ export const ActiveSessionScreen: React.FC = () => {
               accessibilityRole="button"
               accessibilityLabel="Alternar série de aquecimento"
             >
-              <Flame size={20} color="#F5A623" strokeWidth={2} />
+              <Flame size={20} color="#FF7A59" strokeWidth={2} />
               <Text variant="bodyLarge" style={styles.menuOptionText}>
                 {selectedSetForMenu?.set.isWarmup
                   ? 'Desmarcar aquecimento'
@@ -1892,7 +1930,7 @@ export const ActiveSessionScreen: React.FC = () => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#181818',
+    backgroundColor: '#1A1715',
   },
   stitchTopBar: {
     height: 52,
@@ -1900,7 +1938,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    backgroundColor: '#181818',
+    backgroundColor: '#1A1715',
   },
   topBarLeftButtons: {
     flexDirection: 'row',
@@ -1926,29 +1964,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#2C2C2E',
+    backgroundColor: '#2D2925',
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 20,
   },
   liveTimerText: {
     fontSize: 13,
-    fontWeight: '700',
+    fontFamily: fontFamilies.outfitSemiBold,
+    fontWeight: '600',
     color: '#FFFFFF',
     fontVariant: ['tabular-nums'],
   },
-  finishGoldButton: {
-    backgroundColor: '#F5A623',
+  finishCoralButton: {
+    backgroundColor: '#FF7A59',
     paddingHorizontal: 16,
     paddingVertical: 6,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  finishGoldText: {
+  finishCoralText: {
     fontSize: 13,
+    fontFamily: fontFamilies.outfitBold,
     fontWeight: '700',
-    color: '#000000',
+    color: '#1A1715',
   },
 
   // 2. Título e Notas
@@ -1964,6 +2004,26 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     letterSpacing: -0.3,
   },
+  workoutMetaSubtitle: {
+    fontSize: 13,
+    fontFamily: fontFamilies.outfitSemiBold,
+    color: '#B7ADA3',
+    marginTop: 2,
+  },
+  progressBarTrack: {
+    height: 3,
+    backgroundColor: '#2D2925',
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginTop: 6,
+    marginBottom: 4,
+    width: '100%',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#FF7A59',
+    borderRadius: 2,
+  },
   addNotesRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1978,7 +2038,7 @@ const styles = StyleSheet.create({
   },
   stitchDivider: {
     height: 1,
-    backgroundColor: '#242426',
+    backgroundColor: '#23201D',
     marginVertical: 12,
   },
 
@@ -2018,13 +2078,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: fontFamilies.outfitBold,
     fontWeight: '700',
-    color: '#F5A623',
+    color: '#FF7A59',
   },
   exerciseTimerBtn: {
     width: 36,
     height: 36,
     borderRadius: 8,
-    backgroundColor: '#242426',
+    backgroundColor: '#23201D',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2045,7 +2105,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.06)',
-    backgroundColor: '#181818',
+    backgroundColor: '#1A1715',
   },
   topBarLeft: {
     flexDirection: 'row',
@@ -2096,36 +2156,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 12,
     gap: 16,
-  },
-  titleSection: {
-    gap: 6,
-    paddingTop: 4,
-  },
-  workoutMainTitle: {
-    fontSize: 28,
-    fontFamily: fontFamilies.outfitBold,
-    fontWeight: '700',
-    color: colors.onSurface,
-    letterSpacing: -0.5,
-  },
-  progressRow: {
-    gap: 6,
-  },
-  progressText: {
-    fontSize: 13,
-    color: colors.onSurfaceVariant,
-  },
-  progressBarTrack: {
-    height: 4,
-    width: '100%',
-    backgroundColor: colors.surfaceContainer,
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: colors.primary,
-    borderRadius: 2,
   },
   emptySessionCard: {
     padding: 24,
@@ -2492,9 +2522,9 @@ const styles = StyleSheet.create({
   addExerciseFooterButton: {
     height: 48,
     borderRadius: radii.pill,
-    backgroundColor: '#1C1C1E',
+    backgroundColor: '#23201D',
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#38332F',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2505,7 +2535,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: fontFamilies.outfitBold,
     fontWeight: '700',
-    color: '#F5A623',
+    color: '#FF7A59',
   },
 
   /* FIXED REST BOTTOM BAR */

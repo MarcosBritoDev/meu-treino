@@ -16,9 +16,11 @@ export interface ConfirmModalProps {
   description: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  discardLabel?: string;
   isDanger?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  onDiscard?: () => void;
 }
 
 export const ConfirmModal: React.FC<ConfirmModalProps> = ({
@@ -27,11 +29,15 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   description,
   confirmLabel = 'Confirmar',
   cancelLabel = 'Cancelar',
+  discardLabel,
   isDanger = false,
   onConfirm,
   onCancel,
+  onDiscard,
 }) => {
   if (!visible) return null;
+
+  const hasDiscard = Boolean(discardLabel && onDiscard);
 
   return (
     <Modal
@@ -65,20 +71,44 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
             {description}
           </Text>
 
-          <View style={styles.actions}>
-            <Button
-              title={cancelLabel}
-              variant="secondary"
-              onPress={onCancel}
-              style={styles.button}
-            />
-            <Button
-              title={confirmLabel}
-              variant={isDanger ? 'danger' : 'primary'}
-              onPress={onConfirm}
-              style={styles.button}
-            />
-          </View>
+          {hasDiscard ? (
+            <View style={styles.actionsStacked}>
+              <Button
+                title={confirmLabel}
+                variant={isDanger ? 'danger' : 'primary'}
+                onPress={onConfirm}
+                style={styles.buttonStacked}
+              />
+              <Button
+                title={cancelLabel}
+                variant="secondary"
+                onPress={onCancel}
+                style={styles.buttonStacked}
+              />
+              <Button
+                title={discardLabel!}
+                variant="text"
+                onPress={onDiscard!}
+                textStyle={styles.discardButtonText}
+                style={styles.buttonStacked}
+              />
+            </View>
+          ) : (
+            <View style={styles.actions}>
+              <Button
+                title={cancelLabel}
+                variant="secondary"
+                onPress={onCancel}
+                style={styles.button}
+              />
+              <Button
+                title={confirmLabel}
+                variant={isDanger ? 'danger' : 'primary'}
+                onPress={onConfirm}
+                style={styles.button}
+              />
+            </View>
+          )}
         </View>
       </View>
     </Modal>
@@ -115,7 +145,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
   },
+  actionsStacked: {
+    flexDirection: 'column',
+    gap: spacing.sm,
+  },
   button: {
     flex: 1,
+  },
+  buttonStacked: {
+    width: '100%',
+  },
+  discardButtonText: {
+    color: colors.error,
+    fontWeight: '600',
   },
 });

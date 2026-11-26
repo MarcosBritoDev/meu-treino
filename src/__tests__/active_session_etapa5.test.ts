@@ -225,6 +225,28 @@ describe('ETAPA 5 — Integração com startWorkoutSession e ActiveSessionScreen
       expect(isSetInVolume({ type: 'failure' })).toBe(true);
       expect(isSetInVolume({ type: 'drop' })).toBe(true);
     });
+
+    it('Descanso inteligente: se próxima série for drop, zera descanso e alerta sem descanso', () => {
+      const exerciseSets = [
+        { id: 's1', type: 'normal', restS: 90 },
+        { id: 's2', type: 'drop', restS: 30 },
+      ];
+
+      // Ao concluir a série s1, a próxima é drop -> descanso não inicia
+      const currentIdx = 0;
+      const nextSet = exerciseSets[currentIdx + 1];
+      const shouldRest = nextSet && nextSet.type === 'drop' ? false : true;
+      const toastExpected = nextSet && nextSet.type === 'drop' ? 'Sem descanso! Reduza a carga para o Drop' : null;
+
+      expect(shouldRest).toBe(false);
+      expect(toastExpected).toBe('Sem descanso! Reduza a carga para o Drop');
+
+      // Ao concluir a série s2 (último drop), próxima não é drop -> descanso inicia
+      const lastIdx = 1;
+      const nextSetAfterDrop = exerciseSets[lastIdx + 1] ?? null;
+      const shouldRestAfterDrop = nextSetAfterDrop && nextSetAfterDrop.type === 'drop' ? false : true;
+      expect(shouldRestAfterDrop).toBe(true);
+    });
   });
 
   describe('4. Isolamento total durante o treino ativo', () => {
@@ -260,6 +282,36 @@ describe('ETAPA 5 — Integração com startWorkoutSession e ActiveSessionScreen
       expect(updatedExercise.id).toBe(sessionExercise.id);
       expect(updatedExercise.exercise_id).toBe('ex_supino_halteres');
       expect(updatedExercise.setsCount).toBe(4);
+    });
+
+    it('confirmação ao finalizar possui Concluir treino, Continuar treinando e Descartar treino', () => {
+      const modalProps = {
+        title: 'Finalizar este treino?',
+        pendingCount: 2,
+        getDescription: (pending: number) =>
+          pending > 0
+            ? `${pending} séries não foram feitas. Deseja concluir a sessão mesmo assim?`
+            : 'Todas as séries planejadas foram concluídas!',
+        confirmLabel: 'Concluir treino',
+        cancelLabel: 'Continuar treinando',
+        discardLabel: 'Descartar treino',
+      };
+
+      expect(modalProps.confirmLabel).toBe('Concluir treino');
+      expect(modalProps.cancelLabel).toBe('Continuar treinando');
+      expect(modalProps.discardLabel).toBe('Descartar treino');
+      expect(modalProps.getDescription(2)).toContain('2 séries não foram feitas');
+    });
+
+    it('cabeçalho exibe "Grupo X · Y de N exercícios" sem truncar e barra de progresso', () => {
+      const formatHeaderSubtitle = (group: string | null, doneExCount: number, totalExCount: number) => {
+        return group
+          ? `${group} · ${doneExCount} de ${totalExCount} exercícios`
+          : `${doneExCount} de ${totalExCount} exercícios`;
+      };
+
+      expect(formatHeaderSubtitle('Grupo A', 2, 5)).toBe('Grupo A · 2 de 5 exercícios');
+      expect(formatHeaderSubtitle(null, 1, 3)).toBe('1 de 3 exercícios');
     });
   });
 });

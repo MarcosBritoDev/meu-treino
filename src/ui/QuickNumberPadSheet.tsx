@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontFamily: fontFamilies.outfitBold,
     fontWeight: '700',
-    color: '#F5A623', // Gold Stitch
+    color: '#FF7A59',
   },
   steppersRow: {
     flexDirection: 'row',
@@ -291,15 +291,15 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 36,
     borderRadius: 8,
-    backgroundColor: '#242426',
+    backgroundColor: '#23201D',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#2D2925',
   },
   stepperChipPos: {
-    backgroundColor: 'rgba(245, 166, 35, 0.08)',
-    borderColor: 'rgba(245, 166, 35, 0.25)',
+    backgroundColor: 'rgba(255, 122, 89, 0.08)',
+    borderColor: 'rgba(255, 122, 89, 0.25)',
   },
   stepperChipPressed: {
     opacity: 0.65,
@@ -313,7 +313,7 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   stepperTextPos: {
-    color: '#F5A623',
+    color: '#FF7A59',
   },
   keypadGrid: {
     gap: 8,
@@ -327,12 +327,12 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 48,
     borderRadius: 10,
-    backgroundColor: '#242426',
+    backgroundColor: '#23201D',
     alignItems: 'center',
     justifyContent: 'center',
   },
   keyBtnPressed: {
-    backgroundColor: '#323236',
+    backgroundColor: '#2D2925',
     transform: [{ scale: 0.97 }],
   },
   keyBtnText: {
@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
   confirmBtn: {
     height: 48,
     borderRadius: radii.pill,
-    backgroundColor: '#F5A623', // Gold Stitch
+    backgroundColor: '#FF7A59',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 6,
@@ -364,6 +364,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: fontFamilies.outfitBold,
     fontWeight: '700',
-    color: '#000000',
+    color: '#1A1715',
   },
 });

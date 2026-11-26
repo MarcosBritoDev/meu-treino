@@ -12,7 +12,7 @@ interface Props {
   bottomOffset?: number;
 }
 
-/** Rodapé fixo do descanso: −15 · 01:22 · +15 · Pular. Renderize só enquanto houver descanso. */
+/** Rodapé fixo do descanso: −15 s · 01:22 · +30 s · Pular. Renderize só enquanto houver descanso. */
 export function RestFooter({ remainingS, totalS, onAdjust, onSkip, bottomOffset = 12 }: Props) {
   const progress = totalS > 0 ? Math.min(1, Math.max(0, (totalS - remainingS) / totalS)) : 0;
 
@@ -20,15 +20,15 @@ export function RestFooter({ remainingS, totalS, onAdjust, onSkip, bottomOffset 
     <View style={[s.wrap, { bottom: bottomOffset }]} accessibilityLiveRegion="polite">
       <View style={s.row}>
         <Pressable style={s.adj} onPress={() => onAdjust(-15)} accessibilityRole="button" accessibilityLabel="Menos 15 segundos">
-          <Text style={s.adjText} numberOfLines={1}>−15</Text>
+          <Text style={s.adjText} numberOfLines={1}>−15 s</Text>
         </Pressable>
 
         <Text style={s.time} accessibilityLabel={`Descanso, faltam ${remainingS} segundos`}>
           {formatClock(remainingS)}
         </Text>
 
-        <Pressable style={s.adj} onPress={() => onAdjust(15)} accessibilityRole="button" accessibilityLabel="Mais 15 segundos">
-          <Text style={s.adjText} numberOfLines={1}>+15</Text>
+        <Pressable style={s.adj} onPress={() => onAdjust(30)} accessibilityRole="button" accessibilityLabel="Mais 30 segundos">
+          <Text style={s.adjText} numberOfLines={1}>+30 s</Text>
         </Pressable>
 
         <Pressable style={s.skip} onPress={onSkip} accessibilityRole="button" accessibilityLabel="Pular descanso">
@@ -45,16 +45,16 @@ export function RestFooter({ remainingS, totalS, onAdjust, onSkip, bottomOffset 
 const s = StyleSheet.create({
   wrap: {
     position: 'absolute', left: 20, right: 20,
-    backgroundColor: C.primaryTint, borderRadius: 24, borderWidth: 1, borderColor: C.primary,
+    backgroundColor: '#3A251F', borderRadius: 24, borderWidth: 1, borderColor: C.primary,
     paddingTop: 10, paddingBottom: 12, paddingHorizontal: 12,
     shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8,
   },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  row: { flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap', gap: 8 },
   adj: { minWidth: 56, height: 48, borderRadius: 24, backgroundColor: C.card2, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
-  adjText: { fontFamily: F.number, fontSize: 15, color: C.text, fontVariant: ['tabular-nums'] },
-  time: { flex: 1, textAlign: 'center', fontFamily: F.numberBold, fontSize: 30, lineHeight: 36, color: C.text, fontVariant: ['tabular-nums'] },
-  skip: { minWidth: 72, height: 48, borderRadius: 24, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14 },
-  skipText: { fontFamily: F.bodyMedium, fontSize: 15, color: C.onPrimary },
+  adjText: { fontFamily: F.number, fontSize: 13, color: C.text, fontVariant: ['tabular-nums'] },
+  time: { flex: 1, textAlign: 'center', fontFamily: F.numberBold, fontSize: 28, lineHeight: 34, color: C.text, fontVariant: ['tabular-nums'] },
+  skip: { minWidth: 70, height: 48, borderRadius: 24, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  skipText: { fontFamily: F.bodyMedium, fontSize: 14, color: C.onPrimary },
   track: { height: 4, borderRadius: 2, backgroundColor: C.border, marginTop: 10, overflow: 'hidden' },
   fill: { height: 4, borderRadius: 2, backgroundColor: C.primary },
 });
