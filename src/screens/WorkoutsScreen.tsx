@@ -10,9 +10,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
-  Folders,
-  Dumbbell,
-  ClipboardList,
   Plus,
   Settings,
   MoreVertical,
@@ -315,6 +312,7 @@ export const WorkoutsScreen: React.FC = () => {
       {/* Cabeçalho "Meus treinos" com botão pílula "+ Novo grupo" e engrenagem */}
       <ScreenHeader
         title="Meus treinos"
+        style={styles.headerContainer}
         rightAction={
           <View style={styles.headerActions}>
             <Pressable
@@ -322,12 +320,16 @@ export const WorkoutsScreen: React.FC = () => {
                 triggerHaptic('light');
                 setNewGroupModalVisible(true);
               }}
-              style={styles.newGroupPill}
+              style={({ pressed }) => [
+                styles.newGroupPill,
+                pressed && styles.newGroupPillPressed,
+              ]}
               accessible={true}
               accessibilityRole="button"
               accessibilityLabel="Criar novo grupo de treino"
+              hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
             >
-              <Plus size={16} color={colors.primary} strokeWidth={2.2} />
+              <Plus size={15} color={colors.primary} strokeWidth={2.4} />
               <Text variant="labelSmall" style={styles.newGroupPillText}>
                 Novo grupo
               </Text>
@@ -338,10 +340,14 @@ export const WorkoutsScreen: React.FC = () => {
                 triggerHaptic('light');
                 navigation.navigate('Ajustes');
               }}
-              style={styles.iconButton}
+              style={({ pressed }) => [
+                styles.iconButton,
+                pressed && styles.iconButtonPressed,
+              ]}
               accessible={true}
               accessibilityRole="button"
               accessibilityLabel="Ajustes"
+              hitSlop={{ top: 8, bottom: 8, left: 6, right: 8 }}
             >
               <Settings size={22} color={colors.onSurfaceVariant} strokeWidth={1.75} />
             </Pressable>
@@ -353,53 +359,6 @@ export const WorkoutsScreen: React.FC = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Dois cartões de resumo com contadores reais */}
-        <View style={styles.metricsRow}>
-          {/* Card 1: Grupos de treino / Grupos ativos */}
-          <View style={styles.metricCard}>
-            <View style={styles.metricIconBox}>
-              <Folders size={20} color={colors.primary} strokeWidth={1.75} />
-            </View>
-            <View style={styles.metricInfo}>
-              <View style={styles.metricValueRow}>
-                <Text variant="displayMedium" style={styles.metricNumber}>
-                  {data.totalGroups}
-                </Text>
-                <Text variant="bodySmall" color="secondary" style={styles.metricUnit}>
-                  {data.totalGroups === 0 ? 'grupos' : data.totalGroups === 1 ? 'grupo' : 'grupos'}
-                </Text>
-              </View>
-              <Text variant="labelSmall" color="secondary" numberOfLines={1}>
-                {data.totalGroups === 0 ? 'Grupos ativos' : 'Grupos de treino'}
-              </Text>
-            </View>
-          </View>
-
-          {/* Card 2: Treinos montados / Fichas salvas */}
-          <View style={styles.metricCard}>
-            <View style={styles.metricIconBox}>
-              {data.totalGroups === 0 ? (
-                <ClipboardList size={20} color={colors.pr} strokeWidth={1.75} />
-              ) : (
-                <Dumbbell size={20} color={colors.pr} strokeWidth={1.75} />
-              )}
-            </View>
-            <View style={styles.metricInfo}>
-              <View style={styles.metricValueRow}>
-                <Text variant="displayMedium" style={styles.metricNumber}>
-                  {data.totalWorkouts}
-                </Text>
-                <Text variant="bodySmall" color="secondary" style={styles.metricUnit}>
-                  {data.totalWorkouts === 0 ? 'treinos' : data.totalWorkouts === 1 ? 'treino' : 'treinos'}
-                </Text>
-              </View>
-              <Text variant="labelSmall" color="secondary" numberOfLines={1}>
-                {data.totalGroups === 0 ? 'Fichas salvas' : 'Treinos montados'}
-              </Text>
-            </View>
-          </View>
-        </View>
-
         {/* Estado 3.2: Nenhum grupo criado */}
         {data.totalGroups === 0 ? (
           <View style={styles.emptyContainer}>
@@ -427,7 +386,7 @@ export const WorkoutsScreen: React.FC = () => {
                   variant="secondary"
                   disabled={isCreatingPPL}
                   loading={isCreatingPPL}
-                  icon={<Sparkles size={18} color={colors.pr} strokeWidth={1.75} />}
+                  icon={<Sparkles size={18} color={colors.primary} strokeWidth={1.75} />}
                   onPress={handleSeedDefaultPPL}
                   style={styles.emptySecondaryButton}
                 />
@@ -437,7 +396,7 @@ export const WorkoutsScreen: React.FC = () => {
             {/* Dica de periodização */}
             <View style={styles.tipCard}>
               <View style={styles.tipIconBox}>
-                <Lightbulb size={20} color={colors.pr} strokeWidth={1.75} />
+                <Lightbulb size={20} color={colors.primary} strokeWidth={1.75} />
               </View>
               <View style={styles.tipContent}>
                 <Text variant="bodySmall" style={styles.tipTitle}>
@@ -452,16 +411,13 @@ export const WorkoutsScreen: React.FC = () => {
         ) : (
           /* Estado 3.1: Com grupos cadastrados */
           <View style={styles.groupsSection}>
-            {data.groups.map((group) => {
+            {data.groups.map((group, index) => {
               const isExpanded = expandedGroupIds.has(group.id);
 
-              // Renderização do grupo ativo (foco e destaque visual)
+              // Renderização do grupo ativo (cabeçalho de seção limpo, sem cardception)
               if (group.isActive) {
                 return (
-                  <View key={group.id} style={styles.activeGroupCard}>
-                    {/* Linha de acento gradiente superior */}
-                    <View style={styles.activeGroupAccentLine} />
-
+                  <View key={group.id} style={styles.activeGroupSection}>
                     {/* Cabeçalho do grupo ativo */}
                     <View style={styles.groupHeaderContainer}>
                       <View style={styles.groupHeaderTopRow}>
@@ -480,20 +436,28 @@ export const WorkoutsScreen: React.FC = () => {
                               setSelectedGroup(group);
                               setMenuVisible(true);
                             }}
-                            style={styles.iconCircle}
+                            style={({ pressed }) => [
+                              styles.iconCircle,
+                              pressed && styles.iconCirclePressed,
+                            ]}
                             accessible={true}
                             accessibilityRole="button"
                             accessibilityLabel={`Mais opções do grupo ${group.name}`}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                           >
                             <MoreVertical size={20} color={colors.onSurfaceVariant} strokeWidth={1.75} />
                           </Pressable>
 
                           <Pressable
                             onPress={() => toggleGroupExpand(group.id)}
-                            style={styles.iconCircle}
+                            style={({ pressed }) => [
+                              styles.iconCircle,
+                              pressed && styles.iconCirclePressed,
+                            ]}
                             accessible={true}
                             accessibilityRole="button"
                             accessibilityLabel={isExpanded ? 'Recolher grupo' : 'Expandir grupo'}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                           >
                             {isExpanded ? (
                               <ChevronUp size={20} color={colors.onSurfaceVariant} strokeWidth={1.75} />
@@ -536,135 +500,83 @@ export const WorkoutsScreen: React.FC = () => {
                       <View style={styles.workoutsContainer}>
                         {group.workouts.map((w) => (
                           <View key={w.id} style={styles.workoutItemCard}>
-                            <View style={styles.workoutItemTopRow}>
-                              <Pressable
-                                onPress={() => {
-                                  triggerHaptic('light');
-                                  navigation.navigate('EditWorkout', { workoutId: w.id });
-                                }}
-                                style={styles.workoutItemLeft}
-                                accessible={true}
-                                accessibilityRole="button"
-                                accessibilityLabel={`Abrir prévia de ${w.name}`}
-                              >
-                                <View style={styles.workoutCodeBox}>
-                                  <Text variant="labelSmall" style={styles.workoutCodeText}>
-                                    {w.code}
-                                  </Text>
-                                </View>
-                                <View style={styles.workoutTitleBlock}>
-                                  <Text variant="bodyLarge" style={styles.workoutName}>
-                                    {w.name}
-                                  </Text>
-                                  <Text variant="labelSmall" color="secondary" numberOfLines={1}>
-                                    {w.targetMuscles}
-                                  </Text>
-                                </View>
-                              </Pressable>
-
-                              {/* Ações do treino: Editar (lápis) e Iniciar (play coral) */}
-                              <View style={styles.workoutActions}>
-                                <Pressable
-                                  onPress={() => {
-                                    triggerHaptic('light');
-                                    navigation.navigate('EditWorkout', { workoutId: w.id });
-                                  }}
-                                  style={styles.editWorkoutButton}
-                                  accessible={true}
-                                  accessibilityRole="button"
-                                  accessibilityLabel={`Editar treino ${w.name}`}
-                                >
-                                  <Edit2 size={16} color={colors.onSurfaceVariant} strokeWidth={1.75} />
-                                </Pressable>
-
-                                <Pressable
-                                  onPress={() => handleStartWorkout(w)}
-                                  style={styles.startWorkoutButton}
-                                  accessible={true}
-                                  accessibilityRole="button"
-                                  accessibilityLabel={`Iniciar treino ${w.name}`}
-                                >
-                                  <Play size={15} color={colors.onPrimary} fill={colors.onPrimary} strokeWidth={1.75} />
-                                  <Text variant="labelSmall" style={styles.startWorkoutText}>
-                                    Iniciar
-                                  </Text>
-                                </Pressable>
-                              </View>
-                            </View>
-
-                            {/* Resumo do treino: "N séries · ~X min" */}
-                            <View style={styles.workoutStatsRow}>
-                              <Text variant="labelSmall" style={styles.workoutStatsBold}>
-                                {w.summaryText || `${w.totalSets} ${w.totalSets === 1 ? 'série' : 'séries'} · ~${w.estimatedDurationMin} min`}
-                              </Text>
-                              {w.exerciseCount > 0 && (
-                                <>
-                                  <Text variant="labelSmall" color="secondary">
-                                    •
-                                  </Text>
-                                  <Text variant="labelSmall" color="secondary">
-                                    {`${w.exerciseCount} ${w.exerciseCount === 1 ? 'exercício' : 'exercícios'}`}
-                                  </Text>
-                                </>
-                              )}
-                            </View>
-
-                            {/* Lista resumida de exercícios: Nome — A + N séries */}
-                            {w.exercises && w.exercises.length > 0 ? (
-                              <Pressable
-                                onPress={() => {
-                                  triggerHaptic('light');
-                                  navigation.navigate('EditWorkout', { workoutId: w.id });
-                                }}
-                                style={styles.exerciseSummaryList}
-                                accessible={true}
-                                accessibilityRole="button"
-                                accessibilityLabel={`Ver exercícios de ${w.name}`}
-                              >
-                                {w.exercises.slice(0, 3).map((ex, exIdx) => (
-                                  <Text key={exIdx} variant="bodySmall" color="secondary" style={styles.workoutPreviewText} numberOfLines={1}>
-                                    {ex.itemText}
-                                  </Text>
-                                ))}
-                                {w.exercises.length > 3 && (
-                                  <Text variant="labelSmall" color="secondary" style={styles.extraExercisesText}>
-                                    {`+${w.exercises.length - 3} ${w.exercises.length - 3 === 1 ? 'exercício' : 'exercícios'}`}
-                                  </Text>
-                                )}
-                              </Pressable>
-                            ) : w.previewExercises ? (
-                              <Pressable
-                                onPress={() => {
-                                  triggerHaptic('light');
-                                  navigation.navigate('EditWorkout', { workoutId: w.id });
-                                }}
-                                accessible={true}
-                                accessibilityRole="button"
-                                accessibilityLabel={`Ver exercícios de ${w.name}`}
-                              >
-                                <Text variant="bodySmall" color="secondary" style={styles.workoutPreviewText} numberOfLines={1}>
-                                  {w.previewExercises}
+                            {/* Área principal do item: tocar abre Prévia / Edição */}
+                            <Pressable
+                              onPress={() => {
+                                triggerHaptic('light');
+                                navigation.navigate('EditWorkout', { workoutId: w.id });
+                              }}
+                              style={({ pressed }) => [
+                                styles.workoutItemContent,
+                                pressed && styles.workoutItemContentPressed,
+                              ]}
+                              accessible={true}
+                              accessibilityRole="button"
+                              accessibilityLabel={`Ficha ${w.name}, ${w.targetMuscles}, ${w.exerciseCount} exercícios, ${w.totalSets} séries`}
+                            >
+                              {/* Linha 1: Nome do treino + músculos-alvo */}
+                              <View style={styles.workoutNameRow}>
+                                <Text variant="bodyLarge" style={styles.workoutName} numberOfLines={1}>
+                                  {w.name}
                                 </Text>
-                              </Pressable>
-                            ) : null}
+                                <Text variant="bodySmall" color="secondary" style={styles.workoutMuscles} numberOfLines={1}>
+                                  {`• ${w.targetMuscles}`}
+                                </Text>
+                              </View>
+
+                              {/* Linha 2: Resumo métrico tabular + indicador de Próximo se aplicável */}
+                              <View style={styles.workoutMetaRow}>
+                                {w.isNext && (
+                                  <View style={styles.nextBadge}>
+                                    <Text variant="labelSmall" style={styles.nextBadgeText}>
+                                      Próximo
+                                    </Text>
+                                  </View>
+                                )}
+                                <Text variant="bodySmall" color="secondary" tabular style={styles.workoutStatsText} numberOfLines={1}>
+                                  {`${w.exerciseCount} ${w.exerciseCount === 1 ? 'exercício' : 'exercícios'} · ${w.totalSets} ${w.totalSets === 1 ? 'série' : 'séries'} · ~${w.estimatedDurationMin} min`}
+                                </Text>
+                              </View>
+                            </Pressable>
+
+                            {/* Botão pílula coral Iniciar: única ação explícita à direita com folga */}
+                            <Pressable
+                              onPress={() => handleStartWorkout(w)}
+                              style={({ pressed }) => [
+                                styles.startWorkoutButton,
+                                pressed && styles.startWorkoutButtonPressed,
+                              ]}
+                              accessible={true}
+                              accessibilityRole="button"
+                              accessibilityLabel={`Iniciar treino ${w.name}`}
+                              hitSlop={{ top: 8, bottom: 8, left: 6, right: 8 }}
+                            >
+                              <Play size={15} color={colors.onPrimary} fill={colors.onPrimary} strokeWidth={1.75} />
+                              <Text variant="labelSmall" style={styles.startWorkoutText}>
+                                Iniciar
+                              </Text>
+                            </Pressable>
                           </View>
                         ))}
 
-                        {/* Botão para adicionar treino ao grupo */}
+                        {/* Botão nativo e elegante para adicionar treino ao grupo */}
                         <Pressable
                           onPress={() => {
                             triggerHaptic('light');
                             setTargetGroupIdForWorkout(group.id);
                             setNewWorkoutModalVisible(true);
                           }}
-                          style={styles.addWorkoutToGroupButton}
+                          style={({ pressed }) => [
+                            styles.addWorkoutButton,
+                            pressed && styles.addWorkoutButtonPressed,
+                          ]}
                           accessible={true}
                           accessibilityRole="button"
                           accessibilityLabel="Adicionar treino ao grupo"
                         >
-                          <Plus size={16} color={colors.primary} strokeWidth={2} />
-                          <Text variant="bodySmall" style={styles.addWorkoutToGroupText}>
-                            Adicionar treino ao grupo
+                          <Plus size={18} color={colors.primary} strokeWidth={2.2} />
+                          <Text variant="bodyLarge" style={styles.addWorkoutButtonText}>
+                            Adicionar treino
                           </Text>
                         </Pressable>
                       </View>
@@ -674,8 +586,18 @@ export const WorkoutsScreen: React.FC = () => {
               }
 
               // Renderização dos grupos secundários / inativos (recolhidos por padrão)
+              const isFirstInactive = index === 0 || data.groups[index - 1]?.isActive;
+
               return (
-                <View key={group.id} style={styles.inactiveGroupCard}>
+                <React.Fragment key={group.id}>
+                  {isFirstInactive && (
+                    <View style={styles.otherGroupsHeader}>
+                      <Text variant="bodySmall" color="secondary" style={styles.otherGroupsTitle}>
+                        Outras divisões
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.inactiveGroupCard}>
                   <View style={styles.inactiveGroupHeader}>
                     <Pressable
                       style={styles.inactiveGroupMain}
@@ -708,20 +630,28 @@ export const WorkoutsScreen: React.FC = () => {
                           setSelectedGroup(group);
                           setMenuVisible(true);
                         }}
-                        style={styles.iconCircle}
+                        style={({ pressed }) => [
+                          styles.iconCircle,
+                          pressed && styles.iconCirclePressed,
+                        ]}
                         accessible={true}
                         accessibilityRole="button"
                         accessibilityLabel={`Mais opções do grupo ${group.name}`}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       >
                         <MoreVertical size={18} color={colors.onSurfaceVariant} strokeWidth={1.75} />
                       </Pressable>
 
                       <Pressable
                         onPress={() => toggleGroupExpand(group.id)}
-                        style={styles.iconCircle}
+                        style={({ pressed }) => [
+                          styles.iconCircle,
+                          pressed && styles.iconCirclePressed,
+                        ]}
                         accessible={true}
                         accessibilityRole="button"
                         accessibilityLabel={isExpanded ? 'Recolher grupo' : 'Expandir grupo'}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       >
                         {isExpanded ? (
                           <ChevronUp size={20} color={colors.onSurfaceVariant} strokeWidth={1.75} />
@@ -745,116 +675,55 @@ export const WorkoutsScreen: React.FC = () => {
 
                       {group.workouts.map((w) => (
                         <View key={w.id} style={styles.workoutItemCard}>
-                          <View style={styles.workoutItemTopRow}>
-                            <Pressable
-                              onPress={() => {
-                                triggerHaptic('light');
-                                navigation.navigate('EditWorkout', { workoutId: w.id });
-                              }}
-                              style={styles.workoutItemLeft}
-                              accessible={true}
-                              accessibilityRole="button"
-                              accessibilityLabel={`Abrir prévia de ${w.name}`}
-                            >
-                              <View style={styles.workoutCodeBox}>
-                                <Text variant="labelSmall" style={styles.workoutCodeText}>
-                                  {w.code}
-                                </Text>
-                              </View>
-                              <View style={styles.workoutTitleBlock}>
-                                <Text variant="bodyLarge" style={styles.workoutName}>
-                                  {w.name}
-                                </Text>
-                                <Text variant="labelSmall" color="secondary" numberOfLines={1}>
-                                  {w.targetMuscles}
-                                </Text>
-                              </View>
-                            </Pressable>
-
-                            <View style={styles.workoutActions}>
-                              <Pressable
-                                onPress={() => {
-                                  triggerHaptic('light');
-                                  navigation.navigate('EditWorkout', { workoutId: w.id });
-                                }}
-                                style={styles.editWorkoutButton}
-                                accessible={true}
-                                accessibilityRole="button"
-                                accessibilityLabel={`Editar treino ${w.name}`}
-                              >
-                                <Edit2 size={16} color={colors.onSurfaceVariant} strokeWidth={1.75} />
-                              </Pressable>
-
-                              <Pressable
-                                onPress={() => handleStartWorkout(w)}
-                                style={styles.startWorkoutButton}
-                                accessible={true}
-                                accessibilityRole="button"
-                                accessibilityLabel={`Iniciar treino ${w.name}`}
-                              >
-                                <Play size={15} color={colors.onPrimary} fill={colors.onPrimary} strokeWidth={1.75} />
-                                <Text variant="labelSmall" style={styles.startWorkoutText}>
-                                  Iniciar
-                                </Text>
-                              </Pressable>
-                            </View>
-                          </View>
-
-                          {/* Resumo do treino: "N séries · ~X min" */}
-                          <View style={styles.workoutStatsRow}>
-                            <Text variant="labelSmall" style={styles.workoutStatsBold}>
-                              {w.summaryText || `${w.totalSets} ${w.totalSets === 1 ? 'série' : 'séries'} · ~${w.estimatedDurationMin} min`}
-                            </Text>
-                            {w.exerciseCount > 0 && (
-                              <>
-                                <Text variant="labelSmall" color="secondary">
-                                  •
-                                </Text>
-                                <Text variant="labelSmall" color="secondary">
-                                  {`${w.exerciseCount} ${w.exerciseCount === 1 ? 'exercício' : 'exercícios'}`}
-                                </Text>
-                              </>
-                            )}
-                          </View>
-
-                          {/* Lista resumida de exercícios: Nome — A + N séries */}
-                          {w.exercises && w.exercises.length > 0 ? (
-                            <Pressable
-                              onPress={() => {
-                                triggerHaptic('light');
-                                navigation.navigate('EditWorkout', { workoutId: w.id });
-                              }}
-                              style={styles.exerciseSummaryList}
-                              accessible={true}
-                              accessibilityRole="button"
-                              accessibilityLabel={`Ver exercícios de ${w.name}`}
-                            >
-                              {w.exercises.slice(0, 3).map((ex, exIdx) => (
-                                <Text key={exIdx} variant="bodySmall" color="secondary" style={styles.workoutPreviewText} numberOfLines={1}>
-                                  {ex.itemText}
-                                </Text>
-                              ))}
-                              {w.exercises.length > 3 && (
-                                <Text variant="labelSmall" color="secondary" style={styles.extraExercisesText}>
-                                  {`+${w.exercises.length - 3} ${w.exercises.length - 3 === 1 ? 'exercício' : 'exercícios'}`}
-                                </Text>
-                              )}
-                            </Pressable>
-                          ) : w.previewExercises ? (
-                            <Pressable
-                              onPress={() => {
-                                triggerHaptic('light');
-                                navigation.navigate('EditWorkout', { workoutId: w.id });
-                              }}
-                              accessible={true}
-                              accessibilityRole="button"
-                              accessibilityLabel={`Ver exercícios de ${w.name}`}
-                            >
-                              <Text variant="bodySmall" color="secondary" style={styles.workoutPreviewText} numberOfLines={1}>
-                                {w.previewExercises}
+                          {/* Área principal do item: tocar abre Prévia / Edição */}
+                          <Pressable
+                            onPress={() => {
+                              triggerHaptic('light');
+                              navigation.navigate('EditWorkout', { workoutId: w.id });
+                            }}
+                            style={({ pressed }) => [
+                              styles.workoutItemContent,
+                              pressed && styles.workoutItemContentPressed,
+                            ]}
+                            accessible={true}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Ficha ${w.name}, ${w.targetMuscles}, ${w.exerciseCount} exercícios, ${w.totalSets} séries`}
+                          >
+                            {/* Linha 1: Nome do treino + músculos-alvo */}
+                            <View style={styles.workoutNameRow}>
+                              <Text variant="bodyLarge" style={styles.workoutName} numberOfLines={1}>
+                                {w.name}
                               </Text>
-                            </Pressable>
-                          ) : null}
+                              <Text variant="bodySmall" color="secondary" style={styles.workoutMuscles} numberOfLines={1}>
+                                {`• ${w.targetMuscles}`}
+                              </Text>
+                            </View>
+
+                            {/* Linha 2: Resumo métrico tabular */}
+                            <View style={styles.workoutMetaRow}>
+                              <Text variant="bodySmall" color="secondary" tabular style={styles.workoutStatsText} numberOfLines={1}>
+                                {`${w.exerciseCount} ${w.exerciseCount === 1 ? 'exercício' : 'exercícios'} · ${w.totalSets} ${w.totalSets === 1 ? 'série' : 'séries'} · ~${w.estimatedDurationMin} min`}
+                              </Text>
+                            </View>
+                          </Pressable>
+
+                          {/* Botão pílula coral Iniciar: única ação explícita à direita com folga */}
+                          <Pressable
+                            onPress={() => handleStartWorkout(w)}
+                            style={({ pressed }) => [
+                              styles.startWorkoutButton,
+                              pressed && styles.startWorkoutButtonPressed,
+                            ]}
+                            accessible={true}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Iniciar treino ${w.name}`}
+                            hitSlop={{ top: 8, bottom: 8, left: 6, right: 8 }}
+                          >
+                            <Play size={15} color={colors.onPrimary} fill={colors.onPrimary} strokeWidth={1.75} />
+                            <Text variant="labelSmall" style={styles.startWorkoutText}>
+                              Iniciar
+                            </Text>
+                          </Pressable>
                         </View>
                       ))}
 
@@ -864,28 +733,35 @@ export const WorkoutsScreen: React.FC = () => {
                           setTargetGroupIdForWorkout(group.id);
                           setNewWorkoutModalVisible(true);
                         }}
-                        style={styles.addWorkoutToGroupButton}
+                        style={({ pressed }) => [
+                          styles.addWorkoutButton,
+                          pressed && styles.addWorkoutButtonPressed,
+                        ]}
                         accessible={true}
                         accessibilityRole="button"
                         accessibilityLabel="Adicionar treino ao grupo"
                       >
-                        <Plus size={16} color={colors.primary} strokeWidth={2} />
-                        <Text variant="bodySmall" style={styles.addWorkoutToGroupText}>
-                          Adicionar treino ao grupo
+                        <Plus size={18} color={colors.primary} strokeWidth={2.2} />
+                        <Text variant="bodyLarge" style={styles.addWorkoutButtonText}>
+                          Adicionar treino
                         </Text>
                       </Pressable>
                     </View>
                   )}
                 </View>
-              );
-            })}
+              </React.Fragment>
+            );
+          })}
           </View>
         )}
 
         {/* Cartão de Treino Avulso / Rápido */}
         <Pressable
           onPress={handleStartQuickSession}
-          style={styles.quickWorkoutCard}
+          style={({ pressed }) => [
+            styles.quickWorkoutCard,
+            pressed && styles.quickWorkoutCardPressed,
+          ]}
           accessible={true}
           accessibilityRole="button"
           accessibilityLabel="Iniciar treino avulso ou rápido"
@@ -921,7 +797,10 @@ export const WorkoutsScreen: React.FC = () => {
               <>
                 <Pressable
                   onPress={() => handleSetActiveGroup(selectedGroup.id, selectedGroup.name)}
-                  style={styles.menuItem}
+                  style={({ pressed }) => [
+                    styles.menuItem,
+                    pressed && styles.menuItemPressed,
+                  ]}
                   accessible={true}
                   accessibilityRole="button"
                 >
@@ -942,7 +821,10 @@ export const WorkoutsScreen: React.FC = () => {
                   navigation.navigate('EditGroup', { groupId: selectedGroup.id });
                 }
               }}
-              style={styles.menuItem}
+              style={({ pressed }) => [
+                styles.menuItem,
+                pressed && styles.menuItemPressed,
+              ]}
               accessible={true}
               accessibilityRole="button"
             >
@@ -958,7 +840,10 @@ export const WorkoutsScreen: React.FC = () => {
               onPress={() => {
                 if (selectedGroup) handleDuplicateGroup(selectedGroup);
               }}
-              style={styles.menuItem}
+              style={({ pressed }) => [
+                styles.menuItem,
+                pressed && styles.menuItemPressed,
+              ]}
               accessible={true}
               accessibilityRole="button"
             >
@@ -976,7 +861,10 @@ export const WorkoutsScreen: React.FC = () => {
                 setMenuVisible(false);
                 setDeleteModalVisible(true);
               }}
-              style={styles.menuItem}
+              style={({ pressed }) => [
+                styles.menuItem,
+                pressed && styles.menuItemPressed,
+              ]}
               accessible={true}
               accessibilityRole="button"
             >
@@ -1085,6 +973,9 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xs,
     paddingBottom: spacing.tabBarHeight + spacing.xl,
   },
+  headerContainer: {
+    paddingHorizontal: spacing.md,
+  },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1093,65 +984,33 @@ const styles = StyleSheet.create({
   newGroupPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    minHeight: 36,
     backgroundColor: colors.surfaceContainer,
     borderRadius: radii.pill,
     borderWidth: 1,
     borderColor: colors.outlineVariant,
+  },
+  newGroupPillPressed: {
+    backgroundColor: colors.surfaceContainerHigh,
+    borderColor: colors.primary,
   },
   newGroupPillText: {
     color: colors.onSurface,
     fontWeight: '600',
+    fontSize: 12,
   },
   iconButton: {
-    width: spacing.touchTargetMin,
-    height: spacing.touchTargetMin,
+    width: 40,
+    height: 40,
     borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
-
-  // Métricas
-  metricsRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  metricCard: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.surfaceContainer,
-    borderRadius: radii.card,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.outlineVariant,
-  },
-  metricIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: radii.sm,
+  iconButtonPressed: {
     backgroundColor: colors.surfaceContainerHigh,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  metricInfo: {
-    flex: 1,
-  },
-  metricNumber: {
-    color: colors.onSurface,
-    lineHeight: 28,
-  },
-  metricValueRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 4,
-  },
-  metricUnit: {
-    fontSize: 12,
   },
 
   // Grupo Ativo
@@ -1159,26 +1018,12 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     marginBottom: spacing.md,
   },
-  activeGroupCard: {
-    backgroundColor: colors.surfaceContainer,
-    borderRadius: radii.card,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 122, 89, 0.35)',
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  activeGroupAccentLine: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 2,
-    backgroundColor: colors.primary,
-    opacity: 0.8,
+  activeGroupSection: {
+    marginBottom: spacing.xs,
   },
   groupHeaderContainer: {
     marginBottom: spacing.sm,
+    paddingHorizontal: 2,
   },
   groupHeaderTopRow: {
     flexDirection: 'row',
@@ -1212,11 +1057,14 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   iconCircle: {
-    width: 34,
-    height: 34,
+    width: 40,
+    height: 40,
     borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  iconCirclePressed: {
+    backgroundColor: colors.surfaceContainerHigh,
   },
   groupNameRow: {
     flexDirection: 'row',
@@ -1242,111 +1090,115 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   workoutItemCard: {
-    backgroundColor: colors.surfaceContainerHigh,
+    backgroundColor: colors.surfaceContainer,
     borderRadius: radii.card,
-    padding: spacing.md,
+    paddingVertical: 14,
+    paddingHorizontal: spacing.md,
     borderWidth: 1,
     borderColor: colors.outlineVariant,
-  },
-  workoutItemTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 6,
+    minHeight: 76,
   },
-  workoutItemLeft: {
+  workoutItemContent: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  workoutCodeBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: colors.surfaceContainerHighest,
-    alignItems: 'center',
+    paddingRight: spacing.sm,
     justifyContent: 'center',
   },
-  workoutCodeText: {
-    color: colors.onSurface,
-    fontWeight: '700',
-    fontSize: 11,
+  workoutItemContentPressed: {
+    opacity: 0.75,
   },
-  workoutTitleBlock: {
-    flex: 1,
+  workoutNameRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
   },
   workoutName: {
     color: colors.onSurface,
     fontWeight: '700',
-    lineHeight: 20,
+    fontSize: 16,
+    lineHeight: 22,
   },
-  workoutActions: {
+  workoutMuscles: {
+    flexShrink: 1,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  workoutMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    marginTop: 4,
   },
-  editWorkoutButton: {
-    width: 30,
-    height: 30,
+  nextBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    backgroundColor: 'rgba(255, 122, 89, 0.16)',
     borderRadius: radii.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
+  },
+  nextBadgeText: {
+    color: colors.primary,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  workoutStatsText: {
+    color: colors.onSurfaceVariant,
+    fontSize: 13,
+    lineHeight: 18,
   },
   startWorkoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'center',
+    gap: 5,
     backgroundColor: colors.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    height: 40,
+    paddingHorizontal: 14,
     borderRadius: radii.pill,
+    flexShrink: 0,
+  },
+  startWorkoutButtonPressed: {
+    backgroundColor: colors.accentPressed,
+    transform: [{ scale: 0.98 }],
   },
   startWorkoutText: {
     color: colors.onPrimary,
     fontWeight: '700',
-    fontSize: 12,
+    fontSize: 13,
   },
-  workoutStatsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 2,
-  },
-  workoutStatsBold: {
-    color: colors.onSurface,
-    fontWeight: '600',
-  },
-  exerciseSummaryList: {
-    gap: 3,
-    marginTop: 2,
-  },
-  extraExercisesText: {
-    color: colors.primary,
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  workoutPreviewText: {
-    fontStyle: 'italic',
-    fontSize: 12,
-  },
-  addWorkoutToGroupButton: {
+  addWorkoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    backgroundColor: colors.surfaceContainerHigh,
+    gap: 8,
+    backgroundColor: colors.surfaceContainer,
     borderWidth: 1,
-    borderStyle: 'dashed',
     borderColor: colors.outlineVariant,
-    borderRadius: radii.card,
-    paddingVertical: spacing.sm,
-    marginTop: 4,
+    borderRadius: radii.pill,
+    minHeight: spacing.buttonHeight,
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.xs,
   },
-  addWorkoutToGroupText: {
+  addWorkoutButtonPressed: {
+    backgroundColor: colors.surfaceContainerHigh,
+    borderColor: colors.primary,
+  },
+  addWorkoutButtonText: {
     color: colors.onSurface,
-    fontWeight: '500',
+    fontWeight: '600',
+  },
+
+  // Seção de Outras Divisões
+  otherGroupsHeader: {
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
+    paddingHorizontal: 2,
+  },
+  otherGroupsTitle: {
+    fontWeight: '600',
+    fontSize: 13,
+    color: colors.onSurfaceVariant,
   },
 
   // Grupos Inativos
@@ -1409,6 +1261,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.outlineVariant,
     gap: spacing.sm,
+  },
+  quickWorkoutCardPressed: {
+    backgroundColor: colors.surfaceContainerHigh,
+    borderColor: colors.primary,
   },
   quickWorkoutLeft: {
     flex: 1,
@@ -1508,7 +1364,7 @@ const styles = StyleSheet.create({
   // Modal de opções (…)
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
     padding: spacing.margin,
@@ -1528,6 +1384,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     minHeight: 48,
+  },
+  menuItemPressed: {
+    backgroundColor: colors.surfaceContainerHighest,
   },
   menuItemText: {
     color: colors.onSurface,

@@ -56,6 +56,7 @@ export interface WorkoutItemDetail {
   targetMuscles: string;
   previewExercises: string;
   exercises?: WorkoutExerciseSummary[];
+  isNext?: boolean;
 }
 
 export interface WorkoutGroupDetail {
@@ -126,6 +127,27 @@ export function getWorkoutGroupsSummary(): WorkoutSummaryResult {
         [g.id]
       );
 
+      // Determina o próximo treino recomendado do ciclo para o grupo ativo
+      let nextWorkoutIndex = -1;
+      if (isGroupActive && workoutRows.length > 0) {
+        try {
+          const lastInGroupRows = rawDb.getAllSync<{ workout_id: string }>(
+            `SELECT workout_id 
+             FROM sessions 
+             WHERE status = 'completed' AND workout_id IN (
+               SELECT id FROM workouts WHERE group_id = ?
+             )
+             ORDER BY ended_at DESC, started_at DESC
+             LIMIT 1`,
+            [g.id]
+          );
+          const lastWorkoutId = lastInGroupRows[0]?.workout_id || null;
+          nextWorkoutIndex = calculateNextScheduledWorkoutIndex(workoutRows, lastWorkoutId);
+        } catch {
+          nextWorkoutIndex = 0;
+        }
+      }
+
       const workouts: WorkoutItemDetail[] = [];
       let groupTotalEstSeconds = 0;
 
@@ -133,6 +155,7 @@ export function getWorkoutGroupsSummary(): WorkoutSummaryResult {
         const w = workoutRows[wIdx];
         const groupLetter = String.fromCharCode(65 + (gIdx % 26)); // A, B, C...
         const code = `${groupLetter}-${wIdx + 1}`;
+        const isNext = isGroupActive && (wIdx === (nextWorkoutIndex >= 0 ? nextWorkoutIndex : 0));
 
         // Exercícios deste treino
         const exRows = rawDb.getAllSync<{
@@ -264,6 +287,7 @@ export function getWorkoutGroupsSummary(): WorkoutSummaryResult {
           targetMuscles,
           previewExercises,
           exercises,
+          isNext,
         });
       }
 

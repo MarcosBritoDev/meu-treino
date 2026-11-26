@@ -1,0 +1,187 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-26T19:08:00Z",
+  "title": "Design System: Volt Precision Warm",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Warm Living Coral",
+        "canonical": "#FF7A59",
+        "tonalRamp": ["#3A0D00", "#701500", "#A7391E", "#FF7A59", "#FF9B80", "#FFB4A0", "#FFDAD0", "#FFF0EC"]
+      },
+      "background": {
+        "role": "neutral",
+        "displayName": "Warm Night Graphite",
+        "canonical": "#1A1715",
+        "tonalRamp": ["#120F0D", "#141210", "#1A1715", "#1F1B19", "#23201D", "#2D2925", "#38332F", "#3A3531"]
+      },
+      "tertiary-pr": {
+        "role": "tertiary",
+        "displayName": "Trophy Amber",
+        "canonical": "#FFC46B",
+        "tonalRamp": ["#2A1B00", "#3D2E12", "#5C4210", "#CD9844", "#FFC46B", "#FFD799", "#FFE3B3", "#FFF4E0"]
+      },
+      "on-surface": {
+        "role": "neutral",
+        "displayName": "Warm Alabaster",
+        "canonical": "#F5EFE8",
+        "tonalRamp": ["#7D746B", "#998F85", "#B7ADA3", "#D2C9C0", "#E8E0D8", "#F5EFE8", "#FAF6F2", "#FFFFFF"]
+      },
+      "status-success": {
+        "role": "status",
+        "displayName": "Soft Mint Green",
+        "canonical": "#7BC98F",
+        "tonalRamp": ["#183B22", "#2B5738", "#478057", "#7BC98F", "#9AD9A9", "#BEE8C9", "#DDF4E4", "#F0FAF3"]
+      },
+      "status-error": {
+        "role": "status",
+        "displayName": "Soft Signal Red",
+        "canonical": "#FF6B6B",
+        "tonalRamp": ["#4A1F1F", "#6B1D1D", "#932020", "#C84040", "#FF6B6B", "#FF9494", "#FFB4B4", "#FFDAD6"]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Outfit Display Large",
+        "purpose": "Grandes números de carga, timers e totais destacados."
+      },
+      "title": {
+        "displayName": "Outfit Display Medium",
+        "purpose": "Títulos de tela e cabeçalhos de destaque."
+      },
+      "headline": {
+        "displayName": "Outfit Headline",
+        "purpose": "Títulos de cartões e números de séries."
+      },
+      "body": {
+        "displayName": "DM Sans Body",
+        "purpose": "Corpo de texto, nomes de exercícios e descrições."
+      },
+      "label": {
+        "displayName": "DM Sans Label",
+        "purpose": "Chips, badges e metadados auxiliares."
+      }
+    },
+    "shadows": [
+      {
+        "name": "elevation-flat",
+        "value": "none",
+        "purpose": "Superfícies tonais sem drop shadows."
+      }
+    ],
+    "motion": [
+      {
+        "name": "spring-snappy",
+        "value": "damping: 15, stiffness: 150",
+        "purpose": "Transições e expansão de cartões táteis."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact",
+        "value": "360px"
+      },
+      {
+        "name": "mobile",
+        "value": "390px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Botão de ação primária em pílula coral de 56px de altura.",
+      "html": "<button class=\"ds-btn-primary\">Iniciar treino</button>",
+      "css": ".ds-btn-primary { background: #FF7A59; color: #1A1715; height: 56px; padding: 0 24px; font-family: 'DM Sans', sans-serif; font-size: 17px; font-weight: 600; border: none; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.15s, transform 0.15s; } .ds-btn-primary:hover { background: #E8654A; transform: scale(0.995); }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Botão de ação secundária em superfície elevada com borda sutil.",
+      "html": "<button class=\"ds-btn-secondary\">Adicionar exercício</button>",
+      "css": ".ds-btn-secondary { background: #2D2925; color: #F5EFE8; height: 56px; padding: 0 24px; font-family: 'DM Sans', sans-serif; font-size: 17px; font-weight: 500; border: 1px solid #3A3531; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.15s; } .ds-btn-secondary:hover { background: #3A3531; }"
+    },
+    {
+      "name": "PR Badge",
+      "kind": "custom",
+      "refersTo": "chip-selected",
+      "description": "Chip âmbar exclusivo para Personal Record (PR).",
+      "html": "<div class=\"ds-pr-badge\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#1A1715\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 9H4.5a2.5 2.5 0 0 1 0-5H6\"/><path d=\"M18 9h1.5a2.5 2.5 0 0 0 0-5H18\"/><path d=\"M4 22h16\"/><path d=\"M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22\"/><path d=\"M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22\"/><path d=\"M18 2H6v7a6 6 0 0 0 12 0V2Z\"/></svg><span>Recorde pessoal</span></div>",
+      "css": ".ds-pr-badge { background: #FFC46B; color: #1A1715; height: 24px; padding: 0 8px; border-radius: 9999px; display: inline-flex; align-items: center; gap: 4px; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 700; }"
+    },
+    {
+      "name": "Surface Card",
+      "kind": "card",
+      "refersTo": "card-surface",
+      "description": "Cartão base de superfície com raio de 24px.",
+      "html": "<div class=\"ds-card\"><h3 class=\"ds-card-title\">Push A</h3><p class=\"ds-card-text\">Peito, tríceps e ombros</p></div>",
+      "css": ".ds-card { background: #23201D; border: 1px solid #3A3531; border-radius: 24px; padding: 18px; color: #F5EFE8; font-family: 'DM Sans', sans-serif; } .ds-card-title { margin: 0 0 4px 0; font-family: 'Outfit', sans-serif; font-size: 20px; font-weight: 600; color: #F5EFE8; } .ds-card-text { margin: 0; font-size: 13px; color: #B7ADA3; }"
+    },
+    {
+      "name": "Input Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Campo de texto com altura de 48dp e raio de 16px.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Nome do exercício\" />",
+      "css": ".ds-input { background: #38332F; border: 1px solid #3A3531; border-radius: 16px; height: 48px; padding: 0 16px; color: #F5EFE8; font-family: 'DM Sans', sans-serif; font-size: 15px; width: 100%; box-sizing: border-box; } .ds-input:focus { border-color: #FF7A59; outline: none; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Warm Iron Sanctuary",
+    "overview": "O Volt Precision Warm é um sistema de design escuro, quente e tátil, projetado sob medida para o registro de treinos de musculação em ambiente real de academia. Ele evoca a sensação de um santuário de treino à noite: acolhedor aos olhos cansados, sóbrio, amigável e confiável, sem a agressividade visual de contrastes fluorescentes nem o excesso analítico de painéis administrativos web.",
+    "keyCharacteristics": [
+      "Fundo grafite quente acolhedor (#1A1715), nunca preto puro.",
+      "Destaque caloroso em coral vivo (#FF7A59) para ações primárias.",
+      "Consagração absoluta do âmbar (#FFC46B) exclusivo para recordes pessoais (PR).",
+      "Tipografia dual com Outfit tabular para números e DM Sans para leitura.",
+      "Formas ultra-arredondadas com cartões de 24px e pílulas 9999px."
+    ],
+    "rules": [
+      {
+        "name": "The Warm Night Rule",
+        "body": "O fundo da aplicação é sempre grafite quente (#1A1715), nunca preto puro (#000000) e jamais fundo branco ou claro. É estritamente proibido o uso de azul, ciano ou tons genéricos de laranja queimado.",
+        "section": "colors"
+      },
+      {
+        "name": "The Trophy Amber Rule",
+        "body": "A cor âmbar (#FFC46B) é de uso sagrado e exclusivo para recordes pessoais (PR) e troféus de conquista. É terminantemente proibido usá-la como cor de aviso genérico, botão secundário ou adorno de interface.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Numbers Rule",
+        "body": "Todo e qualquer número na interface (cargas em kg/lb, repetições, temporizadores, contadores de séries e totais) deve ser renderizado em Outfit com algarismos tabulares ('tabular-nums'), garantindo estabilidade e alinhamento milimétrico durante atualizações dinâmicas.",
+        "section": "typography"
+      },
+      {
+        "name": "The Sentence Case Rule",
+        "body": "Toda a interface é redigida em português do Brasil estritamente em sentence case (apenas a primeira letra maiúscula). É terminantemente proibido o uso de caixa alta (ALL CAPS / UPPERCASE), inclusive em botões, abas, chips e cabeçalhos de tabela.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Tonal Rule",
+        "body": "Superfícies não utilizam sombras projetadas. A hierarquia e a separação de planos no escuro são estabelecidas exclusivamente pela progressão luminosa dos tons grafite e pelo delineamento sutil de bordas de 1px (#3A3531).",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do usar sempre Outfit com tabular-nums para qualquer número de carga, repetições, tempos e recordes.",
+      "Do manter todos os botões e áreas de toque com no mínimo 48×48 dp de dimensão física.",
+      "Do aplicar sentence case em absolutamente todos os textos, rótulos e botões ('Iniciar treino', nunca 'INICIAR TREINO').",
+      "Do reservar a cor âmbar (#FFC46B) exclusivamente para recordes pessoais (PR) e troféu.",
+      "Do usar o fundo grafite quente (#1A1715), garantindo conforto ocular máximo em ambiente escuro.",
+      "Do colocar a ação principal da tela na zona inferior do polegar."
+    ],
+    "donts": [
+      "Don't usar preto puro (#000000) no plano de fundo.",
+      "Don't usar azul, ciano ou variações de laranja queimado em nenhum componente.",
+      "Don't usar texto em caixa alta (ALL CAPS) em qualquer circunstância.",
+      "Don't praticar 'cardception' (não aninhar cartões com bordas dentro de outros cartões com bordas).",
+      "Don't usar sombras projetadas (drop-shadows) pesadas ou artificiais.",
+      "Don't usar bordas tracejadas (dashed) estilo web desktop em botões de ação nativos."
+    ]
+  }
+}
