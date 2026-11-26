@@ -1,9 +1,15 @@
 import { getExpoDb } from './client';
 import { estimarDuracao } from '../domain/duration';
-import { calculateNextScheduledWorkoutIndex } from '../domain/workouts';
+import {
+  calculateNextScheduledWorkoutIndex,
+  formatExerciseSetsSummary,
+  formatExerciseCardItem,
+  formatWorkoutSummary,
+} from '../domain/workouts';
 import {
   ActiveSessionData,
   RecommendedWorkoutData,
+  RecommendedWorkoutExercise,
   WeekDayStatus,
   WeekStatusData,
   LastCompletedSessionData,
@@ -130,6 +136,7 @@ export function getHomeScreenData(referenceDate: Date = new Date()): HomeScreenD
 
         // Busca exercícios do treino selecionado
         const exRows = rawDb.getAllSync<{
+          workout_exercise_id: string;
           exercise_id: string;
           name: string;
           muscle_group: string;
@@ -137,6 +144,7 @@ export function getHomeScreenData(referenceDate: Date = new Date()): HomeScreenD
           rest_s: number;
         }>(
           `SELECT 
+            we.id AS workout_exercise_id,
             we.exercise_id,
             e.name,
             e.muscle_group,
@@ -149,15 +157,66 @@ export function getHomeScreenData(referenceDate: Date = new Date()): HomeScreenD
           [selectedWorkout.id]
         );
 
+        // Busca séries individuais em workout_exercise_sets
+        let setsRows: { workoutExerciseId: string; type: string; restS: number | null }[] = [];
+        try {
+          setsRows = rawDb.getAllSync<{
+            workoutExerciseId: string;
+            type: string;
+            restS: number | null;
+          }>(
+            `SELECT 
+              wes.workout_exercise_id AS workoutExerciseId,
+              wes.type AS type,
+              wes.rest_s AS restS
+             FROM workout_exercise_sets wes
+             JOIN workout_exercises we ON we.id = wes.workout_exercise_id
+             WHERE we.workout_id = ?
+             ORDER BY wes.position ASC`,
+            [selectedWorkout.id]
+          );
+        } catch {
+          // fallback
+        }
+
+        const exercises: RecommendedWorkoutExercise[] = [];
+        let totalSets = 0;
+        const durExercises: { targetSets: number; restS: number }[] = [];
+
+        for (const ex of exRows) {
+          const matchingSets = setsRows.filter((s) => s.workoutExerciseId === ex.workout_exercise_id);
+          let warmupCount = 0;
+          let otherCount = 0;
+
+          if (matchingSets.length > 0) {
+            warmupCount = matchingSets.filter((s) => s.type === 'warmup').length;
+            otherCount = matchingSets.filter((s) => s.type !== 'warmup').length;
+            totalSets += matchingSets.length;
+            const exRest = matchingSets[0]?.restS ?? ex.rest_s ?? 90;
+            durExercises.push({ targetSets: matchingSets.length, restS: exRest });
+          } else {
+            otherCount = ex.target_sets || 3;
+            totalSets += otherCount;
+            durExercises.push({ targetSets: otherCount, restS: ex.rest_s || 90 });
+          }
+
+          const setsSummary = formatExerciseSetsSummary(warmupCount, otherCount);
+          const itemText = formatExerciseCardItem(ex.name, warmupCount, otherCount);
+          exercises.push({
+            name: ex.name,
+            warmupCount,
+            otherCount,
+            setsSummary,
+            itemText,
+          });
+        }
+
         const exerciseCount = exRows.length;
-        const totalSets = exRows.reduce((sum, item) => sum + (item.target_sets || 0), 0);
         const durSec = estimarDuracao({
-          exercises: exRows.map((r) => ({
-            targetSets: r.target_sets,
-            restS: r.rest_s,
-          })),
+          exercises: durExercises,
         });
         const estimatedDurationMin = Math.max(1, Math.round(durSec / 60));
+        const summaryText = formatWorkoutSummary(totalSets, estimatedDurationMin);
 
         // Músculos envolvidos
         const muscleList = Array.from(new Set(exRows.map((r) => r.muscle_group.toLowerCase())));
@@ -185,6 +244,8 @@ export function getHomeScreenData(referenceDate: Date = new Date()): HomeScreenD
           exerciseCount,
           totalSets,
           estimatedDurationMin,
+          summaryText,
+          exercises,
         };
       }
     }

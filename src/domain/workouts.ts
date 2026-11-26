@@ -63,6 +63,44 @@ export function formatSequenceChips(exerciseNames: string[]): {
   };
 }
 
+/**
+ * Formata a quantidade de séries de um exercício para resumo em cartões:
+ * Ex: "A + 5 séries" (1 aquecimento + 5 demais)
+ *     "2A + 3 séries" (2 aquecimentos + 3 demais)
+ *     "3 séries" (sem aquecimento)
+ *     "1 série" (1 série normal)
+ *     "A série" (1 série só de aquecimento)
+ */
+export function formatExerciseSetsSummary(warmupCount: number, otherCount: number): string {
+  const otherLabel = `${otherCount} ${otherCount === 1 ? 'série' : 'séries'}`;
+  if (warmupCount > 0) {
+    const warmupPrefix = warmupCount === 1 ? 'A' : `${warmupCount}A`;
+    if (otherCount > 0) {
+      return `${warmupPrefix} + ${otherLabel}`;
+    }
+    return `${warmupPrefix} ${warmupCount === 1 ? 'série' : 'séries'}`;
+  }
+  return otherLabel;
+}
+
+/**
+ * Formata o resumo do exercício com nome e séries para os cartões de treino:
+ * Ex: "Supino Reto — A + 5 séries"
+ *     "Desenvolvimento — 3 séries"
+ */
+export function formatExerciseCardItem(name: string, warmupCount: number, otherCount: number): string {
+  return `${name} — ${formatExerciseSetsSummary(warmupCount, otherCount)}`;
+}
+
+/**
+ * Formata o resumo do treino no cartão:
+ * Ex: "18 séries · ~45 min"
+ */
+export function formatWorkoutSummary(totalSets: number, estimatedDurationMin: number): string {
+  const setsLabel = `${totalSets} ${totalSets === 1 ? 'série' : 'séries'}`;
+  return `${setsLabel} · ~${estimatedDurationMin} min`;
+}
+
 export interface GroupSplitSuggestion {
   name: string;
   frequencyDays: number;

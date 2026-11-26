@@ -14,7 +14,6 @@ export * from './EmptyState';
 export * from './ScreenHeader';
 export * from './TabBar';
 export * from './EditGroupSheet';
-export * from './ExerciseTargetSheet';
 export * from './StyledDropdown';
 export * from './SetTypeSheet';
 export * from './SetEditSheet';

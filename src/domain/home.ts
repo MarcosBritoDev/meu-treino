@@ -6,6 +6,14 @@ export interface ActiveSessionData {
   elapsedSeconds: number;
 }
 
+export interface RecommendedWorkoutExercise {
+  name: string;
+  warmupCount: number;
+  otherCount: number;
+  setsSummary: string;
+  itemText: string;
+}
+
 export interface RecommendedWorkoutData {
   id: string;
   groupId: string;
@@ -17,6 +25,8 @@ export interface RecommendedWorkoutData {
   exerciseCount: number;
   totalSets: number;
   estimatedDurationMin: number;
+  summaryText?: string;
+  exercises?: RecommendedWorkoutExercise[];
 }
 
 export interface WeekDayStatus {

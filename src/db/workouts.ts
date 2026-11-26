@@ -3,11 +3,20 @@ import { estimarDuracao } from '../domain/duration';
 import {
   formatTempoRelativoLog,
   calculateNextScheduledWorkoutIndex,
+  formatExerciseSetsSummary,
+  formatExerciseCardItem,
+  formatWorkoutSummary,
 } from '../domain/workouts';
 import { PlannedSet, SetType, RepsMode, EffortMode, Unit } from '../domain/types';
 import { suggestDropWeightKg, suggest1RmWeightKg } from '../domain/sessionMath';
 
-export { formatTempoRelativoLog, calculateNextScheduledWorkoutIndex };
+export {
+  formatTempoRelativoLog,
+  calculateNextScheduledWorkoutIndex,
+  formatExerciseSetsSummary,
+  formatExerciseCardItem,
+  formatWorkoutSummary,
+};
 export type { PlannedSet, SetType, RepsMode, EffortMode, Unit };
 
 /**
@@ -26,6 +35,14 @@ export function getUserUnit(): Unit {
   return 'kg';
 }
 
+export interface WorkoutExerciseSummary {
+  name: string;
+  warmupCount: number;
+  otherCount: number;
+  setsSummary: string; // ex: "A + 5 séries" ou "3 séries"
+  itemText: string;    // ex: "Supino Reto — A + 5 séries"
+}
+
 export interface WorkoutItemDetail {
   id: string;
   groupId: string | null;
@@ -35,8 +52,10 @@ export interface WorkoutItemDetail {
   exerciseCount: number;
   totalSets: number;
   estimatedDurationMin: number;
+  summaryText?: string;
   targetMuscles: string;
   previewExercises: string;
+  exercises?: WorkoutExerciseSummary[];
 }
 
 export interface WorkoutGroupDetail {
@@ -117,6 +136,7 @@ export function getWorkoutGroupsSummary(): WorkoutSummaryResult {
 
         // Exercícios deste treino
         const exRows = rawDb.getAllSync<{
+          workoutExerciseId: string;
           exerciseId: string;
           name: string;
           muscleGroup: string;
@@ -124,6 +144,7 @@ export function getWorkoutGroupsSummary(): WorkoutSummaryResult {
           restS: number;
         }>(
           `SELECT 
+            we.id AS workoutExerciseId,
             we.exercise_id AS exerciseId,
             e.name AS name,
             e.muscle_group AS muscleGroup,
@@ -136,18 +157,69 @@ export function getWorkoutGroupsSummary(): WorkoutSummaryResult {
           [w.id]
         );
 
+        // Busca séries individuais em workout_exercise_sets
+        let setsRows: { workoutExerciseId: string; type: string; restS: number | null }[] = [];
+        try {
+          setsRows = rawDb.getAllSync<{
+            workoutExerciseId: string;
+            type: string;
+            restS: number | null;
+          }>(
+            `SELECT 
+              wes.workout_exercise_id AS workoutExerciseId,
+              wes.type AS type,
+              wes.rest_s AS restS
+             FROM workout_exercise_sets wes
+             JOIN workout_exercises we ON we.id = wes.workout_exercise_id
+             WHERE we.workout_id = ?
+             ORDER BY wes.position ASC`,
+            [w.id]
+          );
+        } catch {
+          // fallback caso a tabela não exista ou haja erro
+        }
+
+        const exercises: WorkoutExerciseSummary[] = [];
+        let totalSets = 0;
+        const durExercises: { targetSets: number; restS: number }[] = [];
+
+        for (const ex of exRows) {
+          const matchingSets = setsRows.filter((s) => s.workoutExerciseId === ex.workoutExerciseId);
+          let warmupCount = 0;
+          let otherCount = 0;
+
+          if (matchingSets.length > 0) {
+            warmupCount = matchingSets.filter((s) => s.type === 'warmup').length;
+            otherCount = matchingSets.filter((s) => s.type !== 'warmup').length;
+            totalSets += matchingSets.length;
+            const exRest = matchingSets[0]?.restS ?? ex.restS ?? 90;
+            durExercises.push({ targetSets: matchingSets.length, restS: exRest });
+          } else {
+            otherCount = ex.targetSets || 3;
+            totalSets += otherCount;
+            durExercises.push({ targetSets: otherCount, restS: ex.restS || 90 });
+          }
+
+          const setsSummary = formatExerciseSetsSummary(warmupCount, otherCount);
+          const itemText = formatExerciseCardItem(ex.name, warmupCount, otherCount);
+          exercises.push({
+            name: ex.name,
+            warmupCount,
+            otherCount,
+            setsSummary,
+            itemText,
+          });
+        }
+
         const exerciseCount = exRows.length;
-        const totalSets = exRows.reduce((acc, curr) => acc + (curr.targetSets || 0), 0);
 
         // Estimativa de duração pelo domínio
         const durationSeconds = estimarDuracao({
-          exercises: exRows.map((r) => ({
-            targetSets: r.targetSets,
-            restS: r.restS,
-          })),
+          exercises: durExercises,
         });
         groupTotalEstSeconds += durationSeconds;
         const estimatedDurationMin = Math.max(1, Math.round(durationSeconds / 60));
+        const summaryText = formatWorkoutSummary(totalSets, estimatedDurationMin);
 
         // Músculos envolvidos (únicos e em minúsculas legíveis)
         const musclesSet = Array.from(new Set(exRows.map((r) => r.muscleGroup.toLowerCase())));
@@ -166,15 +238,15 @@ export function getWorkoutGroupsSummary(): WorkoutSummaryResult {
           }
         }
 
-        // Prévia dos primeiros exercícios
+        // Prévia dos primeiros exercícios formatados como "Nome — A + N séries"
         let previewExercises = '';
-        if (exRows.length > 0) {
-          const names = exRows.map((r) => r.name);
-          if (names.length <= 3) {
-            previewExercises = names.join(', ');
+        if (exercises.length > 0) {
+          const items = exercises.map((r) => r.itemText);
+          if (items.length <= 3) {
+            previewExercises = items.join(', ');
           } else {
-            const firstThree = names.slice(0, 3).join(', ');
-            const remaining = names.length - 3;
+            const firstThree = items.slice(0, 3).join(', ');
+            const remaining = items.length - 3;
             previewExercises = `${firstThree} +${remaining}`;
           }
         }
@@ -188,8 +260,10 @@ export function getWorkoutGroupsSummary(): WorkoutSummaryResult {
           exerciseCount,
           totalSets,
           estimatedDurationMin,
+          summaryText,
           targetMuscles,
           previewExercises,
+          exercises,
         });
       }
 
@@ -1050,6 +1124,7 @@ export function getGroupDetail(groupId: string): GroupDetailResult | null {
 
       // Exercícios
       const exRows = rawDb.getAllSync<{
+        workoutExerciseId: string;
         exerciseId: string;
         name: string;
         muscleGroup: string;
@@ -1057,6 +1132,7 @@ export function getGroupDetail(groupId: string): GroupDetailResult | null {
         restS: number;
       }>(
         `SELECT 
+          we.id AS workoutExerciseId,
           we.exercise_id AS exerciseId,
           e.name AS name,
           e.muscle_group AS muscleGroup,
@@ -1069,17 +1145,68 @@ export function getGroupDetail(groupId: string): GroupDetailResult | null {
         [w.id]
       );
 
+      // Busca séries individuais em workout_exercise_sets
+      let setsRows: { workoutExerciseId: string; type: string; restS: number | null }[] = [];
+      try {
+        setsRows = rawDb.getAllSync<{
+          workoutExerciseId: string;
+          type: string;
+          restS: number | null;
+        }>(
+          `SELECT 
+            wes.workout_exercise_id AS workoutExerciseId,
+            wes.type AS type,
+            wes.rest_s AS restS
+           FROM workout_exercise_sets wes
+           JOIN workout_exercises we ON we.id = wes.workout_exercise_id
+           WHERE we.workout_id = ?
+           ORDER BY wes.position ASC`,
+          [w.id]
+        );
+      } catch {
+        // fallback
+      }
+
+      const exercises: WorkoutExerciseSummary[] = [];
+      let totalSets = 0;
+      const durExercises: { targetSets: number; restS: number }[] = [];
+
+      for (const ex of exRows) {
+        const matchingSets = setsRows.filter((s) => s.workoutExerciseId === ex.workoutExerciseId);
+        let warmupCount = 0;
+        let otherCount = 0;
+
+        if (matchingSets.length > 0) {
+          warmupCount = matchingSets.filter((s) => s.type === 'warmup').length;
+          otherCount = matchingSets.filter((s) => s.type !== 'warmup').length;
+          totalSets += matchingSets.length;
+          const exRest = matchingSets[0]?.restS ?? ex.restS ?? 90;
+          durExercises.push({ targetSets: matchingSets.length, restS: exRest });
+        } else {
+          otherCount = ex.targetSets || 3;
+          totalSets += otherCount;
+          durExercises.push({ targetSets: otherCount, restS: ex.restS || 90 });
+        }
+
+        const setsSummary = formatExerciseSetsSummary(warmupCount, otherCount);
+        const itemText = formatExerciseCardItem(ex.name, warmupCount, otherCount);
+        exercises.push({
+          name: ex.name,
+          warmupCount,
+          otherCount,
+          setsSummary,
+          itemText,
+        });
+      }
+
       const exerciseCount = exRows.length;
-      const totalSets = exRows.reduce((acc, curr) => acc + (curr.targetSets || 0), 0);
 
       const durationSeconds = estimarDuracao({
-        exercises: exRows.map((r) => ({
-          targetSets: r.targetSets,
-          restS: r.restS,
-        })),
+        exercises: durExercises,
       });
       groupTotalEstSeconds += durationSeconds;
       const estimatedDurationMin = Math.max(1, Math.round(durationSeconds / 60));
+      const summaryText = formatWorkoutSummary(totalSets, estimatedDurationMin);
 
       // Músculos
       const musclesSet = Array.from(new Set(exRows.map((r) => r.muscleGroup.toLowerCase())));
@@ -1098,9 +1225,9 @@ export function getGroupDetail(groupId: string): GroupDetailResult | null {
         }
       }
 
-      // Chips da "Sequência de carga": primeiros 4 + contador excedente
-      const exerciseChips = exRows.slice(0, 4).map((r) => r.name);
-      const extraExerciseCount = Math.max(0, exRows.length - 4);
+      // Chips da "Sequência de carga": primeiros 4 formatados com "Nome — A + N séries" + contador excedente
+      const exerciseChips = exercises.slice(0, 4).map((r) => r.itemText);
+      const extraExerciseCount = Math.max(0, exercises.length - 4);
 
       // Último log desta ficha específica
       const lastWorkoutLog = rawDb.getAllSync<{ endedAt: number | null }>(
@@ -1124,12 +1251,14 @@ export function getGroupDetail(groupId: string): GroupDetailResult | null {
         exerciseCount,
         totalSets,
         estimatedDurationMin,
+        summaryText,
         targetMuscles,
         previewExercises: exerciseChips.join(', '),
         lastLogText,
         isScheduledForToday,
         exerciseChips,
         extraExerciseCount,
+        exercises,
       });
     }
 

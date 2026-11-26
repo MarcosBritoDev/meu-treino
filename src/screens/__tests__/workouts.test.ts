@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { estimarDuracao, formatarDuracao } from '../../domain/duration';
+import {
+  formatExerciseSetsSummary,
+  formatExerciseCardItem,
+  formatWorkoutSummary,
+} from '../../domain/workouts';
 
 describe('Tela 3.1 - Treinos (Lógica de Domínio e Estimativas)', () => {
   describe('Cálculo de Duração Estimada (estimarDuracao)', () => {
@@ -171,6 +176,30 @@ describe('Tela 3.1 - Treinos (Lógica de Domínio e Estimativas)', () => {
       expect(sessions.find((s) => s.id === 'sess_1')?.workoutId).toBeNull();
       // Outras sessões permanecem inalteradas
       expect(sessions.find((s) => s.id === 'sess_2')?.workoutId).toBe('w_2');
+    });
+  });
+
+  describe('Etapa 6 - Resumos de Treinos e Exercícios nos Cartões', () => {
+    it('formata o resumo de séries com aquecimento separado das normais (A + N séries)', () => {
+      // 1 aquecimento + 5 demais séries
+      expect(formatExerciseSetsSummary(1, 5)).toBe('A + 5 séries');
+      // Sem aquecimento
+      expect(formatExerciseSetsSummary(0, 3)).toBe('3 séries');
+      expect(formatExerciseSetsSummary(0, 1)).toBe('1 série');
+      // 2 aquecimentos + 3 demais séries
+      expect(formatExerciseSetsSummary(2, 3)).toBe('2A + 3 séries');
+      // Apenas aquecimento
+      expect(formatExerciseSetsSummary(1, 0)).toBe('A série');
+    });
+
+    it('formata o item de exercício com nome e séries no padrão "Nome — A + N séries"', () => {
+      expect(formatExerciseCardItem('Supino Reto', 1, 5)).toBe('Supino Reto — A + 5 séries');
+      expect(formatExerciseCardItem('Desenvolvimento', 0, 3)).toBe('Desenvolvimento — 3 séries');
+    });
+
+    it('formata o resumo do treino no padrão "N séries · ~X min"', () => {
+      expect(formatWorkoutSummary(18, 45)).toBe('18 séries · ~45 min');
+      expect(formatWorkoutSummary(1, 1)).toBe('1 série · ~1 min');
     });
   });
 });

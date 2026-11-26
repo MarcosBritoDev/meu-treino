@@ -204,13 +204,14 @@ export const GroupDetailScreen: React.FC = () => {
   const handleCreateWorkout = () => {
     if (!newWorkoutName.trim()) return;
     try {
-      addWorkoutToGroup(group.id, newWorkoutName.trim());
+      const newWorkoutId = addWorkoutToGroup(group.id, newWorkoutName.trim());
       triggerHaptic('success');
       setNewWorkoutModalVisible(false);
       setNewWorkoutName('');
       loadGroup();
       setToastMessage('Treino adicionado ao grupo');
       setToastVisible(true);
+      navigation.navigate('EditWorkout', { workoutId: newWorkoutId });
     } catch (err) {
       console.warn('Erro ao adicionar treino:', err);
     }
@@ -501,12 +502,24 @@ export const GroupDetailScreen: React.FC = () => {
                   </Text>
                 </View>
 
-                {/* Sequência de Carga (Sentence Case) */}
-                {w.exerciseChips.length > 0 && (
+                {/* Lista resumida de exercícios (ex: "Supino Reto — A + 5 séries") */}
+                {w.exercises && w.exercises.length > 0 ? (
                   <View style={styles.loadSequenceContainer}>
-                    <Text variant="labelSmall" color="secondary" style={styles.loadSequenceLabel}>
-                      Sequência de carga
-                    </Text>
+                    <View style={styles.exerciseSummaryList}>
+                      {w.exercises.slice(0, 3).map((ex, exIdx) => (
+                        <Text key={`ex-${exIdx}`} variant="bodySmall" color="secondary" style={styles.exerciseSummaryText} numberOfLines={1}>
+                          {ex.itemText}
+                        </Text>
+                      ))}
+                      {w.exercises.length > 3 && (
+                        <Text variant="labelSmall" color="secondary" style={styles.extraExerciseCountText}>
+                          {`+${w.exercises.length - 3} ${w.exercises.length - 3 === 1 ? 'exercício' : 'exercícios'}`}
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                ) : w.exerciseChips.length > 0 ? (
+                  <View style={styles.loadSequenceContainer}>
                     <View style={styles.loadChipsRow}>
                       {w.exerciseChips.map((exName, exIdx) => (
                         <View key={`chip-${exIdx}`} style={styles.exerciseChip}>
@@ -525,34 +538,29 @@ export const GroupDetailScreen: React.FC = () => {
                       )}
                     </View>
                   </View>
-                )}
+                ) : null}
 
-                {/* Barra de Métricas */}
+                {/* Resumo do treino: "N séries · ~X min" */}
                 <View style={styles.metricsBar}>
                   <View style={styles.metricItem}>
-                    <List size={14} color={colors.primary} strokeWidth={1.75} />
-                    <Text variant="labelSmall" color="secondary">
-                      {`${w.exerciseCount} exercícios`}
+                    <Repeat size={14} color={colors.primary} strokeWidth={1.75} />
+                    <Text variant="labelSmall" style={styles.workoutSummaryBold}>
+                      {w.summaryText || `${w.totalSets} ${w.totalSets === 1 ? 'série' : 'séries'} · ~${w.estimatedDurationMin} min`}
                     </Text>
                   </View>
-                  <Text variant="labelSmall" color="secondary">
-                    ·
-                  </Text>
-                  <View style={styles.metricItem}>
-                    <Repeat size={14} color={colors.onSurfaceVariant} strokeWidth={1.75} />
-                    <Text variant="labelSmall" color="secondary">
-                      {`${w.totalSets} séries`}
-                    </Text>
-                  </View>
-                  <Text variant="labelSmall" color="secondary">
-                    ·
-                  </Text>
-                  <View style={styles.metricItem}>
-                    <Clock size={14} color={colors.pr} strokeWidth={1.75} />
-                    <Text variant="labelSmall" color="secondary">
-                      {`~${w.estimatedDurationMin} min`}
-                    </Text>
-                  </View>
+                  {w.exerciseCount > 0 && (
+                    <>
+                      <Text variant="labelSmall" color="secondary">
+                        ·
+                      </Text>
+                      <View style={styles.metricItem}>
+                        <List size={14} color={colors.onSurfaceVariant} strokeWidth={1.75} />
+                        <Text variant="labelSmall" color="secondary">
+                          {`${w.exerciseCount} ${w.exerciseCount === 1 ? 'exercício' : 'exercícios'}`}
+                        </Text>
+                      </View>
+                    </>
+                  )}
                 </View>
 
                 {/* Rodapé do Card com Ações */}
@@ -1147,6 +1155,20 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     fontWeight: '500',
   },
+  exerciseSummaryList: {
+    gap: 4,
+  },
+  exerciseSummaryText: {
+    color: colors.onSurfaceVariant,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  extraExerciseCountText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 2,
+  },
   loadChipsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1188,6 +1210,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+  },
+  workoutSummaryBold: {
+    fontWeight: '700',
+    color: colors.onSurface,
   },
 
   // Ações do Card

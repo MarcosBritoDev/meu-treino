@@ -390,6 +390,9 @@ export const HomeScreen: React.FC = () => {
                     <Text variant="bodyMedium" style={styles.heroSubtitle}>
                       {data.recommendedWorkout.targetMuscles} · Grupo {data.recommendedWorkout.groupName}
                     </Text>
+                    <Text variant="labelSmall" style={styles.heroSummaryBadge}>
+                      {data.recommendedWorkout.summaryText || `${data.recommendedWorkout.totalSets} ${data.recommendedWorkout.totalSets === 1 ? 'série' : 'séries'} · ~${data.recommendedWorkout.estimatedDurationMin} min`}
+                    </Text>
                   </View>
 
                   {/* Indicador de Ciclo e Segmentos de Progresso */}
@@ -450,6 +453,22 @@ export const HomeScreen: React.FC = () => {
                       </Text>
                     </View>
                   </View>
+
+                  {/* Lista resumida de exercícios: Nome — A + N séries */}
+                  {data.recommendedWorkout.exercises && data.recommendedWorkout.exercises.length > 0 && (
+                    <View style={styles.heroExerciseList}>
+                      {data.recommendedWorkout.exercises.slice(0, 3).map((ex, idx) => (
+                        <Text key={idx} variant="bodySmall" color="secondary" style={styles.heroExerciseItem} numberOfLines={1}>
+                          {ex.itemText}
+                        </Text>
+                      ))}
+                      {data.recommendedWorkout.exercises.length > 3 && (
+                        <Text variant="labelSmall" color="secondary" style={styles.heroExtraExercises}>
+                          {`+${data.recommendedWorkout.exercises.length - 3} ${data.recommendedWorkout.exercises.length - 3 === 1 ? 'exercício' : 'exercícios'}`}
+                        </Text>
+                      )}
+                    </View>
+                  )}
 
                   {/* Botão Primário 56px Iniciar treino */}
                   <Button
@@ -767,6 +786,28 @@ const styles = StyleSheet.create({
   heroSubtitle: {
     fontSize: 14,
     color: colors.onSurfaceVariant,
+  },
+  heroSummaryBadge: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
+    marginTop: 2,
+  },
+  heroExerciseList: {
+    gap: 4,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  heroExerciseItem: {
+    fontSize: 13,
+    color: colors.onSurfaceVariant,
+    lineHeight: 18,
+  },
+  heroExtraExercises: {
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: '600',
+    marginTop: 2,
   },
   cycleBlock: {
     gap: 8,

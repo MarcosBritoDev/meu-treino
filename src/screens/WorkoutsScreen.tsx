@@ -225,7 +225,7 @@ export const WorkoutsScreen: React.FC = () => {
   const handleAddWorkout = () => {
     if (!targetGroupIdForWorkout || !newWorkoutName.trim()) return;
     try {
-      addWorkoutToGroup(targetGroupIdForWorkout, newWorkoutName.trim());
+      const newWorkoutId = addWorkoutToGroup(targetGroupIdForWorkout, newWorkoutName.trim());
       triggerHaptic('success');
       setNewWorkoutModalVisible(false);
       setNewWorkoutName('');
@@ -233,6 +233,7 @@ export const WorkoutsScreen: React.FC = () => {
       loadData();
       setToastMessage('Treino adicionado ao grupo');
       setToastVisible(true);
+      navigation.navigate('EditWorkout', { workoutId: newWorkoutId });
     } catch (err) {
       console.warn('Erro ao adicionar treino:', err);
     }
@@ -582,27 +583,38 @@ export const WorkoutsScreen: React.FC = () => {
                               </View>
                             </View>
 
-                            {/* Estatísticas calculadas: exercícios, séries e duração estimada */}
+                            {/* Resumo do treino: "N séries · ~X min" */}
                             <View style={styles.workoutStatsRow}>
                               <Text variant="labelSmall" style={styles.workoutStatsBold}>
-                                {`${w.exerciseCount} ${w.exerciseCount === 1 ? 'exercício' : 'exercícios'}`}
+                                {w.summaryText || `${w.totalSets} ${w.totalSets === 1 ? 'série' : 'séries'} · ~${w.estimatedDurationMin} min`}
                               </Text>
-                              <Text variant="labelSmall" color="secondary">
-                                •
-                              </Text>
-                              <Text variant="labelSmall" color="secondary">
-                                {`${w.totalSets} ${w.totalSets === 1 ? 'série' : 'séries'}`}
-                              </Text>
-                              <Text variant="labelSmall" color="secondary">
-                                •
-                              </Text>
-                              <Text variant="labelSmall" color="secondary">
-                                {`~${w.estimatedDurationMin} min`}
-                              </Text>
+                              {w.exerciseCount > 0 && (
+                                <>
+                                  <Text variant="labelSmall" color="secondary">
+                                    •
+                                  </Text>
+                                  <Text variant="labelSmall" color="secondary">
+                                    {`${w.exerciseCount} ${w.exerciseCount === 1 ? 'exercício' : 'exercícios'}`}
+                                  </Text>
+                                </>
+                              )}
                             </View>
 
-                            {/* Prévia dos primeiros exercícios */}
-                            {w.previewExercises ? (
+                            {/* Lista resumida de exercícios: Nome — A + N séries */}
+                            {w.exercises && w.exercises.length > 0 ? (
+                              <View style={styles.exerciseSummaryList}>
+                                {w.exercises.slice(0, 3).map((ex, exIdx) => (
+                                  <Text key={exIdx} variant="bodySmall" color="secondary" style={styles.workoutPreviewText} numberOfLines={1}>
+                                    {ex.itemText}
+                                  </Text>
+                                ))}
+                                {w.exercises.length > 3 && (
+                                  <Text variant="labelSmall" color="secondary" style={styles.extraExercisesText}>
+                                    {`+${w.exercises.length - 3} ${w.exercises.length - 3 === 1 ? 'exercício' : 'exercícios'}`}
+                                  </Text>
+                                )}
+                              </View>
+                            ) : w.previewExercises ? (
                               <Text variant="bodySmall" color="secondary" style={styles.workoutPreviewText} numberOfLines={1}>
                                 {w.previewExercises}
                               </Text>
@@ -735,6 +747,43 @@ export const WorkoutsScreen: React.FC = () => {
                               </Text>
                             </Pressable>
                           </View>
+
+                          {/* Resumo do treino: "N séries · ~X min" */}
+                          <View style={styles.workoutStatsRow}>
+                            <Text variant="labelSmall" style={styles.workoutStatsBold}>
+                              {w.summaryText || `${w.totalSets} ${w.totalSets === 1 ? 'série' : 'séries'} · ~${w.estimatedDurationMin} min`}
+                            </Text>
+                            {w.exerciseCount > 0 && (
+                              <>
+                                <Text variant="labelSmall" color="secondary">
+                                  •
+                                </Text>
+                                <Text variant="labelSmall" color="secondary">
+                                  {`${w.exerciseCount} ${w.exerciseCount === 1 ? 'exercício' : 'exercícios'}`}
+                                </Text>
+                              </>
+                            )}
+                          </View>
+
+                          {/* Lista resumida de exercícios: Nome — A + N séries */}
+                          {w.exercises && w.exercises.length > 0 ? (
+                            <View style={styles.exerciseSummaryList}>
+                              {w.exercises.slice(0, 3).map((ex, exIdx) => (
+                                <Text key={exIdx} variant="bodySmall" color="secondary" style={styles.workoutPreviewText} numberOfLines={1}>
+                                  {ex.itemText}
+                                </Text>
+                              ))}
+                              {w.exercises.length > 3 && (
+                                <Text variant="labelSmall" color="secondary" style={styles.extraExercisesText}>
+                                  {`+${w.exercises.length - 3} ${w.exercises.length - 3 === 1 ? 'exercício' : 'exercícios'}`}
+                                </Text>
+                              )}
+                            </View>
+                          ) : w.previewExercises ? (
+                            <Text variant="bodySmall" color="secondary" style={styles.workoutPreviewText} numberOfLines={1}>
+                              {w.previewExercises}
+                            </Text>
+                          ) : null}
                         </View>
                       ))}
 
@@ -1197,6 +1246,16 @@ const styles = StyleSheet.create({
   workoutStatsBold: {
     color: colors.onSurface,
     fontWeight: '600',
+  },
+  exerciseSummaryList: {
+    gap: 3,
+    marginTop: 2,
+  },
+  extraExercisesText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 2,
   },
   workoutPreviewText: {
     fontStyle: 'italic',
