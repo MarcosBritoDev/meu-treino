@@ -163,7 +163,7 @@ export const ActiveSessionScreen: React.FC = () => {
   const [numberModalCallback, setNumberModalCallback] = useState<(val: number) => void>(() => () => {});
 
   // Linha de RPE aberta para a série selecionada
-  const [activeRpeSetId, setActiveRpeSetId] = useState<string | null>(null);
+
 
   // Sheet de Adicionar Série (SetTypeSheet com 6 opções)
   const [setTypeSheetVisible, setSetTypeSheetVisible] = useState(false);
@@ -526,7 +526,6 @@ export const ActiveSessionScreen: React.FC = () => {
     if (isAlreadyCompleted) {
       // Desmarca a série
       triggerHaptic('light');
-      if (activeRpeSetId === setItem.id) setActiveRpeSetId(null);
       rawDb.runSync(
         `UPDATE sets SET completed_at = NULL, is_pr_weight = 0, is_pr_volume = 0 WHERE id = ?`,
         [setItem.id]
@@ -620,8 +619,6 @@ export const ActiveSessionScreen: React.FC = () => {
             : ex
         )
       );
-
-      setActiveRpeSetId(null);
 
       // Dispara o cronômetro de descanso: set.rest_s ?? session_exercise.rest_s ?? defaultRestFor(set.type)
       const restTime = setItem.restS ?? exercise.restS ?? defaultRestFor(setItem.type);

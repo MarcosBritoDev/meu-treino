@@ -24,12 +24,10 @@ import {
 import { C, F } from './tokens';
 import { GRID } from './grid';
 import {
-  RPE_OPTIONS,
   Unit,
   SetType,
   RepsMode,
   EffortMode,
-  formatRpe,
   formatWeight,
   rowStates,
   setLabels,
@@ -104,15 +102,11 @@ export interface SetTableProps {
   // Props do modo ativo / compartilhadas
   previous?: (PreviousVM | null)[];
   targets?: (TargetVM | null)[];
-  openRpeId?: string | null;
   onToggle?: (setId: string) => void;
   onEditWeight?: (setId: string) => void;
   onEditReps?: (setId: string) => void;
   onActiveChange?: (setId: string, field: 'weight' | 'reps', value: any) => void;
   onOpenMenu?: (setId: string) => void;
-  onToggleRpe?: (setId: string) => void;
-  onCloseRpe?: () => void;
-  onChangeRpe?: (setId: string, rpe: number) => void;
   onAddSet?: () => void;
   onSwapExercise?: () => void;
   onOpenExerciseOptions?: () => void;
@@ -633,57 +627,6 @@ const SetRow = memo(function SetRow({
   );
 });
 
-function RpeStrip({
-  value,
-  onChange,
-  onClose,
-}: {
-  value: number | null;
-  onChange: (v: number) => void;
-  onClose: () => void;
-}) {
-  return (
-    <View style={s.rpeWrap}>
-      <Pressable onPress={onClose} style={s.rpeLabelButton} hitSlop={8}>
-        <Text style={s.rpeLabel}>RPE</Text>
-      </Pressable>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={s.rpeScroll}
-        style={{ flex: 1 }}
-      >
-        {RPE_OPTIONS.map((v) => {
-          const sel = value === v;
-          return (
-            <Pressable
-              key={v}
-              onPress={() => onChange(v)}
-              style={[s.rpeChip, sel && s.rpeChipSel]}
-              accessibilityRole="button"
-              accessibilityState={{ selected: sel }}
-              accessibilityLabel={`RPE ${formatRpe(v)}`}
-            >
-              <Text style={[s.rpeChipText, sel && s.rpeChipTextSel]}>
-                {formatRpe(v)}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-      <Pressable
-        onPress={onClose}
-        style={s.rpeCloseBtn}
-        hitSlop={12}
-        accessibilityRole="button"
-        accessibilityLabel="Fechar faixa de RPE"
-      >
-        <X size={18} color={C.muted} strokeWidth={2.4} />
-      </Pressable>
-    </View>
-  );
-}
-
 const s = StyleSheet.create({
   tableContainer: {
     width: '100%',
@@ -1182,59 +1125,5 @@ const s = StyleSheet.create({
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-
-  rpeWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingLeft: 10,
-    paddingRight: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    borderRadius: 8,
-    marginTop: 4,
-  },
-  rpeLabelButton: {
-    paddingVertical: 4,
-    paddingRight: 6,
-  },
-  rpeLabel: {
-    fontFamily: F.bodyMedium,
-    fontSize: 11,
-    color: C.muted,
-  },
-  rpeScroll: {
-    gap: 6,
-    paddingRight: 8,
-  },
-  rpeChip: {
-    height: 32,
-    minWidth: 40,
-    paddingHorizontal: 8,
-    borderRadius: 16,
-    backgroundColor: '#242426',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rpeChipSel: {
-    backgroundColor: '#F5A623',
-  },
-  rpeChipText: {
-    fontFamily: F.bodyMedium,
-    fontSize: 12,
-    color: '#A1A1A6',
-    fontVariant: ['tabular-nums'],
-  },
-  rpeChipTextSel: {
-    color: '#000000',
-    fontWeight: '700',
-  },
-  rpeCloseBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 4,
   },
 });
