@@ -5,6 +5,7 @@ export type MuscleGroup = 'Peito' | 'Costas' | 'Pernas' | 'Ombros' | 'Braços' |
 export type ExerciseKind = 'composto' | 'isolamento';
 
 export type WeightUnit = 'kg' | 'lb';
+export type Unit = 'kg' | 'lb';
 
 export interface SetData {
   weight: number;

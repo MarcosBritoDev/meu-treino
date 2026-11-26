@@ -18,6 +18,7 @@ export * from './ExerciseTargetSheet';
 export * from './StyledDropdown';
 export * from './SetTypeSheet';
 export * from './SetEditSheet';
+export * from './ExerciseCard';
 export * from './session/SetTable';
 export * from './illustrations/EmptySearchIllustration';
 export * from './illustrations/EmptyWorkoutsIllustration';

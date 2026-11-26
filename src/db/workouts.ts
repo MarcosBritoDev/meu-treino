@@ -4,10 +4,26 @@ import {
   formatTempoRelativoLog,
   calculateNextScheduledWorkoutIndex,
 } from '../domain/workouts';
-import { PlannedSet, SetType, RepsMode, EffortMode } from '../domain/types';
+import { PlannedSet, SetType, RepsMode, EffortMode, Unit } from '../domain/types';
 
 export { formatTempoRelativoLog, calculateNextScheduledWorkoutIndex };
-export type { PlannedSet, SetType, RepsMode, EffortMode };
+export type { PlannedSet, SetType, RepsMode, EffortMode, Unit };
+
+/**
+ * Consulta a unidade de peso configurada pelo usuário ('kg' | 'lb').
+ */
+export function getUserUnit(): Unit {
+  try {
+    const rawDb = getExpoDb();
+    const rows = rawDb.getAllSync<{ unit: string }>('SELECT unit FROM settings WHERE id = 1 LIMIT 1');
+    if (rows.length > 0 && (rows[0].unit === 'lb' || rows[0].unit === 'kg')) {
+      return rows[0].unit as Unit;
+    }
+  } catch {
+    // fallback seguro
+  }
+  return 'kg';
+}
 
 export interface WorkoutItemDetail {
   id: string;
@@ -1181,7 +1197,7 @@ export function getWorkoutExerciseSets(workoutExerciseId: string): PlannedSet[] 
  */
 export function saveWorkoutExerciseSets(
   workoutExerciseId: string,
-  sets: Array<Omit<PlannedSet, 'position'> | PlannedSet>
+  sets: Array<Omit<PlannedSet, 'position'> | PlannedSet | any>
 ): void {
   const rawDb = getExpoDb();
   rawDb.runSync(`DELETE FROM workout_exercise_sets WHERE workout_exercise_id = ?`, [workoutExerciseId]);
@@ -1202,14 +1218,14 @@ export function saveWorkoutExerciseSets(
         workoutExerciseId,
         i, // Reindexação contígua garantida 0..N-1
         s.type || 'normal',
-        s.repsMode || 'reps_range',
-        s.minReps ?? null,
-        s.maxReps ?? null,
-        s.effortMode || 'none',
-        s.effortValue ?? null,
-        s.effortValueMax ?? null,
-        s.effortRefExerciseId ?? null,
-        s.restS ?? null,
+        s.repsMode || s.reps_mode || 'reps_range',
+        s.minReps ?? s.min_reps ?? null,
+        s.maxReps ?? s.max_reps ?? null,
+        s.effortMode || s.effort_mode || 'none',
+        s.effortValue ?? s.effort_value ?? null,
+        s.effortValueMax ?? s.effort_value_max ?? null,
+        s.effortRefExerciseId ?? s.effort_ref_exercise_id ?? null,
+        s.restS ?? s.rest_s ?? null,
       ]
     );
   }

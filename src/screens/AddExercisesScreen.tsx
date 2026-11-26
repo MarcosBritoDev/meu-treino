@@ -46,6 +46,7 @@ export const AddExercisesScreen: React.FC = () => {
   const workoutId = route.params?.workoutId;
   const sessionId = route.params?.sessionId;
   const fromScreen = route.params?.fromScreen;
+  const replaceTargetWorkoutExerciseId = route.params?.replaceTargetWorkoutExerciseId;
   const existingExerciseIds = useMemo(
     () => new Set(route.params?.existingExerciseIds || []),
     [route.params?.existingExerciseIds]
@@ -117,6 +118,10 @@ export const AddExercisesScreen: React.FC = () => {
     }
 
     triggerHaptic('selection');
+    if (replaceTargetWorkoutExerciseId) {
+      setSelectedIds([exerciseId]);
+      return;
+    }
     setSelectedIds((prev) => {
       if (prev.includes(exerciseId)) {
         return prev.filter((id) => id !== exerciseId);
@@ -188,6 +193,17 @@ export const AddExercisesScreen: React.FC = () => {
     }
 
     if (workoutId) {
+      if (replaceTargetWorkoutExerciseId && selectedObjects.length > 0) {
+        navigation.navigate('EditWorkout', {
+          workoutId,
+          replacedExercise: {
+            targetWorkoutExerciseId: replaceTargetWorkoutExerciseId,
+            newExercise: selectedObjects[0],
+          },
+        });
+        return;
+      }
+
       navigation.navigate('EditWorkout', {
         workoutId,
         addedExercises: selectedObjects,
@@ -229,7 +245,7 @@ export const AddExercisesScreen: React.FC = () => {
           <ArrowLeft size={22} color={colors.onSurface} strokeWidth={2} />
         </Pressable>
         <Text variant="headline" style={styles.headerTitle}>
-          Adicionar exercícios
+          {replaceTargetWorkoutExerciseId ? 'Substituir exercício' : 'Adicionar exercícios'}
         </Text>
         <View style={styles.headerSpacer} />
       </View>
@@ -507,11 +523,17 @@ export const AddExercisesScreen: React.FC = () => {
               onPress={handleConfirmAdd}
               style={styles.confirmAddButton}
               accessibilityRole="button"
-              accessibilityLabel={`Adicionar ${selectedCount} exercícios ao treino`}
+              accessibilityLabel={
+                replaceTargetWorkoutExerciseId
+                  ? 'Substituir exercício selecionado'
+                  : `Adicionar ${selectedCount} exercícios ao treino`
+              }
             >
               <Plus size={18} color={colors.onPrimary} strokeWidth={2.4} />
               <Text variant="bodyMedium" style={styles.confirmAddButtonText}>
-                Adicionar ao treino ({selectedCount})
+                {replaceTargetWorkoutExerciseId
+                  ? 'Substituir exercício'
+                  : `Adicionar ao treino (${selectedCount})`}
               </Text>
             </Pressable>
           </View>

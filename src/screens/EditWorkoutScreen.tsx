@@ -5,35 +5,40 @@ import {
   Pressable,
   TextInput,
   ScrollView,
-  Platform,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
   ArrowLeft,
-  Edit2,
+  ChevronLeft,
+  Play,
+  Save,
   Plus,
-  Trash2,
-  Check,
-  Clock,
-  GripVertical,
-  X,
-  CheckCircle,
-  Sliders,
 } from 'lucide-react-native';
 import { RootStackParamList } from '../navigation/types';
-import { colors, radii, spacing, fontFamilies } from '../theme';
+import { colors } from '../theme';
 import { Text } from '../ui/Text';
-import { ConfirmModal } from '../ui/ConfirmModal';
 import { Toast } from '../ui/Toast';
-import { ExerciseTargetSheet } from '../ui/ExerciseTargetSheet';
-import { ReorderableExerciseList } from '../ui/ReorderableExerciseList';
+import { ConfirmModal } from '../ui/ConfirmModal';
+import { ExerciseCard } from '../ui/ExerciseCard';
+import { SetTypeSheet, SetTypeOptionKey } from '../ui/SetTypeSheet';
+import { SetEditSheet } from '../ui/SetEditSheet';
+import { SetMenuAction } from '../ui/session/SetTable';
 import { triggerHaptic } from '../ui/haptics';
 import { estimarDuracao, formatarDuracao } from '../domain/duration';
 import {
+  Unit,
+  PlannedSet,
+  sanitizePlannedSet,
+  serializeExercisesForDirtyCheck,
+} from '../domain/sessionMath';
+import {
   getWorkoutForEdit,
   saveWorkout,
+  startWorkoutSession,
+  getUserUnit,
   WorkoutForEdit,
   WorkoutExerciseForEdit,
 } from '../db/workouts';
@@ -41,7 +46,7 @@ import {
 type RouteParams = RouteProp<RootStackParamList, 'EditWorkout'>;
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-const REST_CHIPS = [60, 90, 120, 180] as const;
+export const serializeExercises = serializeExercisesForDirtyCheck;
 
 export const EditWorkoutScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
@@ -49,14 +54,13 @@ export const EditWorkoutScreen: React.FC = () => {
   const workoutId = route.params?.workoutId;
 
   const [data, setData] = useState<WorkoutForEdit | null>(null);
-
-  // Estados de Rascunho Local
   const [name, setName] = useState('');
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [isActive, setIsActive] = useState(true);
   const [exercises, setExercises] = useState<WorkoutExerciseForEdit[]>([]);
+  const [unit, setUnit] = useState<Unit>('kg');
 
-  // Estados Iniciais para comparação de alterações (Dirty State)
+  // Estado inicial para detecção de alterações pendentes (Dirty State)
   const [initialState, setInitialState] = useState<{
     name: string;
     groupId: string | null;
@@ -64,28 +68,27 @@ export const EditWorkoutScreen: React.FC = () => {
     exercisesJson: string;
   } | null>(null);
 
-  // Modal de descarte de alterações
+  // Sheets e Modais
+  const [addSetExerciseId, setAddSetExerciseId] = useState<string | null>(null);
+  const [editingTarget, setEditingTarget] = useState<{
+    exercise: WorkoutExerciseForEdit;
+    set: any;
+    badgeLabel: string;
+  } | null>(null);
+  const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [discardModalVisible, setDiscardModalVisible] = useState(false);
 
-  // Sheet 3.6: Alvo do Exercício
-  const [targetModalVisible, setTargetModalVisible] = useState(false);
-  const [targetIndex, setTargetIndex] = useState<number | null>(null);
-  const [targetSets, setTargetSets] = useState(3);
-  const [targetRepMin, setTargetRepMin] = useState(8);
-  const [targetRepMax, setTargetRepMax] = useState(12);
-  const [targetRestS, setTargetRestS] = useState(90);
-
-  // Toast de Feedback
+  // Toast
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
-  // Estado de arrasto ativo (desabilita scroll do ScrollView para evitar conflito de gestos)
-  const [isDragging, setIsDragging] = useState(false);
-
-  // Carrega dados da ficha
+  // Carrega dados da ficha e configurações
   const loadWorkout = useCallback(() => {
     if (!workoutId) return;
     try {
+      const currentUnit = getUserUnit();
+      setUnit(currentUnit);
+
       const result = getWorkoutForEdit(workoutId);
       if (result) {
         setData(result);
@@ -98,15 +101,7 @@ export const EditWorkoutScreen: React.FC = () => {
           name: result.name,
           groupId: result.groupId,
           isActive: result.isActive,
-          exercisesJson: JSON.stringify(
-            result.exercises.map((e) => ({
-              id: e.exerciseId,
-              s: e.targetSets,
-              min: e.repMin,
-              max: e.repMax,
-              r: e.restS,
-            }))
-          ),
+          exercisesJson: serializeExercises(result.exercises),
         });
       }
     } catch (err) {
@@ -118,25 +113,49 @@ export const EditWorkoutScreen: React.FC = () => {
     loadWorkout();
   }, [loadWorkout]);
 
-  // Recebe exercícios selecionados na tela modal 3.7 Adicionar exercícios
+  // Recebe exercícios adicionados da AddExercisesScreen (gera 3 séries normais por padrão)
   useEffect(() => {
     const newItems = route.params?.addedExercises;
     if (newItems && newItems.length > 0) {
       setExercises((prev) => {
         const nextPos = prev.length;
-        const mapped: WorkoutExerciseForEdit[] = newItems.map((item, idx) => ({
-          id: `new_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
-          exerciseId: item.exerciseId,
-          name: item.name,
-          muscleGroup: item.muscleGroup,
-          equipment: item.equipment,
-          position: nextPos + idx,
-          targetSets: 3,
-          repMin: 8,
-          repMax: 12,
-          restS: item.defaultRestS || 90,
-          note: null,
-        }));
+        const mapped: WorkoutExerciseForEdit[] = newItems.map((item, idx) => {
+          const newExId = `new_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`;
+          const repMin = 8;
+          const repMax = 12;
+          const restS = item.defaultRestS || 90;
+
+          // Cria automaticamente 3 séries normais em workout_exercise_sets
+          const defaultSets: PlannedSet[] = [0, 1, 2].map((sIdx) => ({
+            id: `wes_${newExId}_${sIdx}`,
+            workoutExerciseId: newExId,
+            position: sIdx,
+            type: 'normal',
+            repsMode: 'reps_range',
+            minReps: repMin,
+            maxReps: repMax,
+            effortMode: 'none',
+            effortValue: null,
+            effortValueMax: null,
+            effortRefExerciseId: null,
+            restS: null,
+          }));
+
+          return {
+            id: newExId,
+            exerciseId: item.exerciseId,
+            name: item.name,
+            muscleGroup: item.muscleGroup,
+            equipment: item.equipment,
+            position: nextPos + idx,
+            targetSets: 3,
+            repMin,
+            repMax,
+            restS,
+            note: null,
+            sets: defaultSets,
+          };
+        });
         return [...prev, ...mapped];
       });
       triggerHaptic('success');
@@ -150,28 +169,79 @@ export const EditWorkoutScreen: React.FC = () => {
     }
   }, [route.params?.addedExercises, navigation]);
 
-  // Verifica se há alterações pendentes
+  // Recebe exercício substituído (mantém as séries planejadas intactas!)
+  useEffect(() => {
+    const replaced = route.params?.replacedExercise;
+    if (replaced) {
+      const { targetWorkoutExerciseId, newExercise } = replaced;
+      setExercises((prev) =>
+        prev.map((ex) => {
+          if (ex.id !== targetWorkoutExerciseId) return ex;
+          return {
+            ...ex,
+            exerciseId: newExercise.exerciseId,
+            name: newExercise.name,
+            muscleGroup: newExercise.muscleGroup,
+            equipment: newExercise.equipment,
+            // Séries planejadas intactas
+          };
+        })
+      );
+      triggerHaptic('success');
+      setToastMessage(`Substituído por ${newExercise.name}`);
+      setToastVisible(true);
+      navigation.setParams({ replacedExercise: undefined });
+    }
+  }, [route.params?.replacedExercise, navigation]);
+
+  // Verificação de alterações não salvas (Dirty State)
   const isDirty = useMemo(() => {
     if (!initialState) return false;
-    const currentExercisesJson = JSON.stringify(
-      exercises.map((e) => ({
-        id: e.exerciseId,
-        s: e.targetSets,
-        min: e.repMin,
-        max: e.repMax,
-        r: e.restS,
-      }))
-    );
-
     return (
       name.trim() !== initialState.name.trim() ||
       selectedGroupId !== initialState.groupId ||
       isActive !== initialState.isActive ||
-      currentExercisesJson !== initialState.exercisesJson
+      serializeExercises(exercises) !== initialState.exercisesJson
     );
   }, [name, selectedGroupId, isActive, exercises, initialState]);
 
-  // Voltar com verificação de rascunho
+  // Cálculos do resumo do rodapé (Séries e Duração Estimada)
+  const totalSets = useMemo(() => {
+    return exercises.reduce((acc, ex) => acc + (ex.sets?.length ?? ex.targetSets ?? 0), 0);
+  }, [exercises]);
+
+  const approxMin = useMemo(() => {
+    const totalSecs = estimarDuracao({
+      exercises: exercises.map((e) => ({
+        targetSets: e.sets?.length ?? e.targetSets ?? 3,
+        restS: e.restS ?? 90,
+      })),
+    });
+    return Math.max(1, Math.round(totalSecs / 60));
+  }, [exercises]);
+
+  // Iniciar sessão
+  const startSessionAndNavigate = () => {
+    if (!workoutId) return;
+    try {
+      const sessionId = startWorkoutSession(workoutId, name.trim());
+      navigation.navigate('ActiveSession', { sessionId, workoutId });
+    } catch (err) {
+      console.warn('Erro ao iniciar sessão:', err);
+    }
+  };
+
+  const handleStartClick = () => {
+    if (isDirty) {
+      triggerHaptic('warning');
+      setShowUnsavedModal(true);
+    } else {
+      triggerHaptic('light');
+      startSessionAndNavigate();
+    }
+  };
+
+  // Voltar
   const handleBack = () => {
     if (isDirty) {
       triggerHaptic('warning');
@@ -182,31 +252,8 @@ export const EditWorkoutScreen: React.FC = () => {
     }
   };
 
-  // Remover exercício da lista
-  const handleRemoveExercise = (index: number) => {
-    triggerHaptic('medium');
-    setExercises((prev) => prev.filter((_, i) => i !== index));
-    if (targetIndex === index) {
-      setTargetModalVisible(false);
-      setTargetIndex(null);
-    }
-  };
-
-  // Abrir Sheet 3.6 de Alvo do Exercício
-  const handleOpenTargetSheet = (index: number) => {
-    const ex = exercises[index];
-    if (!ex) return;
-    triggerHaptic('light');
-    setTargetIndex(index);
-    setTargetSets(ex.targetSets);
-    setTargetRepMin(ex.repMin);
-    setTargetRepMax(ex.repMax);
-    setTargetRestS(ex.restS);
-    setTargetModalVisible(true);
-  };
-
   // Salvar ficha completa
-  const handleSave = () => {
+  const handleSaveWorkout = () => {
     if (!workoutId || !name.trim()) {
       triggerHaptic('error');
       return;
@@ -216,38 +263,260 @@ export const EditWorkoutScreen: React.FC = () => {
         name: name.trim(),
         groupId: selectedGroupId,
         isActive,
-        exercises,
+        exercises: exercises.map((ex, idx) => ({
+          ...ex,
+          position: idx,
+          sets: (ex.sets || []).map((s, sIdx) => ({
+            ...s,
+            position: sIdx,
+          })),
+        })),
       });
+
+      setInitialState({
+        name: name.trim(),
+        groupId: selectedGroupId,
+        isActive,
+        exercisesJson: serializeExercises(exercises),
+      });
+
       triggerHaptic('success');
-      navigation.goBack();
+      setToastMessage('Treino salvo');
+      setToastVisible(true);
     } catch (err) {
       console.warn('Erro ao salvar treino:', err);
+      triggerHaptic('error');
+      setToastMessage('Erro ao salvar treino');
+      setToastVisible(true);
     }
   };
 
-  // Cálculos dinâmicos de resumo (Volume e Duração Estimada)
-  const totalVolumeSets = useMemo(() => {
-    return exercises.reduce((acc, ex) => acc + (Number(ex.targetSets) || 0), 0);
-  }, [exercises]);
+  // Alternar descanso de um exercício (60/90/120/180s)
+  const handleCycleRest = (exerciseId: string) => {
+    setExercises((prev) =>
+      prev.map((ex) => {
+        if (ex.id !== exerciseId) return ex;
+        const currentRest = ex.restS ?? 90;
+        const presets = [60, 90, 120, 180];
+        const idx = presets.indexOf(currentRest);
+        const nextRest = idx >= 0 ? presets[(idx + 1) % presets.length] : 60;
+        return { ...ex, restS: nextRest };
+      })
+    );
+  };
 
-  const estimatedDurationText = useMemo(() => {
-    const totalSecs = estimarDuracao({
-      exercises: exercises.map((e) => ({
-        targetSets: e.targetSets,
-        restS: e.restS,
-      })),
+  // Atualizar nota inline
+  const handleUpdateNote = (exerciseId: string, note: string) => {
+    setExercises((prev) =>
+      prev.map((ex) => (ex.id === exerciseId ? { ...ex, note } : ex))
+    );
+  };
+
+  // Reordenação de exercícios
+  const handleMoveExerciseUp = (exerciseId: string) => {
+    setExercises((prev) => {
+      const idx = prev.findIndex((e) => e.id === exerciseId);
+      if (idx <= 0) return prev;
+      const copy = [...prev];
+      const temp = copy[idx];
+      copy[idx] = copy[idx - 1];
+      copy[idx - 1] = temp;
+      return copy.map((e, p) => ({ ...e, position: p }));
     });
-    return formatarDuracao(totalSecs);
-  }, [exercises]);
+  };
+
+  const handleMoveExerciseDown = (exerciseId: string) => {
+    setExercises((prev) => {
+      const idx = prev.findIndex((e) => e.id === exerciseId);
+      if (idx < 0 || idx >= prev.length - 1) return prev;
+      const copy = [...prev];
+      const temp = copy[idx];
+      copy[idx] = copy[idx + 1];
+      copy[idx + 1] = temp;
+      return copy.map((e, p) => ({ ...e, position: p }));
+    });
+  };
+
+  // Remover exercício
+  const handleRemoveExercise = (exerciseId: string) => {
+    setExercises((prev) =>
+      prev.filter((e) => e.id !== exerciseId).map((e, p) => ({ ...e, position: p }))
+    );
+  };
+
+  // Substituir exercício
+  const handleSwapExercise = (workoutExerciseId: string) => {
+    navigation.navigate('AddExercises', {
+      workoutId,
+      existingExerciseIds: exercises.map((e) => e.exerciseId),
+      fromScreen: 'EditWorkout',
+      replaceTargetWorkoutExerciseId: workoutExerciseId,
+    });
+  };
+
+  // Adicionar série via SetTypeSheet (1 toque)
+  const handleAddSetOption = (optionKey: SetTypeOptionKey) => {
+    if (!addSetExerciseId) return;
+
+    const targetEx = exercises.find((e) => e.id === addSetExerciseId);
+    if (!targetEx) return;
+
+    triggerHaptic('light');
+    const newId = `wes_new_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const currentSets = targetEx.sets || [];
+    const position = currentSets.length;
+
+    let newSet: PlannedSet = {
+      id: newId,
+      workoutExerciseId: targetEx.id,
+      position,
+      type: 'normal',
+      repsMode: 'reps_range',
+      minReps: targetEx.repMin || 8,
+      maxReps: targetEx.repMax || 10,
+      effortMode: 'none',
+      effortValue: null,
+      effortValueMax: null,
+      effortRefExerciseId: null,
+      restS: null,
+    };
+
+    if (optionKey === 'warmup') {
+      newSet.type = 'warmup';
+      newSet.repsMode = 'reps_range';
+      newSet.minReps = 8;
+      newSet.maxReps = 12;
+      newSet.effortMode = 'none';
+      newSet.effortValue = null;
+    } else if (optionKey === 'rpe') {
+      newSet.type = 'normal';
+      newSet.effortMode = 'rpe';
+      newSet.effortValue = 8;
+    } else if (optionKey === 'rir') {
+      newSet.type = 'normal';
+      newSet.effortMode = 'rir';
+      newSet.effortValue = 2;
+    } else if (optionKey === 'failure') {
+      newSet.type = 'failure';
+      newSet.repsMode = 'reps_max';
+      newSet.minReps = null;
+      newSet.maxReps = null;
+      newSet.effortMode = 'none';
+      newSet.effortValue = null;
+    } else if (optionKey === 'drop') {
+      newSet.type = 'drop';
+      newSet.repsMode = 'reps_max';
+      newSet.minReps = null;
+      newSet.maxReps = null;
+      newSet.effortMode = 'none';
+      newSet.effortValue = null;
+    }
+
+    newSet = sanitizePlannedSet(newSet);
+
+    setExercises((prev) =>
+      prev.map((ex) => {
+        if (ex.id !== addSetExerciseId) return ex;
+        const updatedSets = [...(ex.sets || []), newSet];
+        return {
+          ...ex,
+          targetSets: updatedSets.length,
+          sets: updatedSets,
+        };
+      })
+    );
+
+    setAddSetExerciseId(null);
+    setToastMessage('Série adicionada');
+    setToastVisible(true);
+  };
+
+  // Ações no menu contextual de cada série (⋮)
+  const handleSetMenuAction = (
+    exerciseId: string,
+    action: SetMenuAction,
+    setId: string
+  ) => {
+    triggerHaptic('light');
+    setExercises((prev) =>
+      prev.map((ex) => {
+        if (ex.id !== exerciseId) return ex;
+        const sets = [...(ex.sets || [])];
+        const idx = sets.findIndex((s) => s.id === setId);
+        if (idx === -1) return ex;
+
+        if (action === 'duplicate') {
+          const original = sets[idx];
+          const cloned: PlannedSet = {
+            ...original,
+            id: `wes_new_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          };
+          sets.splice(idx + 1, 0, cloned);
+        } else if (action === 'up' && idx > 0) {
+          const temp = sets[idx];
+          sets[idx] = sets[idx - 1];
+          sets[idx - 1] = temp;
+        } else if (action === 'down' && idx < sets.length - 1) {
+          const temp = sets[idx];
+          sets[idx] = sets[idx + 1];
+          sets[idx + 1] = temp;
+        } else if (action === 'remove') {
+          sets.splice(idx, 1);
+        }
+
+        const reindexed = sets.map((s, pIdx) => ({ ...s, position: pIdx }));
+        return { ...ex, targetSets: reindexed.length, sets: reindexed };
+      })
+    );
+  };
+
+  // Edição detalhada via SetEditSheet
+  const handleApplySetEdit = (updatedSet: any) => {
+    if (!editingTarget) return;
+    triggerHaptic('success');
+    const targetExId = editingTarget.exercise.id;
+    const targetSetId = editingTarget.set.id;
+
+    setExercises((prev) =>
+      prev.map((ex) => {
+        if (ex.id !== targetExId) return ex;
+        const updatedSets = (ex.sets || []).map((s) => {
+          if (s.id !== targetSetId) return s;
+          return sanitizePlannedSet({
+            ...s,
+            ...updatedSet,
+          });
+        });
+        return { ...ex, sets: updatedSets };
+      })
+    );
+    setEditingTarget(null);
+  };
+
+  const handleRemoveSetFromSheet = (setId: string) => {
+    if (!editingTarget) return;
+    triggerHaptic('medium');
+    const targetExId = editingTarget.exercise.id;
+
+    setExercises((prev) =>
+      prev.map((ex) => {
+        if (ex.id !== targetExId) return ex;
+        const filtered = (ex.sets || []).filter((s) => s.id !== setId);
+        const reindexed = filtered.map((s, idx) => ({ ...s, position: idx }));
+        return { ...ex, targetSets: reindexed.length, sets: reindexed };
+      })
+    );
+    setEditingTarget(null);
+  };
 
   if (!workoutId || !data) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
           <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-            <ArrowLeft size={22} color={colors.onSurface} strokeWidth={2} />
+            <ArrowLeft size={22} color="#FFFFFF" strokeWidth={2} />
           </Pressable>
-          <Text variant="headline" style={styles.headerTitle}>
+          <Text variant="headline" style={styles.headerTitleFallback}>
             Editar treino
           </Text>
         </View>
@@ -260,17 +529,9 @@ export const EditWorkoutScreen: React.FC = () => {
     );
   }
 
-  // Lista de grupos para chips de divisão
-  const groupChips = [
-    ...data.allGroups.map((g) => ({ id: g.id, name: g.name })),
-    { id: null, name: 'Personalizada' },
-  ];
-
-  const currentExerciseForTarget = targetIndex !== null ? exercises[targetIndex] : null;
-
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* 1. CABEÇALHO DA TELA */}
+      {/* 1. CABEÇALHO DA PRÉVIA */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Pressable
@@ -279,269 +540,230 @@ export const EditWorkoutScreen: React.FC = () => {
             accessibilityRole="button"
             accessibilityLabel="Voltar"
           >
-            <ArrowLeft size={22} color={colors.onSurface} strokeWidth={2} />
+            <ChevronLeft size={24} color="#FFFFFF" strokeWidth={2} />
           </Pressable>
-          <Text variant="headline" style={styles.headerTitle}>
-            Editar treino
-          </Text>
+
+          <TextInput
+            value={name}
+            onChangeText={setName}
+            maxLength={40}
+            placeholder="Nome do treino"
+            placeholderTextColor="#636366"
+            style={styles.nameInputInline}
+            accessible={true}
+            accessibilityLabel="Nome do treino"
+          />
+
+          <View style={styles.codeBadge}>
+            <Text style={styles.codeBadgeText}>{data.code}</Text>
+          </View>
         </View>
 
-        {/* Indicador de Status / Switch Ativo */}
         <Pressable
-          onPress={() => {
-            triggerHaptic('light');
-            setIsActive(!isActive);
-          }}
-          style={[styles.statusBadge, isActive ? styles.statusBadgeActive : styles.statusBadgeArchived]}
-          accessibilityRole="switch"
-          accessibilityLabel={`Status do treino: ${isActive ? 'Ativo' : 'Arquivado'}`}
+          onPress={handleStartClick}
+          style={({ pressed }) => [
+            styles.startBtn,
+            pressed && { opacity: 0.8 },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Iniciar treino"
         >
-          <View style={[styles.statusDot, isActive ? styles.statusDotActive : styles.statusDotArchived]} />
-          <Text
-            variant="labelSmall"
-            style={[styles.statusText, isActive ? styles.statusTextActive : styles.statusTextArchived]}
-          >
-            {isActive ? 'Ativo' : 'Arquivado'}
-          </Text>
+          <Play size={12} fill="#F5C400" color="#F5C400" />
+          <Text style={styles.startBtnText}>Iniciar</Text>
         </Pressable>
       </View>
 
+      {/* 2. CONTEÚDO ROLÁVEL (LISTA DE EXERCÍCIOS) */}
       <ScrollView
         showsVerticalScrollIndicator={false}
-        scrollEnabled={!isDragging}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Linha do Código do Treino (ex.: Rotina A-1) */}
-        <View style={styles.codeRow}>
-          <Text variant="labelSmall" style={styles.codeText}>
-            Rotina {data.code}
-          </Text>
-        </View>
-
-        {/* CAMPO NOME DO TREINO */}
-        <View style={styles.fieldSection}>
-          <Text variant="labelSmall" style={styles.fieldLabel}>
-            Nome do treino
-          </Text>
-          <View style={styles.nameInputBox}>
-            <TextInput
-              style={styles.nameInput}
-              value={name}
-              onChangeText={setName}
-              maxLength={40}
-              placeholder="Ex: Push A"
-              placeholderTextColor={colors.textMuted}
-              accessible={true}
-              accessibilityLabel="Nome da ficha de treino"
-            />
-            <Edit2 size={18} color={colors.onSurfaceVariant} strokeWidth={1.8} />
-          </View>
-        </View>
-
-        {/* SEÇÃO DIVISÃO (OPCIONAL) */}
-        <View style={styles.fieldSection}>
-          <View style={styles.divisionHeader}>
-            <Text variant="labelSmall" style={styles.fieldLabel}>
-              Divisão (opcional)
-            </Text>
-            <Text variant="bodySmall" style={styles.currentDivisionName}>
-              {selectedGroupId
-                ? data.allGroups.find((g) => g.id === selectedGroupId)?.name || 'Personalizada'
-                : 'Personalizada'}
-            </Text>
-          </View>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.divisionScroll}
-          >
-            {groupChips.map((chip) => {
-              const isSelected = selectedGroupId === chip.id;
-              return (
-                <Pressable
-                  key={chip.name}
-                  onPress={() => {
-                    triggerHaptic('selection');
-                    setSelectedGroupId(chip.id);
-                  }}
-                  style={[
-                    styles.divisionChip,
-                    isSelected && styles.divisionChipSelected,
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Divisão ${chip.name}`}
-                >
-                  <Text
-                    variant="labelSmall"
-                    style={[
-                      styles.divisionChipText,
-                      isSelected && styles.divisionChipTextSelected,
-                    ]}
-                  >
-                    {chip.name}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        {/* SEÇÃO EXERCÍCIOS */}
-        <View style={styles.fieldSection}>
-          <View style={styles.exerciseSectionHeader}>
-            <View style={styles.exerciseTitleRow}>
-              <Text variant="headline" style={styles.exerciseSectionTitle}>
-                Exercícios
-              </Text>
-              <View style={styles.exerciseCountPill}>
-                <Text variant="labelSmall" style={styles.exerciseCountText}>
-                  {exercises.length}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.reorderHintRow}>
-              <Sliders size={14} color={colors.onSurfaceVariant} strokeWidth={1.8} />
-              <Text variant="bodySmall" style={styles.reorderHintText}>
-                Arraste para reordenar
-              </Text>
-            </View>
-          </View>
-
-          {/* LISTA DE EXERCÍCIOS REORDENÁVEIS (ARRASTAR E SOLTAR NATIVO) */}
-          <ReorderableExerciseList
-            exercises={exercises}
-            onReorder={(reordered) => setExercises(reordered)}
-            onPressItem={(index) => handleOpenTargetSheet(index)}
-            onDragStart={() => setIsDragging(true)}
-            onDragEnd={() => setIsDragging(false)}
+        {exercises.map((ex, idx) => (
+          <ExerciseCard
+            key={ex.id || `ex-${idx}`}
+            index={idx}
+            exercise={ex}
+            mode="preview"
+            unit={unit}
+            canMoveUp={idx > 0}
+            canMoveDown={idx < exercises.length - 1}
+            onCycleRest={handleCycleRest}
+            onUpdateNote={handleUpdateNote}
+            onOpenAddSet={(id) => setAddSetExerciseId(id)}
+            onSwapExercise={handleSwapExercise}
+            onRemoveExercise={handleRemoveExercise}
+            onMoveUp={handleMoveExerciseUp}
+            onMoveDown={handleMoveExerciseDown}
+            onRowClick={(exerciseObj, set, badgeLabel) =>
+              setEditingTarget({ exercise: exerciseObj, set, badgeLabel })
+            }
+            onMenuAction={handleSetMenuAction}
           />
+        ))}
 
-          {/* BOTÃO ADICIONAR EXERCÍCIO */}
-          <Pressable
-            onPress={() => {
-              triggerHaptic('light');
-              navigation.navigate('AddExercises', {
-                workoutId,
-                existingExerciseIds: exercises.map((e) => e.exerciseId),
-              });
-            }}
-            style={({ pressed }) => [
-              styles.addExerciseButton,
-              pressed && styles.addExerciseButtonPressed,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Adicionar exercício ao treino"
-          >
-            <Plus size={20} color={colors.primary} strokeWidth={2.4} />
-            <Text variant="bodyMedium" style={styles.addExerciseButtonText}>
-              Adicionar exercício
-            </Text>
-          </Pressable>
-        </View>
+        {/* BOTÃO + ADICIONAR EXERCÍCIO */}
+        <Pressable
+          onPress={() => {
+            triggerHaptic('light');
+            navigation.navigate('AddExercises', {
+              workoutId,
+              existingExerciseIds: exercises.map((e) => e.exerciseId),
+              fromScreen: 'EditWorkout',
+            });
+          }}
+          style={({ pressed }) => [
+            styles.addExerciseButton,
+            pressed && { opacity: 0.8 },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Adicionar exercício"
+        >
+          <Plus size={18} color="#FF6B57" strokeWidth={2.4} />
+          <Text style={styles.addExerciseButtonText}>Adicionar exercício</Text>
+        </Pressable>
       </ScrollView>
 
-      {/* 2. RODAPÉ FIXO COM RESUMO E SALVAR */}
-      <View style={styles.stickyBottomBar}>
-        <View style={styles.stickyMetricsContainer}>
-          <View style={styles.volumeRow}>
-            <Text variant="bodySmall" style={styles.metricLabel}>
-              Volume
-            </Text>
-            <Text variant="headline" style={styles.volumeValue}>
-              {totalVolumeSets} séries
-            </Text>
-          </View>
-          <View style={styles.durationRow}>
-            <Clock size={13} color={colors.onSurfaceVariant} strokeWidth={2} />
-            <Text variant="bodySmall" style={styles.durationValue}>
-              Tempo est. ~{estimatedDurationText}
-            </Text>
-          </View>
+      {/* 3. RODAPÉ FIXO (Modo Prévia) */}
+      <View style={styles.fixedFooter}>
+        <View style={styles.footerInfoRow}>
+          <Text style={styles.footerStatsText}>
+            <Text style={styles.footerStatsBold}>{totalSets} séries</Text> · ~{approxMin} min
+          </Text>
+
+          {isDirty && (
+            <View style={styles.unsavedIndicator}>
+              <View style={styles.unsavedDot} />
+              <Text style={styles.unsavedText}>Alterações não salvas</Text>
+            </View>
+          )}
         </View>
 
-        {/* Botão Salvar Treino (Coral, não âmbar!) */}
         <Pressable
-          onPress={handleSave}
-          disabled={!name.trim()}
+          onPress={handleSaveWorkout}
           style={({ pressed }) => [
             styles.saveButton,
-            !name.trim() && styles.saveButtonDisabled,
-            pressed && styles.saveButtonPressed,
+            pressed && { opacity: 0.85 },
           ]}
           accessibilityRole="button"
           accessibilityLabel="Salvar treino"
         >
-          <Check size={18} color={name.trim() ? colors.onPrimary : colors.textMuted} strokeWidth={2.6} />
-          <Text
-            variant="bodyMedium"
-            style={[
-              styles.saveButtonText,
-              !name.trim() && styles.saveButtonTextDisabled,
-            ]}
-          >
-            Salvar treino
-          </Text>
+          <Save size={16} color="#FFFFFF" strokeWidth={2} />
+          <Text style={styles.saveButtonText}>Salvar treino</Text>
         </Pressable>
       </View>
 
-      {/* 3. SHEET 3.6: ALVO DO EXERCÍCIO */}
-      <ExerciseTargetSheet
-        visible={targetModalVisible}
-        exerciseName={currentExerciseForTarget?.name || ''}
-        initialSets={currentExerciseForTarget?.targetSets ?? 4}
-        initialRepMin={currentExerciseForTarget?.repMin ?? 8}
-        initialRepMax={currentExerciseForTarget?.repMax ?? 10}
-        initialRestS={currentExerciseForTarget?.restS ?? 90}
-        onClose={() => {
-          setTargetModalVisible(false);
-          setTargetIndex(null);
-        }}
-        onApply={(targets) => {
-          if (targetIndex === null || !exercises[targetIndex]) return;
-          triggerHaptic('success');
-          setExercises((prev) => {
-            const updated = [...prev];
-            updated[targetIndex] = {
-              ...updated[targetIndex],
-              targetSets: targets.targetSets,
-              repMin: targets.repMin,
-              repMax: targets.repMax,
-              restS: targets.restS,
-            };
-            return updated;
-          });
-          setTargetModalVisible(false);
-          setTargetIndex(null);
-        }}
-        onRemove={() => {
-          if (targetIndex !== null) {
-            handleRemoveExercise(targetIndex);
-            setTargetModalVisible(false);
-            setTargetIndex(null);
-          }
-        }}
+      {/* SHEET: Adicionar série (6 opções) */}
+      <SetTypeSheet
+        visible={Boolean(addSetExerciseId)}
+        mode="preview"
+        unit={unit}
+        onClose={() => setAddSetExerciseId(null)}
+        onSelect={handleAddSetOption}
       />
 
-      {/* 4. MODAL DE CONFIRMAÇÃO DE DESCARTE DE ALTERAÇÕES */}
+      {/* SHEET: Editar série detalhada */}
+      <SetEditSheet
+        visible={Boolean(editingTarget)}
+        set={editingTarget?.set || null}
+        exercise={editingTarget?.exercise ? {
+          id: editingTarget.exercise.exerciseId,
+          name: editingTarget.exercise.name,
+          defaultRest: editingTarget.exercise.restS,
+        } : null}
+        badgeLabel={editingTarget?.badgeLabel || '1'}
+        unit={unit}
+        onClose={() => setEditingTarget(null)}
+        onApply={handleApplySetEdit}
+        onRemove={handleRemoveSetFromSheet}
+      />
+
+      {/* MODAL: "Salvar antes de iniciar?" */}
+      {showUnsavedModal && (
+        <Modal
+          transparent
+          visible={showUnsavedModal}
+          animationType="fade"
+          onRequestClose={() => setShowUnsavedModal(false)}
+        >
+          <Pressable
+            style={styles.modalOverlay}
+            onPress={() => setShowUnsavedModal(false)}
+          >
+            <Pressable
+              style={styles.unsavedModalCard}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <Text style={styles.unsavedModalTitle}>Salvar antes de iniciar?</Text>
+              <Text style={styles.unsavedModalDesc}>
+                Você fez alterações na prévia deste treino. Deseja salvar no planejamento antes de iniciar a sessão?
+              </Text>
+
+              <View style={styles.unsavedModalBtnList}>
+                <Pressable
+                  onPress={() => {
+                    handleSaveWorkout();
+                    setShowUnsavedModal(false);
+                    startSessionAndNavigate();
+                  }}
+                  style={({ pressed }) => [
+                    styles.modalPrimaryBtn,
+                    pressed && { opacity: 0.85 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Salvar e iniciar treino"
+                >
+                  <Text style={styles.modalPrimaryBtnText}>Salvar e iniciar</Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => {
+                    setShowUnsavedModal(false);
+                    startSessionAndNavigate();
+                  }}
+                  style={({ pressed }) => [
+                    styles.modalSecondaryBtn,
+                    pressed && { opacity: 0.85 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Iniciar sem salvar"
+                >
+                  <Text style={styles.modalSecondaryBtnText}>Iniciar sem salvar</Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => setShowUnsavedModal(false)}
+                  style={({ pressed }) => [
+                    styles.modalCancelBtn,
+                    pressed && { opacity: 0.6 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancelar"
+                >
+                  <Text style={styles.modalCancelBtnText}>Cancelar</Text>
+                </Pressable>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
+
+      {/* MODAL: Descartar alterações ao voltar */}
       <ConfirmModal
         visible={discardModalVisible}
         title="Descartar alterações?"
-        description="As alterações não salvas serão perdidas."
+        description="Você fez alterações na prévia deste treino que ainda não foram salvas. Deseja sair e descartar?"
         confirmLabel="Descartar"
         cancelLabel="Continuar editando"
-        isDanger={true}
+        isDanger
         onConfirm={() => {
           setDiscardModalVisible(false);
-          triggerHaptic('light');
           navigation.goBack();
         }}
         onCancel={() => setDiscardModalVisible(false)}
       />
 
-      {/* Toast Feedback */}
+      {/* FEEDBACK TOAST */}
       <Toast
         visible={toastVisible}
         message={toastMessage}
@@ -554,488 +776,216 @@ export const EditWorkoutScreen: React.FC = () => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.background, // #1A1715
+    backgroundColor: '#121212',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: colors.outlineVariant,
+    borderBottomColor: '#2C2C2E',
+    backgroundColor: '#121212',
   },
   headerLeft: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
+    marginRight: 8,
   },
   backButton: {
-    width: 38,
-    height: 38,
-    borderRadius: radii.sm,
-    backgroundColor: colors.surfaceContainer,
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: -4,
   },
-  headerTitle: {
-    fontFamily: fontFamilies.outfitBold,
-    fontSize: 20,
-    color: colors.onSurface,
+  headerTitleFallback: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+    marginLeft: 8,
   },
-  statusBadge: {
+  nameInputInline: {
+    flexShrink: 1,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    paddingVertical: 2,
+    paddingHorizontal: 0,
+    minWidth: 80,
+  },
+  codeBadge: {
+    backgroundColor: '#2C2C2E',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  codeBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#F5C400',
+  },
+  startBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    backgroundColor: '#2C2C2E',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: radii.pill,
-    backgroundColor: 'rgba(255, 122, 89, 0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 122, 89, 0.25)',
+    borderRadius: 8,
   },
-  statusBadgeActive: {
-    backgroundColor: 'rgba(123, 201, 143, 0.12)',
-    borderColor: 'rgba(123, 201, 143, 0.3)',
-  },
-  statusBadgeArchived: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  statusDotActive: {
-    backgroundColor: colors.success,
-  },
-  statusDotArchived: {
-    backgroundColor: colors.textMuted,
-  },
-  statusText: {
+  startBtnText: {
     fontSize: 12,
     fontWeight: '600',
-  },
-  statusTextActive: {
-    color: colors.success,
-  },
-  statusTextArchived: {
-    color: colors.textMuted,
+    color: '#FFFFFF',
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 110, // Espaço para a barra fixa inferior
-  },
-  codeRow: {
-    marginBottom: 12,
-  },
-  codeText: {
-    fontSize: 13,
-    color: colors.onSurfaceVariant,
-    fontFamily: fontFamilies.outfitSemiBold,
-    letterSpacing: 0.5,
-  },
-  fieldSection: {
-    marginBottom: 20,
-  },
-  fieldLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.onSurfaceVariant,
-    marginBottom: 6,
-  },
-  nameInputBox: {
-    backgroundColor: colors.surfaceContainerHigh, // #2D2925
-    borderRadius: 12,
-    height: 52,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  nameInput: {
-    flex: 1,
-    fontFamily: fontFamilies.outfitBold,
-    fontSize: 16,
-    color: colors.onSurface,
-  },
-  divisionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  currentDivisionName: {
-    fontSize: 12,
-    color: colors.primary,
-    fontWeight: '600',
-  },
-  divisionScroll: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingBottom: 2,
-  },
-  divisionChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: radii.sm,
-    backgroundColor: colors.surfaceContainerHigh,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  divisionChipSelected: {
-    backgroundColor: colors.primary,
-  },
-  divisionChipText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: colors.onSurfaceVariant,
-  },
-  divisionChipTextSelected: {
-    color: colors.onPrimary,
-    fontWeight: '700',
-  },
-  exerciseSectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  exerciseTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  exerciseSectionTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: colors.onSurface,
-  },
-  exerciseCountPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surfaceContainerHighest,
-  },
-  exerciseCountText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.onSurface,
-  },
-  reorderHintRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  reorderHintText: {
-    fontSize: 12,
-    color: colors.onSurfaceVariant,
+    padding: 14,
+    paddingBottom: 110,
   },
   addExerciseButton: {
-    marginTop: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
     paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: colors.surfaceContainerLow,
+    backgroundColor: '#1C1C1E',
     borderWidth: 1,
-    borderColor: colors.outlineVariant,
-  },
-  addExerciseButtonPressed: {
-    backgroundColor: colors.surfaceContainerHigh,
+    borderColor: '#2C2C2E',
+    borderStyle: 'dashed',
+    borderRadius: 14,
+    marginTop: 4,
   },
   addExerciseButtonText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
-    color: colors.primary,
+    color: '#FF6B57',
   },
-  stickyBottomBar: {
+  fixedFooter: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: colors.surfaceContainer,
+    backgroundColor: 'rgba(28, 28, 30, 0.96)',
     borderTopWidth: 1,
-    borderTopColor: colors.outlineVariant,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: Platform.OS === 'ios' ? 28 : 16,
+    borderTopColor: '#2C2C2E',
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 16,
+  },
+  footerInfoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 10,
-  },
-  stickyMetricsContainer: {
-    flexDirection: 'column',
-    gap: 2,
-  },
-  volumeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  metricLabel: {
-    fontSize: 12,
-    color: colors.onSurfaceVariant,
-  },
-  volumeValue: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.onSurface,
-  },
-  durationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  durationValue: {
-    fontSize: 12,
-    color: colors.onSurfaceVariant,
-  },
-  saveButton: {
-    backgroundColor: colors.primary, // CORAL
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: radii.pill,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  saveButtonDisabled: {
-    backgroundColor: colors.surfaceContainerHigh,
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  saveButtonPressed: {
-    backgroundColor: colors.accentPressed,
-  },
-  saveButtonText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.onPrimary,
-  },
-  saveButtonTextDisabled: {
-    color: colors.textMuted,
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: colors.overlay,
-    justifyContent: 'flex-end',
-  },
-  modalBackdrop: {
-    ...StyleSheet.absoluteFill,
-  },
-  targetSheetContainer: {
-    backgroundColor: colors.surfaceContainer, // #23201D
-    borderTopLeftRadius: radii.sheet,
-    borderTopRightRadius: radii.sheet,
-    padding: 20,
-    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
-    borderTopWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  sheetHandle: {
-    width: 44,
-    height: 5,
-    borderRadius: radii.pill,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    alignSelf: 'center',
-    marginBottom: 12,
-  },
-  targetSheetHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  targetHeaderLeft: {
-    flex: 1,
-    marginRight: 10,
-  },
-  targetExerciseTitle: {
-    fontFamily: fontFamilies.outfitBold,
-    fontSize: 18,
-    color: colors.onSurface,
-  },
-  targetSubtitle: {
-    fontSize: 12,
-    color: colors.onSurfaceVariant,
-    marginTop: 2,
-  },
-  sheetCloseButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  targetBlock: {
-    marginBottom: 16,
-  },
-  targetBlockLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
     justifyContent: 'space-between',
     marginBottom: 8,
   },
-  targetBlockTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.onSurface,
-  },
-  targetBlockDescription: {
-    fontSize: 11,
-    color: colors.onSurfaceVariant,
-  },
-  stepperContainer: {
-    backgroundColor: colors.surfaceContainerHigh,
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  stepperButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepperButtonText: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.onSurface,
-  },
-  stepperValueText: {
-    fontFamily: fontFamilies.outfitBold,
-    fontSize: 26,
-    color: colors.onSurface,
-  },
-  hypertrophyTag: {
-    fontSize: 11,
-    color: colors.primary,
-    fontWeight: '600',
-  },
-  repRangeGrid: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  repBox: {
-    flex: 1,
-    backgroundColor: colors.surfaceContainerHigh,
-    borderRadius: 14,
-    padding: 12,
-    alignItems: 'center',
-  },
-  repBoxLabel: {
-    fontSize: 11,
-    color: colors.onSurfaceVariant,
-    marginBottom: 6,
-  },
-  repStepperRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-  },
-  repStepperBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  repStepperBtnText: {
-    color: colors.onSurface,
-    fontWeight: '700',
-  },
-  repValue: {
-    fontFamily: fontFamilies.outfitBold,
-    fontSize: 22,
-    color: colors.onSurface,
-  },
-  restChipsRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  restChip: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: colors.surfaceContainerHigh,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  restChipSelected: {
-    backgroundColor: colors.primary,
-  },
-  restChipText: {
+  footerStatsText: {
     fontSize: 12,
-    fontWeight: '500',
-    color: colors.onSurfaceVariant,
+    color: '#B7ADA3',
   },
-  restChipTextSelected: {
+  footerStatsBold: {
     fontWeight: '700',
-    color: colors.onPrimary,
+    color: '#FFFFFF',
   },
-  targetActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginTop: 8,
-  },
-  applyTargetsButton: {
-    flex: 1,
-    backgroundColor: colors.primary,
-    paddingVertical: 14,
-    borderRadius: radii.pill,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  applyTargetsText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.onPrimary,
-  },
-  removeTargetButton: {
-    backgroundColor: 'rgba(255, 107, 107, 0.12)',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 107, 107, 0.25)',
+  unsavedIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  removeTargetText: {
+  unsavedDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#F5C400',
+  },
+  unsavedText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#F5C400',
+  },
+  saveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FF6B57',
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  saveButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  unsavedModalCard: {
+    width: '100%',
+    maxWidth: 340,
+    backgroundColor: '#1C1C1E',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
+    padding: 20,
+  },
+  unsavedModalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 6,
+  },
+  unsavedModalDesc: {
+    fontSize: 12,
+    color: '#B7ADA3',
+    lineHeight: 18,
+    marginBottom: 18,
+  },
+  unsavedModalBtnList: {
+    flexDirection: 'column',
+    gap: 8,
+  },
+  modalPrimaryBtn: {
+    backgroundColor: '#FF6B57',
+    paddingVertical: 11,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  modalPrimaryBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  modalSecondaryBtn: {
+    backgroundColor: '#2C2C2E',
+    paddingVertical: 11,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  modalSecondaryBtnText: {
     fontSize: 13,
     fontWeight: '600',
-    color: colors.error,
+    color: '#E5E5EA',
+  },
+  modalCancelBtn: {
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  modalCancelBtnText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#8E8E93',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

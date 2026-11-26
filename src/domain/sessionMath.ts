@@ -560,4 +560,38 @@ export const getEffortModeOptions = (
   { value: 'last_session_plus', label: `Sessão passada + X ${unit}` },
 ];
 
+/**
+ * Serializa a lista de exercícios e séries para verificação de alterações (dirty check)
+ * na tela de edição/prévia de treino.
+ */
+export function serializeExercisesForDirtyCheck(
+  exercises: Array<{
+    exerciseId?: string;
+    name?: string;
+    restS?: number | null;
+    note?: string | null;
+    sets?: Array<any>;
+  }>
+): string {
+  return JSON.stringify(
+    exercises.map((e) => ({
+      id: e.exerciseId,
+      name: e.name,
+      restS: e.restS,
+      note: e.note || '',
+      sets: (e.sets || []).map((s) => ({
+        type: s.type || 'normal',
+        repsMode: s.repsMode || s.reps_mode || 'reps_range',
+        minReps: s.minReps ?? s.min_reps ?? null,
+        maxReps: s.maxReps ?? s.max_reps ?? null,
+        effortMode: s.effortMode || s.effort_mode || 'none',
+        effortValue: s.effortValue ?? s.effort_value ?? null,
+        effortValueMax: s.effortValueMax ?? s.effort_value_max ?? null,
+        effortRefExerciseId: s.effortRefExerciseId ?? s.effort_ref_exercise_id ?? null,
+        restS: s.restS ?? s.rest_s ?? null,
+      })),
+    }))
+  );
+}
+
 

@@ -26,12 +26,23 @@ export type RootStackParamList = {
       equipment: string;
       defaultRestS: number;
     }[];
+    replacedExercise?: {
+      targetWorkoutExerciseId: string;
+      newExercise: {
+        exerciseId: string;
+        name: string;
+        muscleGroup: string;
+        equipment: string;
+        defaultRestS: number;
+      };
+    };
   } | undefined;
   AddExercises: {
     workoutId?: string;
     sessionId?: string;
     existingExerciseIds: string[];
     fromScreen?: 'EditWorkout' | 'ActiveSession';
+    replaceTargetWorkoutExerciseId?: string;
   } | undefined;
   ActiveSession: { sessionId: string; workoutId?: string } | undefined;
   SessionDetail: { sessionId: string };
