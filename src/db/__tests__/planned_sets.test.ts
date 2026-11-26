@@ -90,6 +90,7 @@ describe('ETAPA 1 — Migração 0003 e Camada de Dados (Séries Planejadas)', (
       expect(workoutExerciseSets.effortValueMax).toBeDefined();
       expect(workoutExerciseSets.effortRefExerciseId).toBeDefined();
       expect(workoutExerciseSets.restS).toBeDefined();
+      expect(workoutExerciseSets.dropPercent).toBeDefined();
     });
 
     it('o schema Drizzle de sets deve mapear as novas colunas de planejamento e isolamento', () => {
@@ -103,6 +104,7 @@ describe('ETAPA 1 — Migração 0003 e Camada de Dados (Séries Planejadas)', (
       expect(sets.effortRefExerciseId).toBeDefined();
       expect(sets.restS).toBeDefined();
       expect(sets.isSessionOnly).toBeDefined();
+      expect(sets.dropPercent).toBeDefined();
       expect(sets.rpe).toBeDefined(); // Compatibilidade histórica
     });
 

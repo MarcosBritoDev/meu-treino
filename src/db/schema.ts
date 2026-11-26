@@ -98,6 +98,7 @@ export const workoutExerciseSets = sqliteTable('workout_exercise_sets', {
   effortValueMax: real('effort_value_max'),
   effortRefExerciseId: text('effort_ref_exercise_id'),
   restS: integer('rest_s'),
+  dropPercent: real('drop_percent'),
 });
 
 /**
@@ -157,6 +158,7 @@ export const sets = sqliteTable('sets', {
   effortRefExerciseId: text('effort_ref_exercise_id'),
   restS: integer('rest_s'),
   isSessionOnly: integer('is_session_only', { mode: 'boolean' }).notNull().default(false),
+  dropPercent: real('drop_percent'),
 });
 
 export type Setting = typeof settings.$inferSelect;

@@ -194,4 +194,14 @@ export const migrations: Migration[] = [
        );`,
     ],
   },
+  {
+    version: 6,
+    name: '0004_drop_percent',
+    sql: [
+      `ALTER TABLE workout_exercise_sets ADD COLUMN drop_percent REAL NULL;`,
+      `ALTER TABLE sets ADD COLUMN drop_percent REAL NULL;`,
+      `UPDATE workout_exercise_sets SET drop_percent = 20 WHERE type = 'drop' AND drop_percent IS NULL;`,
+      `UPDATE sets SET drop_percent = 20 WHERE type = 'drop' AND drop_percent IS NULL;`,
+    ],
+  },
 ];

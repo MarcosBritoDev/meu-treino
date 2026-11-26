@@ -7,7 +7,7 @@ import {
   formatExerciseCardItem,
   formatWorkoutSummary,
 } from '../domain/workouts';
-import { PlannedSet, SetType, RepsMode, EffortMode, Unit } from '../domain/types';
+import { PlannedSet, SessionSet, SetType, RepsMode, EffortMode, Unit } from '../domain/types';
 import { suggestDropWeightKg, suggest1RmWeightKg } from '../domain/sessionMath';
 
 export {
@@ -17,7 +17,7 @@ export {
   formatExerciseCardItem,
   formatWorkoutSummary,
 };
-export type { PlannedSet, SetType, RepsMode, EffortMode, Unit };
+export type { PlannedSet, SessionSet, SetType, RepsMode, EffortMode, Unit };
 
 /**
  * Consulta a unidade de peso configurada pelo usuário ('kg' | 'lb').
@@ -723,9 +723,10 @@ export function startWorkoutSession(workoutId?: string, workoutName?: string): s
         effort_value_max: number | null;
         effort_ref_exercise_id: string | null;
         rest_s: number | null;
+        drop_percent: number | null;
       }>(
         `SELECT id, position, type, reps_mode, min_reps, max_reps, effort_mode,
-                effort_value, effort_value_max, effort_ref_exercise_id, rest_s
+                effort_value, effort_value_max, effort_ref_exercise_id, rest_s, drop_percent
          FROM workout_exercise_sets
          WHERE workout_exercise_id = ?
          ORDER BY position ASC`,
@@ -834,14 +835,17 @@ export function startWorkoutSession(workoutId?: string, workoutName?: string): s
               ? 10
               : prevSets.filter((s) => !s.isWarmup)[normalIdx]?.reps ?? ex.repMin ?? 10);
 
+          const setType = ps.type || 'normal';
+          const dropPercent = setType === 'drop' ? (ps.drop_percent ?? 20) : null;
+
           const setId = `set_${Date.now()}_${p}_${Math.random().toString(36).substring(2, 6)}`;
           rawDb.runSync(
             `INSERT INTO sets (
                id, session_exercise_id, "index", weight, reps, rpe, is_warmup,
                completed_at, is_pr_weight, is_pr_volume, type, reps_mode,
                min_reps, max_reps, effort_mode, effort_value, effort_value_max,
-               effort_ref_exercise_id, rest_s, is_session_only
-             ) VALUES (?, ?, ?, ?, ?, NULL, ?, NULL, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+               effort_ref_exercise_id, rest_s, is_session_only, drop_percent
+             ) VALUES (?, ?, ?, ?, ?, NULL, ?, NULL, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
             [
               setId,
               seId,
@@ -849,7 +853,7 @@ export function startWorkoutSession(workoutId?: string, workoutName?: string): s
               initialKg,
               initialReps,
               isWarmup ? 1 : 0,
-              ps.type,
+              setType,
               ps.reps_mode,
               ps.min_reps,
               ps.max_reps,
@@ -858,6 +862,7 @@ export function startWorkoutSession(workoutId?: string, workoutName?: string): s
               ps.effort_value_max,
               ps.effort_ref_exercise_id,
               ps.rest_s,
+              dropPercent,
             ]
           );
 
@@ -886,8 +891,8 @@ export function startWorkoutSession(workoutId?: string, workoutName?: string): s
             `INSERT INTO sets (
                id, session_exercise_id, "index", weight, reps, rpe, is_warmup,
                completed_at, is_pr_weight, is_pr_volume, type, reps_mode,
-               min_reps, max_reps, effort_mode, is_session_only
-             ) VALUES (?, ?, ?, ?, ?, NULL, 0, NULL, 0, 0, 'normal', 'reps_range', ?, ?, 'none', 0)`,
+               min_reps, max_reps, effort_mode, is_session_only, drop_percent
+             ) VALUES (?, ?, ?, ?, ?, NULL, 0, NULL, 0, 0, 'normal', 'reps_range', ?, ?, 'none', 0, NULL)`,
             [setId, seId, idx, initialWeight, initialReps, ex.repMin, ex.repMax]
           );
         }
@@ -1477,6 +1482,8 @@ export function getWorkoutExerciseSets(workoutExerciseId: string): PlannedSet[] 
     effortValueMax: number | null;
     effortRefExerciseId: string | null;
     restS: number | null;
+    drop_percent: number | null;
+    dropPercent: number | null;
   }>(
     `SELECT 
        id,
@@ -1490,7 +1497,9 @@ export function getWorkoutExerciseSets(workoutExerciseId: string): PlannedSet[] 
        effort_value AS effortValue,
        effort_value_max AS effortValueMax,
        effort_ref_exercise_id AS effortRefExerciseId,
-       rest_s AS restS
+       rest_s AS restS,
+       drop_percent AS dropPercent,
+       drop_percent AS drop_percent
      FROM workout_exercise_sets
      WHERE workout_exercise_id = ?
      ORDER BY position ASC`,
@@ -1516,8 +1525,8 @@ export function getWorkoutExerciseSets(workoutExerciseId: string): PlannedSet[] 
         const setId = `wes_${workoutExerciseId}_${pos}`;
         rawDb.runSync(
           `INSERT INTO workout_exercise_sets (
-             id, workout_exercise_id, position, type, reps_mode, min_reps, max_reps, effort_mode, rest_s
-           ) VALUES (?, ?, ?, 'normal', 'reps_range', ?, ?, 'none', NULL)`,
+             id, workout_exercise_id, position, type, reps_mode, min_reps, max_reps, effort_mode, rest_s, drop_percent
+           ) VALUES (?, ?, ?, 'normal', 'reps_range', ?, ?, 'none', NULL, NULL)`,
           [setId, workoutExerciseId, pos, we.repMin, we.repMax]
         );
         generated.push({
@@ -1533,6 +1542,8 @@ export function getWorkoutExerciseSets(workoutExerciseId: string): PlannedSet[] 
           effortValueMax: null,
           effortRefExerciseId: null,
           restS: null,
+          drop_percent: null,
+          dropPercent: null,
         });
       }
       return generated;
@@ -1544,7 +1555,7 @@ export function getWorkoutExerciseSets(workoutExerciseId: string): PlannedSet[] 
 
 /**
  * Salva a lista de séries planejadas de um exercício, garantindo reindexação
- * contígua de position (0..N-1) sem buracos.
+ * contígua de position (0..N-1) sem buracos. Força drop_percent como NULL se type !== 'drop'.
  */
 export function saveWorkoutExerciseSets(
   workoutExerciseId: string,
@@ -1560,15 +1571,25 @@ export function saveWorkoutExerciseSets(
         ? s.id
         : `wes_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 6)}`;
 
+    const setType: SetType = s.type || 'normal';
+    const rawDrop = s.dropPercent ?? s.drop_percent;
+    const dropPercent =
+      setType === 'drop'
+        ? rawDrop !== undefined && rawDrop !== null
+          ? Number(rawDrop)
+          : 20
+        : null;
+
     rawDb.runSync(
       `INSERT INTO workout_exercise_sets (
-         id, workout_exercise_id, position, type, reps_mode, min_reps, max_reps, effort_mode, effort_value, effort_value_max, effort_ref_exercise_id, rest_s
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         id, workout_exercise_id, position, type, reps_mode, min_reps, max_reps,
+         effort_mode, effort_value, effort_value_max, effort_ref_exercise_id, rest_s, drop_percent
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         workoutExerciseId,
         i, // Reindexação contígua garantida 0..N-1
-        s.type || 'normal',
+        setType,
         s.repsMode || s.reps_mode || 'reps_range',
         s.minReps ?? s.min_reps ?? null,
         s.maxReps ?? s.max_reps ?? null,
@@ -1577,9 +1598,166 @@ export function saveWorkoutExerciseSets(
         s.effortValueMax ?? s.effort_value_max ?? null,
         s.effortRefExerciseId ?? s.effort_ref_exercise_id ?? null,
         s.restS ?? s.rest_s ?? null,
+        dropPercent,
       ]
     );
   }
+}
+
+/**
+ * Consulta todas as séries de um exercício da sessão ativa.
+ */
+export function getSessionSets(sessionExerciseId: string): SessionSet[] {
+  const rawDb = getExpoDb();
+  return rawDb.getAllSync<{
+    id: string;
+    sessionExerciseId: string;
+    index: number;
+    weight: number;
+    reps: number;
+    rpe: number | null;
+    isWarmup: number;
+    completedAt: number | null;
+    isPrWeight: number;
+    isPrVolume: number;
+    type: SetType;
+    repsMode: RepsMode;
+    minReps: number | null;
+    maxReps: number | null;
+    effortMode: EffortMode;
+    effortValue: number | null;
+    effortValueMax: number | null;
+    effortRefExerciseId: string | null;
+    restS: number | null;
+    isSessionOnly: number;
+    drop_percent: number | null;
+    dropPercent: number | null;
+  }>(
+    `SELECT 
+       id,
+       session_exercise_id AS sessionExerciseId,
+       "index",
+       weight,
+       reps,
+       rpe,
+       is_warmup AS isWarmup,
+       completed_at AS completedAt,
+       is_pr_weight AS isPrWeight,
+       is_pr_volume AS isPrVolume,
+       type,
+       reps_mode AS repsMode,
+       min_reps AS minReps,
+       max_reps AS maxReps,
+       effort_mode AS effortMode,
+       effort_value AS effortValue,
+       effort_value_max AS effortValueMax,
+       effort_ref_exercise_id AS effortRefExerciseId,
+       rest_s AS restS,
+       is_session_only AS isSessionOnly,
+       drop_percent AS dropPercent,
+       drop_percent AS drop_percent
+     FROM sets
+     WHERE session_exercise_id = ?
+     ORDER BY "index" ASC`,
+    [sessionExerciseId]
+  ).map((r) => ({
+    ...r,
+    isWarmup: Boolean(r.isWarmup),
+    isPrWeight: Boolean(r.isPrWeight),
+    isPrVolume: Boolean(r.isPrVolume),
+    isSessionOnly: Boolean(r.isSessionOnly),
+  }));
+}
+
+/**
+ * Salva ou atualiza uma série de sessão, persistindo drop_percent
+ * e forçando NULL quando type !== 'drop'.
+ */
+export function saveSessionSet(set: {
+  id: string;
+  sessionExerciseId: string;
+  index: number;
+  weight: number;
+  reps: number;
+  rpe?: number | null;
+  isWarmup?: boolean;
+  completedAt?: number | null;
+  isPrWeight?: boolean;
+  isPrVolume?: boolean;
+  type?: SetType | string;
+  repsMode?: RepsMode | string;
+  minReps?: number | null;
+  maxReps?: number | null;
+  effortMode?: EffortMode | string;
+  effortValue?: number | null;
+  effortValueMax?: number | null;
+  effortRefExerciseId?: string | null;
+  restS?: number | null;
+  isSessionOnly?: boolean;
+  drop_percent?: number | null;
+  dropPercent?: number | null;
+}): void {
+  const rawDb = getExpoDb();
+  const setType = (set.type || 'normal') as SetType;
+  const rawDrop = set.dropPercent ?? set.drop_percent;
+  const dropPercent =
+    setType === 'drop'
+      ? rawDrop !== undefined && rawDrop !== null
+        ? Number(rawDrop)
+        : 20
+      : null;
+
+  rawDb.runSync(
+    `INSERT INTO sets (
+       id, session_exercise_id, "index", weight, reps, rpe, is_warmup,
+       completed_at, is_pr_weight, is_pr_volume, type, reps_mode,
+       min_reps, max_reps, effort_mode, effort_value, effort_value_max,
+       effort_ref_exercise_id, rest_s, is_session_only, drop_percent
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       "index" = excluded."index",
+       weight = excluded.weight,
+       reps = excluded.reps,
+       rpe = excluded.rpe,
+       is_warmup = excluded.is_warmup,
+       completed_at = excluded.completed_at,
+       is_pr_weight = excluded.is_pr_weight,
+       is_pr_volume = excluded.is_pr_volume,
+       type = excluded.type,
+       reps_mode = excluded.reps_mode,
+       min_reps = excluded.min_reps,
+       max_reps = excluded.max_reps,
+       effort_mode = excluded.effort_mode,
+       effort_value = excluded.effort_value,
+       effort_value_max = excluded.effort_value_max,
+       effort_ref_exercise_id = excluded.effort_ref_exercise_id,
+       rest_s = excluded.rest_s,
+       is_session_only = excluded.is_session_only,
+       drop_percent = excluded.drop_percent`,
+    [
+      set.id,
+      set.sessionExerciseId,
+      set.index,
+      set.weight,
+      set.reps,
+      set.rpe ?? null,
+      set.isWarmup ? 1 : 0,
+      set.completedAt ?? null,
+      set.isPrWeight ? 1 : 0,
+      set.isPrVolume ? 1 : 0,
+      setType,
+      set.repsMode || 'reps_range',
+      set.minReps ?? null,
+      set.maxReps ?? null,
+      set.effortMode || 'none',
+      set.effortValue ?? null,
+      set.effortValueMax ?? null,
+      set.effortRefExerciseId ?? null,
+      set.restS ?? null,
+      set.isSessionOnly ? 1 : 0,
+      dropPercent,
+    ]
+  );
 }
 
 /**

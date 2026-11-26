@@ -12,6 +12,9 @@ export interface SetData {
   reps: number;
   isWarmup?: boolean;
   completedAt?: number | null | boolean;
+  type?: SetType;
+  drop_percent?: number | null;
+  dropPercent?: number | null;
 }
 
 export interface PRResult {
@@ -61,5 +64,32 @@ export interface PlannedSet {
   effortValueMax?: number | null;
   effortRefExerciseId?: string | null;
   restS?: number | null;
+  drop_percent?: number | null;
+  dropPercent?: number | null;
+}
+
+export interface SessionSet {
+  id: string;
+  sessionExerciseId?: string;
+  index: number;
+  weight: number;
+  reps: number;
+  rpe?: number | null;
+  isWarmup?: boolean;
+  completedAt?: number | null | boolean;
+  isPrWeight?: boolean;
+  isPrVolume?: boolean;
+  type?: SetType;
+  repsMode?: RepsMode;
+  minReps?: number | null;
+  maxReps?: number | null;
+  effortMode?: EffortMode;
+  effortValue?: number | null;
+  effortValueMax?: number | null;
+  effortRefExerciseId?: string | null;
+  restS?: number | null;
+  isSessionOnly?: boolean;
+  drop_percent?: number | null;
+  dropPercent?: number | null;
 }
 
