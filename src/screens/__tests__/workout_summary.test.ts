@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { calcularVolume, isSetInVolume, canGeneratePR } from '../../domain/sessionMath';
 
 describe('Tela 4.5 - Resumo do Treino Concluído (WorkoutSummaryScreen)', () => {
   describe('Cálculo de Volume Total e Formatação', () => {
@@ -15,6 +16,35 @@ describe('Tela 4.5 - Resumo do Treino Concluído (WorkoutSummaryScreen)', () => 
         .reduce((sum, s) => sum + s.weight * s.reps, 0);
 
       expect(completedVolume).toBe(100 * 8 + 100 * 8 + 90 * 10); // 800 + 800 + 900 = 2500
+    });
+
+    it('aplica regra oficial: multiplica por 2x quando equipamento = Halteres e ignora aquecimento', () => {
+      const sets = [
+        { weight: 20, reps: 15, isWarmup: true, completedAt: 1000 }, // aquecimento: ignora
+        { weight: 30, reps: 10, isWarmup: false, completedAt: 2000 }, // 30 × 10 × 2 = 600
+        { weight: 32, reps: 8, isWarmup: false, completedAt: 3000 },  // 32 × 8 × 2 = 512
+      ];
+
+      const volume = calcularVolume(sets, 'Halteres');
+      expect(volume).toBe(600 + 512); // 1112
+    });
+
+    it('drop entra no volume e falha entra no volume', () => {
+      const sets = [
+        { weight: 50, reps: 10, type: 'normal', completedAt: 1000 },
+        { weight: 45, reps: 8, type: 'failure', completedAt: 2000 },
+        { weight: 35, reps: 10, type: 'drop', completedAt: 3000 },
+        { weight: 20, reps: 15, type: 'warmup', completedAt: 4000 },
+      ];
+
+      expect(isSetInVolume(sets[0])).toBe(true);
+      expect(isSetInVolume(sets[1])).toBe(true);
+      expect(isSetInVolume(sets[2])).toBe(true);
+      expect(isSetInVolume(sets[3])).toBe(false);
+
+      const volBarra = calcularVolume(sets, 'Barra');
+      // 50*10 + 45*8 + 35*10 = 500 + 360 + 350 = 1210
+      expect(volBarra).toBe(1210);
     });
 
     it('formata o volume no padrão pt-BR com separador de milhar', () => {
@@ -54,23 +84,28 @@ describe('Tela 4.5 - Resumo do Treino Concluído (WorkoutSummaryScreen)', () => 
     });
   });
 
-  describe('Intensidade RPE vs Fallback de Exercícios', () => {
-    it('exibe intensidade com RPE médio quando disponível', () => {
-      const rpeList = [8, 8.5, 9, 8];
-      const avg = rpeList.reduce((a, b) => a + b, 0) / rpeList.length;
-      const formattedRpe = Number(avg.toFixed(1));
+  describe('Bloco de Exercícios (Substituição de RPE Médio)', () => {
+    it('exibe sempre o bloco "Exercícios" com contagem de concluídos no lugar de RPE', () => {
+      const exerciseLoads = [{ id: '1' }, { id: '2' }, { id: '3' }];
+      const cardTitle = 'Exercícios';
+      const count = exerciseLoads.length;
+      const subtitle = count === 1 ? '1 concluído' : `${count} concluídos`;
 
-      expect(formattedRpe).toBe(8.4);
-    });
-
-    it('faz fallback para contagem de exercícios quando nenhuma série possui RPE', () => {
-      const avgRpe: number | null = null;
-      const cardTitle = avgRpe !== null ? 'Intensidade' : 'Exercícios';
       expect(cardTitle).toBe('Exercícios');
+      expect(count).toBe(3);
+      expect(subtitle).toBe('3 concluídos');
     });
   });
 
   describe('Recordes da Sessão (PRs)', () => {
+    it('drop e aquecimento NUNCA aparecem em recordes; falha e normal podem gerar recordes', () => {
+      expect(canGeneratePR({ type: 'drop' })).toBe(false);
+      expect(canGeneratePR({ type: 'warmup' })).toBe(false);
+      expect(canGeneratePR({ isWarmup: true })).toBe(false);
+      expect(canGeneratePR({ type: 'normal' })).toBe(true);
+      expect(canGeneratePR({ type: 'failure' })).toBe(true);
+    });
+
     it('calcula delta em kg para PR de carga quando há histórico prévio', () => {
       const currentWeight = 34.0;
       const prevMaxWeight = 32.0;

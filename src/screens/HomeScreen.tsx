@@ -383,7 +383,17 @@ export const HomeScreen: React.FC = () => {
                   </View>
 
                   {/* Título & Subtítulo */}
-                  <View style={styles.heroTitlesBlock}>
+                  <Pressable
+                    onPress={() => {
+                      triggerHaptic('light');
+                      navigation.navigate('EditWorkout', {
+                        workoutId: data.recommendedWorkout!.id,
+                      });
+                    }}
+                    style={styles.heroTitlesBlock}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Abrir prévia de ${data.recommendedWorkout.name}`}
+                  >
                     <Text variant="headline" style={styles.heroTitle} numberOfLines={2}>
                       {data.recommendedWorkout.name}
                     </Text>
@@ -393,7 +403,7 @@ export const HomeScreen: React.FC = () => {
                     <Text variant="labelSmall" style={styles.heroSummaryBadge}>
                       {data.recommendedWorkout.summaryText || `${data.recommendedWorkout.totalSets} ${data.recommendedWorkout.totalSets === 1 ? 'série' : 'séries'} · ~${data.recommendedWorkout.estimatedDurationMin} min`}
                     </Text>
-                  </View>
+                  </Pressable>
 
                   {/* Indicador de Ciclo e Segmentos de Progresso */}
                   <View style={styles.cycleBlock}>
@@ -456,7 +466,17 @@ export const HomeScreen: React.FC = () => {
 
                   {/* Lista resumida de exercícios: Nome — A + N séries */}
                   {data.recommendedWorkout.exercises && data.recommendedWorkout.exercises.length > 0 && (
-                    <View style={styles.heroExerciseList}>
+                    <Pressable
+                      onPress={() => {
+                        triggerHaptic('light');
+                        navigation.navigate('EditWorkout', {
+                          workoutId: data.recommendedWorkout!.id,
+                        });
+                      }}
+                      style={styles.heroExerciseList}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Ver exercícios de ${data.recommendedWorkout.name}`}
+                    >
                       {data.recommendedWorkout.exercises.slice(0, 3).map((ex, idx) => (
                         <Text key={idx} variant="bodySmall" color="secondary" style={styles.heroExerciseItem} numberOfLines={1}>
                           {ex.itemText}
@@ -467,7 +487,7 @@ export const HomeScreen: React.FC = () => {
                           {`+${data.recommendedWorkout.exercises.length - 3} ${data.recommendedWorkout.exercises.length - 3 === 1 ? 'exercício' : 'exercícios'}`}
                         </Text>
                       )}
-                    </View>
+                    </Pressable>
                   )}
 
                   {/* Botão Primário 56px Iniciar treino */}

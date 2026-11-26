@@ -493,18 +493,36 @@ export const GroupDetailScreen: React.FC = () => {
                 </View>
 
                 {/* Nome & Músculos Alvo */}
-                <View style={styles.workoutNameBlock}>
+                <Pressable
+                  onPress={() => {
+                    triggerHaptic('light');
+                    navigation.navigate('EditWorkout', { workoutId: w.id });
+                  }}
+                  style={styles.workoutNameBlock}
+                  accessible={true}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Abrir prévia de ${w.name}`}
+                >
                   <Text variant="bodyLarge" style={styles.workoutCardTitle}>
                     {w.name}
                   </Text>
                   <Text variant="labelSmall" color="secondary" style={styles.workoutMusclesText}>
                     {`(${w.targetMuscles})`}
                   </Text>
-                </View>
+                </Pressable>
 
                 {/* Lista resumida de exercícios (ex: "Supino Reto — A + 5 séries") */}
                 {w.exercises && w.exercises.length > 0 ? (
-                  <View style={styles.loadSequenceContainer}>
+                  <Pressable
+                    onPress={() => {
+                      triggerHaptic('light');
+                      navigation.navigate('EditWorkout', { workoutId: w.id });
+                    }}
+                    style={styles.loadSequenceContainer}
+                    accessible={true}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Ver exercícios de ${w.name}`}
+                  >
                     <View style={styles.exerciseSummaryList}>
                       {w.exercises.slice(0, 3).map((ex, exIdx) => (
                         <Text key={`ex-${exIdx}`} variant="bodySmall" color="secondary" style={styles.exerciseSummaryText} numberOfLines={1}>
@@ -517,9 +535,18 @@ export const GroupDetailScreen: React.FC = () => {
                         </Text>
                       )}
                     </View>
-                  </View>
+                  </Pressable>
                 ) : w.exerciseChips.length > 0 ? (
-                  <View style={styles.loadSequenceContainer}>
+                  <Pressable
+                    onPress={() => {
+                      triggerHaptic('light');
+                      navigation.navigate('EditWorkout', { workoutId: w.id });
+                    }}
+                    style={styles.loadSequenceContainer}
+                    accessible={true}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Ver exercícios de ${w.name}`}
+                  >
                     <View style={styles.loadChipsRow}>
                       {w.exerciseChips.map((exName, exIdx) => (
                         <View key={`chip-${exIdx}`} style={styles.exerciseChip}>
@@ -537,7 +564,7 @@ export const GroupDetailScreen: React.FC = () => {
                         </View>
                       )}
                     </View>
-                  </View>
+                  </Pressable>
                 ) : null}
 
                 {/* Resumo do treino: "N séries · ~X min" */}
@@ -609,7 +636,7 @@ export const GroupDetailScreen: React.FC = () => {
         >
           <PlusCircle size={20} color={colors.primary} strokeWidth={2} />
           <Text variant="bodyMedium" style={styles.footerAddWorkoutText}>
-            Adicionar outro treino a este grupo
+            {workouts.length === 0 ? 'Adicionar treino ao grupo' : 'Adicionar outro treino a este grupo'}
           </Text>
         </Pressable>
       </ScrollView>

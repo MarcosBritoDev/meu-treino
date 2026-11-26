@@ -1,5 +1,6 @@
 import { getExpoDb } from './client';
 import { estimarDuracao } from '../domain/duration';
+import { calcularVolume } from '../domain/sessionMath';
 import {
   calculateNextScheduledWorkoutIndex,
   formatExerciseSetsSummary,
@@ -318,22 +319,49 @@ export function getHomeScreenData(referenceDate: Date = new Date()): HomeScreenD
       const sess = lastRows[0];
       const endTimestamp = sess.ended_at || sess.started_at;
 
-      // Consulta carga e séries
-      const metricsRows = rawDb.getAllSync<{
-        setsCount: number;
-        totalVolume: number;
+      // Consulta carga e séries usando a regra oficial (exclui aquecimento, 2x para Halteres)
+      const exVolRows = rawDb.getAllSync<{
+        id: string;
+        equipment: string;
       }>(
-        `SELECT 
-          COUNT(st.id) AS setsCount,
-          COALESCE(SUM(st.weight * st.reps), 0) AS totalVolume
+        `SELECT se.id, e.equipment
          FROM session_exercises se
-         JOIN sets st ON st.session_exercise_id = se.id
-         WHERE se.session_id = ? AND st.is_warmup = 0`,
+         JOIN exercises e ON se.exercise_id = e.id
+         WHERE se.session_id = ?`,
         [sess.id]
       );
 
-      let setsCount = metricsRows[0]?.setsCount ?? 0;
-      let totalVolume = metricsRows[0]?.totalVolume ?? 0;
+      let totalVolume = 0;
+      let setsCount = 0;
+
+      for (const ex of exVolRows) {
+        const sRows = rawDb.getAllSync<{
+          weight: number;
+          reps: number;
+          is_warmup: number;
+          type?: string;
+          completed_at: number | null;
+        }>(
+          `SELECT weight, reps, is_warmup, type, completed_at FROM sets WHERE session_exercise_id = ?`,
+          [ex.id]
+        );
+
+        totalVolume += calcularVolume(
+          sRows.map((r) => ({
+            weight: r.weight,
+            reps: r.reps,
+            isWarmup: Boolean(r.is_warmup),
+            type: r.type,
+            completedAt: r.completed_at,
+          })),
+          ex.equipment
+        );
+
+        const completedNonWarmup = sRows.filter(
+          (r) => r.completed_at !== null && (r.type ? r.type !== 'warmup' : !r.is_warmup)
+        );
+        setsCount += completedNonWarmup.length;
+      }
 
       // Se não houver séries registradas individualmente, busca soma dos alvos
       if (setsCount === 0) {

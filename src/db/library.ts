@@ -279,6 +279,13 @@ export function getExerciseSessionHistory(
   try {
     const rawDb = getExpoDb();
 
+    const exRows = rawDb.getAllSync<{ equipment: string }>(
+      `SELECT equipment FROM exercises WHERE id = ?`,
+      [exerciseId]
+    );
+    const isDumbbell = exRows[0]?.equipment?.trim().toLowerCase() === 'halteres';
+    const multiplier = isDumbbell ? 2 : 1;
+
     // Sessões distintas onde o exercício esteve presente
     const sessionRows = rawDb.getAllSync<{
       sessionId: string;
@@ -315,7 +322,7 @@ export function getExerciseSessionHistory(
       if (setRows.length === 0) continue;
 
       const bestSet = setRows[0];
-      const totalVolume = setRows.reduce((acc, curr) => acc + curr.weight * curr.reps, 0);
+      const totalVolume = setRows.reduce((acc, curr) => acc + curr.weight * multiplier * curr.reps, 0);
       const rpeValues = setRows.map((r) => r.rpe).filter((r): r is number => r !== null && r > 0);
       const avgRpe = rpeValues.length > 0
         ? Number((rpeValues.reduce((a, b) => a + b, 0) / rpeValues.length).toFixed(1))

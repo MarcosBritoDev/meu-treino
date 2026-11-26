@@ -537,7 +537,16 @@ export const WorkoutsScreen: React.FC = () => {
                         {group.workouts.map((w) => (
                           <View key={w.id} style={styles.workoutItemCard}>
                             <View style={styles.workoutItemTopRow}>
-                              <View style={styles.workoutItemLeft}>
+                              <Pressable
+                                onPress={() => {
+                                  triggerHaptic('light');
+                                  navigation.navigate('EditWorkout', { workoutId: w.id });
+                                }}
+                                style={styles.workoutItemLeft}
+                                accessible={true}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Abrir prévia de ${w.name}`}
+                              >
                                 <View style={styles.workoutCodeBox}>
                                   <Text variant="labelSmall" style={styles.workoutCodeText}>
                                     {w.code}
@@ -551,7 +560,7 @@ export const WorkoutsScreen: React.FC = () => {
                                     {w.targetMuscles}
                                   </Text>
                                 </View>
-                              </View>
+                              </Pressable>
 
                               {/* Ações do treino: Editar (lápis) e Iniciar (play coral) */}
                               <View style={styles.workoutActions}>
@@ -602,7 +611,16 @@ export const WorkoutsScreen: React.FC = () => {
 
                             {/* Lista resumida de exercícios: Nome — A + N séries */}
                             {w.exercises && w.exercises.length > 0 ? (
-                              <View style={styles.exerciseSummaryList}>
+                              <Pressable
+                                onPress={() => {
+                                  triggerHaptic('light');
+                                  navigation.navigate('EditWorkout', { workoutId: w.id });
+                                }}
+                                style={styles.exerciseSummaryList}
+                                accessible={true}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Ver exercícios de ${w.name}`}
+                              >
                                 {w.exercises.slice(0, 3).map((ex, exIdx) => (
                                   <Text key={exIdx} variant="bodySmall" color="secondary" style={styles.workoutPreviewText} numberOfLines={1}>
                                     {ex.itemText}
@@ -613,11 +631,21 @@ export const WorkoutsScreen: React.FC = () => {
                                     {`+${w.exercises.length - 3} ${w.exercises.length - 3 === 1 ? 'exercício' : 'exercícios'}`}
                                   </Text>
                                 )}
-                              </View>
+                              </Pressable>
                             ) : w.previewExercises ? (
-                              <Text variant="bodySmall" color="secondary" style={styles.workoutPreviewText} numberOfLines={1}>
-                                {w.previewExercises}
-                              </Text>
+                              <Pressable
+                                onPress={() => {
+                                  triggerHaptic('light');
+                                  navigation.navigate('EditWorkout', { workoutId: w.id });
+                                }}
+                                accessible={true}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Ver exercícios de ${w.name}`}
+                              >
+                                <Text variant="bodySmall" color="secondary" style={styles.workoutPreviewText} numberOfLines={1}>
+                                  {w.previewExercises}
+                                </Text>
+                              </Pressable>
                             ) : null}
                           </View>
                         ))}
@@ -718,7 +746,16 @@ export const WorkoutsScreen: React.FC = () => {
                       {group.workouts.map((w) => (
                         <View key={w.id} style={styles.workoutItemCard}>
                           <View style={styles.workoutItemTopRow}>
-                            <View style={styles.workoutItemLeft}>
+                            <Pressable
+                              onPress={() => {
+                                triggerHaptic('light');
+                                navigation.navigate('EditWorkout', { workoutId: w.id });
+                              }}
+                              style={styles.workoutItemLeft}
+                              accessible={true}
+                              accessibilityRole="button"
+                              accessibilityLabel={`Abrir prévia de ${w.name}`}
+                            >
                               <View style={styles.workoutCodeBox}>
                                 <Text variant="labelSmall" style={styles.workoutCodeText}>
                                   {w.code}
@@ -732,20 +769,35 @@ export const WorkoutsScreen: React.FC = () => {
                                   {w.targetMuscles}
                                 </Text>
                               </View>
-                            </View>
-
-                            <Pressable
-                              onPress={() => handleStartWorkout(w)}
-                              style={styles.startWorkoutButton}
-                              accessible={true}
-                              accessibilityRole="button"
-                              accessibilityLabel={`Iniciar treino ${w.name}`}
-                            >
-                              <Play size={15} color={colors.onPrimary} fill={colors.onPrimary} strokeWidth={1.75} />
-                              <Text variant="labelSmall" style={styles.startWorkoutText}>
-                                Iniciar
-                              </Text>
                             </Pressable>
+
+                            <View style={styles.workoutActions}>
+                              <Pressable
+                                onPress={() => {
+                                  triggerHaptic('light');
+                                  navigation.navigate('EditWorkout', { workoutId: w.id });
+                                }}
+                                style={styles.editWorkoutButton}
+                                accessible={true}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Editar treino ${w.name}`}
+                              >
+                                <Edit2 size={16} color={colors.onSurfaceVariant} strokeWidth={1.75} />
+                              </Pressable>
+
+                              <Pressable
+                                onPress={() => handleStartWorkout(w)}
+                                style={styles.startWorkoutButton}
+                                accessible={true}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Iniciar treino ${w.name}`}
+                              >
+                                <Play size={15} color={colors.onPrimary} fill={colors.onPrimary} strokeWidth={1.75} />
+                                <Text variant="labelSmall" style={styles.startWorkoutText}>
+                                  Iniciar
+                                </Text>
+                              </Pressable>
+                            </View>
                           </View>
 
                           {/* Resumo do treino: "N séries · ~X min" */}
@@ -767,7 +819,16 @@ export const WorkoutsScreen: React.FC = () => {
 
                           {/* Lista resumida de exercícios: Nome — A + N séries */}
                           {w.exercises && w.exercises.length > 0 ? (
-                            <View style={styles.exerciseSummaryList}>
+                            <Pressable
+                              onPress={() => {
+                                triggerHaptic('light');
+                                navigation.navigate('EditWorkout', { workoutId: w.id });
+                              }}
+                              style={styles.exerciseSummaryList}
+                              accessible={true}
+                              accessibilityRole="button"
+                              accessibilityLabel={`Ver exercícios de ${w.name}`}
+                            >
                               {w.exercises.slice(0, 3).map((ex, exIdx) => (
                                 <Text key={exIdx} variant="bodySmall" color="secondary" style={styles.workoutPreviewText} numberOfLines={1}>
                                   {ex.itemText}
@@ -778,11 +839,21 @@ export const WorkoutsScreen: React.FC = () => {
                                   {`+${w.exercises.length - 3} ${w.exercises.length - 3 === 1 ? 'exercício' : 'exercícios'}`}
                                 </Text>
                               )}
-                            </View>
+                            </Pressable>
                           ) : w.previewExercises ? (
-                            <Text variant="bodySmall" color="secondary" style={styles.workoutPreviewText} numberOfLines={1}>
-                              {w.previewExercises}
-                            </Text>
+                            <Pressable
+                              onPress={() => {
+                                triggerHaptic('light');
+                                navigation.navigate('EditWorkout', { workoutId: w.id });
+                              }}
+                              accessible={true}
+                              accessibilityRole="button"
+                              accessibilityLabel={`Ver exercícios de ${w.name}`}
+                            >
+                              <Text variant="bodySmall" color="secondary" style={styles.workoutPreviewText} numberOfLines={1}>
+                                {w.previewExercises}
+                              </Text>
+                            </Pressable>
                           ) : null}
                         </View>
                       ))}

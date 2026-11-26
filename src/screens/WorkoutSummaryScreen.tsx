@@ -65,7 +65,6 @@ export const WorkoutSummaryScreen: React.FC = () => {
   const [completedSets, setCompletedSets] = useState(0);
   const [plannedSets, setPlannedSets] = useState(0);
   const [avgRestS, setAvgRestS] = useState(90);
-  const [averageRpe, setAverageRpe] = useState<number | null>(null);
   const [unit, setUnit] = useState('kg');
   const [records, setRecords] = useState<PRRecordItem[]>([]);
   const [exerciseLoads, setExerciseLoads] = useState<ExerciseLoadSummary[]>([]);
@@ -136,11 +135,9 @@ export const WorkoutSummaryScreen: React.FC = () => {
       // 3. Métricas de séries e volume total
       const metricsRows = rawDb.getAllSync<{
         setsCount: number;
-        avgRpe: number | null;
       }>(
         `SELECT 
-          COUNT(st.id) AS setsCount,
-          AVG(st.rpe) AS avgRpe
+          COUNT(st.id) AS setsCount
          FROM session_exercises se
          JOIN sets st ON st.session_exercise_id = se.id
          WHERE se.session_id = ? AND st.completed_at IS NOT NULL`,
@@ -165,9 +162,10 @@ export const WorkoutSummaryScreen: React.FC = () => {
           weight: number;
           reps: number;
           is_warmup: number;
+          type?: string;
           completed_at: number | null;
         }>(
-          `SELECT weight, reps, is_warmup, completed_at FROM sets WHERE session_exercise_id = ?`,
+          `SELECT weight, reps, is_warmup, type, completed_at FROM sets WHERE session_exercise_id = ?`,
           [ex.id]
         );
         curVolume += calcularVolume(
@@ -175,6 +173,7 @@ export const WorkoutSummaryScreen: React.FC = () => {
             weight: r.weight,
             reps: r.reps,
             isWarmup: Boolean(r.is_warmup),
+            type: r.type,
             completedAt: r.completed_at,
           })),
           ex.equipment
@@ -184,11 +183,6 @@ export const WorkoutSummaryScreen: React.FC = () => {
       const curSetsCount = metricsRows.length > 0 ? metricsRows[0].setsCount : 0;
       setTotalVolume(curVolume);
       setCompletedSets(curSetsCount);
-      setAverageRpe(
-        metricsRows.length > 0 && metricsRows[0].avgRpe !== null
-          ? Number(metricsRows[0].avgRpe.toFixed(1))
-          : null
-      );
 
       // 4. Séries planejadas (alvo) e descanso médio
       const planRows = rawDb.getAllSync<{
@@ -234,9 +228,10 @@ export const WorkoutSummaryScreen: React.FC = () => {
               weight: number;
               reps: number;
               is_warmup: number;
+              type?: string;
               completed_at: number | null;
             }>(
-              `SELECT weight, reps, is_warmup, completed_at FROM sets WHERE session_exercise_id = ?`,
+              `SELECT weight, reps, is_warmup, type, completed_at FROM sets WHERE session_exercise_id = ?`,
               [ex.id]
             );
             prevVol += calcularVolume(
@@ -244,6 +239,7 @@ export const WorkoutSummaryScreen: React.FC = () => {
                 weight: r.weight,
                 reps: r.reps,
                 isWarmup: Boolean(r.is_warmup),
+                type: r.type,
                 completedAt: r.completed_at,
               })),
               ex.equipment
@@ -284,7 +280,10 @@ export const WorkoutSummaryScreen: React.FC = () => {
          FROM session_exercises se
          JOIN sets st ON st.session_exercise_id = se.id
          JOIN exercises e ON se.exercise_id = e.id
-         WHERE se.session_id = ? AND (st.is_pr_weight = 1 OR st.is_pr_volume = 1)
+         WHERE se.session_id = ? 
+           AND (st.is_pr_weight = 1 OR st.is_pr_volume = 1)
+           AND (st.type IS NULL OR (st.type != 'drop' AND st.type != 'warmup'))
+           AND st.is_warmup = 0
          ORDER BY st.completed_at ASC`,
         [sessionId]
       );
@@ -512,33 +511,25 @@ export const WorkoutSummaryScreen: React.FC = () => {
               </View>
             </Card>
 
-            {/* Card 4: Intensidade ou Exercícios */}
+            {/* Card 4: Exercícios */}
             <Card variant="surface" style={styles.metricCard}>
               <View style={styles.metricCardHeader}>
                 <Text variant="labelSmall" color="secondary">
-                  {averageRpe !== null ? 'Intensidade' : 'Exercícios'}
+                  Exercícios
                 </Text>
-                <Activity
+                <Dumbbell
                   size={18}
-                  color={averageRpe !== null ? colors.primary : colors.onSurfaceVariant}
+                  color={colors.onSurfaceVariant}
                   strokeWidth={2}
                 />
               </View>
               <View style={styles.metricCardBottom}>
                 <Text variant="headline" style={styles.metricValue}>
-                  {averageRpe !== null ? `RPE ${averageRpe}` : exerciseLoads.length}
+                  {exerciseLoads.length}
                 </Text>
-                {averageRpe !== null ? (
-                  <View style={styles.targetZonePill}>
-                    <Text variant="labelSmall" style={styles.targetZonePillText}>
-                      Zona alvo
-                    </Text>
-                  </View>
-                ) : (
-                  <Text variant="labelSmall" style={styles.metricSubtitleText}>
-                    {exerciseLoads.length} concluídos
-                  </Text>
-                )}
+                <Text variant="labelSmall" style={styles.metricSubtitleText}>
+                  {exerciseLoads.length === 1 ? '1 concluído' : `${exerciseLoads.length} concluídos`}
+                </Text>
               </View>
             </Card>
           </View>

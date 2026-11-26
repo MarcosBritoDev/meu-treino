@@ -15,12 +15,14 @@ import {
   Layers,
   Calendar,
   CheckCircle,
+  Activity,
 } from 'lucide-react-native';
 import { RootStackParamList } from '../navigation/types';
 import { colors, radii, fontFamilies } from '../theme';
 import { Text } from '../ui/Text';
 import { Card } from '../ui/Card';
 import { getExpoDb } from '../db/client';
+import { calcularVolume, formatDecimalBR, isSetInVolume } from '../domain/sessionMath';
 
 type RouteParams = RouteProp<RootStackParamList, 'SessionDetail'>;
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -53,6 +55,7 @@ export const SessionDetailScreen: React.FC = () => {
 
   const [session, setSession] = useState<SessionDetailData | null>(null);
   const [exercises, setExercises] = useState<SessionExerciseDetail[]>([]);
+  const [averageRpe, setAverageRpe] = useState<number | null>(null);
   const [unit, setUnit] = useState('kg');
 
   useEffect(() => {
@@ -83,22 +86,51 @@ export const SessionDetailScreen: React.FC = () => {
         const durationMs = Math.max(60000, (s.ended_at || Date.now()) - s.started_at);
         const durationMin = Math.max(1, Math.round(durationMs / 60000));
 
-        // Volume e séries reais
-        const metricsRows = rawDb.getAllSync<{
-          setsCount: number;
-          totalVolume: number;
+        // Volume total calculado com a regra oficial (exclui aquecimento, 2x para Halteres)
+        const exVolRows = rawDb.getAllSync<{
+          id: string;
+          equipment: string;
         }>(
-          `SELECT 
-            COUNT(st.id) AS setsCount,
-            COALESCE(SUM(st.weight * st.reps), 0) AS totalVolume
+          `SELECT se.id, e.equipment
            FROM session_exercises se
-           JOIN sets st ON st.session_exercise_id = se.id
-           WHERE se.session_id = ? AND st.is_warmup = 0`,
+           JOIN exercises e ON se.exercise_id = e.id
+           WHERE se.session_id = ?`,
           [sessionId]
         );
 
-        let setsCount = metricsRows[0]?.setsCount ?? 0;
-        let totalVolume = metricsRows[0]?.totalVolume ?? 0;
+        let totalVolume = 0;
+        let setsCount = 0;
+
+        for (const ex of exVolRows) {
+          const sRows = rawDb.getAllSync<{
+            weight: number;
+            reps: number;
+            is_warmup: number;
+            type?: string;
+            completed_at: number | null;
+          }>(
+            `SELECT weight, reps, is_warmup, type, completed_at FROM sets WHERE session_exercise_id = ?`,
+            [ex.id]
+          );
+
+          totalVolume += calcularVolume(
+            sRows.map((r) => ({
+              weight: r.weight,
+              reps: r.reps,
+              isWarmup: Boolean(r.is_warmup),
+              type: r.type,
+              completedAt: r.completed_at,
+            })),
+            ex.equipment
+          );
+
+          const completedNonWarmup = sRows.filter(
+            (r) =>
+              r.completed_at !== null &&
+              isSetInVolume({ type: r.type, isWarmup: Boolean(r.is_warmup) })
+          );
+          setsCount += completedNonWarmup.length;
+        }
 
         if (setsCount === 0) {
           const targetRows = rawDb.getAllSync<{ totalTargetSets: number }>(
@@ -109,6 +141,20 @@ export const SessionDetailScreen: React.FC = () => {
           );
           setsCount = targetRows[0]?.totalTargetSets ?? 0;
         }
+
+        // Esforço médio (RPE do histórico antigo, se houver)
+        const rpeRows = rawDb.getAllSync<{ avgRpe: number | null }>(
+          `SELECT AVG(st.rpe) AS avgRpe
+           FROM session_exercises se
+           JOIN sets st ON st.session_exercise_id = se.id
+           WHERE se.session_id = ? AND st.rpe IS NOT NULL AND st.rpe > 0`,
+          [sessionId]
+        );
+        const avgRpe =
+          rpeRows.length > 0 && rpeRows[0].avgRpe !== null
+            ? Number(rpeRows[0].avgRpe.toFixed(1))
+            : null;
+        setAverageRpe(avgRpe);
 
         setSession({
           id: s.id,
@@ -235,6 +281,31 @@ export const SessionDetailScreen: React.FC = () => {
             </View>
           </Card>
         </View>
+
+        {/* Card: Esforço Médio (Oculto quando não houver RPE gravado em histórico antigo) */}
+        {averageRpe !== null && (
+          <Card variant="surface" style={styles.effortCard}>
+            <View style={styles.effortCardHeader}>
+              <View style={styles.effortTitleRow}>
+                <Activity size={18} color={colors.primary} strokeWidth={2} />
+                <Text variant="bodyMedium" style={styles.effortTitle}>
+                  Esforço médio
+                </Text>
+              </View>
+              <Text variant="labelSmall" color="secondary">
+                Histórico
+              </Text>
+            </View>
+            <View style={styles.effortValueRow}>
+              <Text variant="headline" style={styles.effortValue}>
+                RPE {formatDecimalBR(averageRpe)}
+              </Text>
+              <Text variant="bodySmall" color="secondary" style={styles.effortScale}>
+                / 10
+              </Text>
+            </View>
+          </Card>
+        )}
 
         {/* LISTA DE EXERCÍCIOS DA SESSÃO */}
         <View style={styles.exerciseSection}>
@@ -397,5 +468,37 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '500',
     marginTop: 2,
+  },
+  effortCard: {
+    padding: 14,
+    borderRadius: radii.card,
+    gap: 8,
+  },
+  effortCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  effortTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  effortTitle: {
+    fontWeight: '600',
+    color: colors.onSurface,
+  },
+  effortValueRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+  },
+  effortValue: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.onSurface,
+  },
+  effortScale: {
+    fontSize: 13,
   },
 });

@@ -39,9 +39,12 @@ import {
   getWorkoutForEdit,
   saveWorkout,
   startWorkoutSession,
+  getInProgressSession,
+  discardInProgressSession,
   getUserUnit,
   WorkoutForEdit,
   WorkoutExerciseForEdit,
+  InProgressSessionInfo,
 } from '../db/workouts';
 
 type RouteParams = RouteProp<RootStackParamList, 'EditWorkout'>;
@@ -79,6 +82,8 @@ export const EditWorkoutScreen: React.FC = () => {
   } | null>(null);
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [discardModalVisible, setDiscardModalVisible] = useState(false);
+  const [conflictSession, setConflictSession] = useState<InProgressSessionInfo | null>(null);
+  const [conflictModalVisible, setConflictModalVisible] = useState(false);
 
   // Toast
   const [toastVisible, setToastVisible] = useState(false);
@@ -233,13 +238,23 @@ export const EditWorkoutScreen: React.FC = () => {
     }
   };
 
+  const checkConflictAndStart = () => {
+    const existing = getInProgressSession();
+    if (existing) {
+      setConflictSession(existing);
+      setConflictModalVisible(true);
+      return;
+    }
+    startSessionAndNavigate();
+  };
+
   const handleStartClick = () => {
     if (isDirty) {
       triggerHaptic('warning');
       setShowUnsavedModal(true);
     } else {
       triggerHaptic('light');
-      startSessionAndNavigate();
+      checkConflictAndStart();
     }
   };
 
@@ -629,6 +644,14 @@ export const EditWorkoutScreen: React.FC = () => {
           />
         ))}
 
+        {exercises.length === 0 && (
+          <View style={styles.emptyPreviewBox}>
+            <Text variant="bodyMedium" color="secondary" style={styles.emptyPreviewText}>
+              Nenhum exercício nesta ficha ainda.
+            </Text>
+          </View>
+        )}
+
         {/* BOTÃO + ADICIONAR EXERCÍCIO */}
         <Pressable
           onPress={() => {
@@ -655,7 +678,7 @@ export const EditWorkoutScreen: React.FC = () => {
       <View style={styles.fixedFooter}>
         <View style={styles.footerInfoRow}>
           <Text style={styles.footerStatsText}>
-            <Text style={styles.footerStatsBold}>{totalSets} séries</Text> · ~{approxMin} min
+            <Text style={styles.footerStatsBold}>{totalSets} {totalSets === 1 ? 'série' : 'séries'}</Text> · ~{approxMin} min
           </Text>
 
           {isDirty && (
@@ -734,7 +757,7 @@ export const EditWorkoutScreen: React.FC = () => {
                   onPress={() => {
                     handleSaveWorkout();
                     setShowUnsavedModal(false);
-                    startSessionAndNavigate();
+                    checkConflictAndStart();
                   }}
                   style={({ pressed }) => [
                     styles.modalPrimaryBtn,
@@ -749,7 +772,7 @@ export const EditWorkoutScreen: React.FC = () => {
                 <Pressable
                   onPress={() => {
                     setShowUnsavedModal(false);
-                    startSessionAndNavigate();
+                    checkConflictAndStart();
                   }}
                   style={({ pressed }) => [
                     styles.modalSecondaryBtn,
@@ -777,6 +800,22 @@ export const EditWorkoutScreen: React.FC = () => {
           </Pressable>
         </Modal>
       )}
+
+      {/* Modal de Conflito de Sessão */}
+      <ConfirmModal
+        visible={conflictModalVisible}
+        title="Treino em andamento"
+        description={`Já existe uma sessão iniciada ("${conflictSession?.nameSnapshot}"). Deseja descartar a sessão anterior e iniciar esta?`}
+        confirmLabel="Descartar e iniciar"
+        cancelLabel="Voltar"
+        isDanger={true}
+        onConfirm={() => {
+          discardInProgressSession();
+          setConflictModalVisible(false);
+          startSessionAndNavigate();
+        }}
+        onCancel={() => setConflictModalVisible(false)}
+      />
 
       {/* MODAL: Descartar alterações ao voltar */}
       <ConfirmModal
@@ -1012,6 +1051,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     color: '#8E8E93',
+  },
+  emptyPreviewBox: {
+    paddingVertical: 32,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyPreviewText: {
+    textAlign: 'center',
+    fontSize: 14,
   },
   emptyContainer: {
     flex: 1,
