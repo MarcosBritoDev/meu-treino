@@ -18,6 +18,7 @@ import { EditWorkoutScreen } from '../screens/EditWorkoutScreen';
 import { AddExercisesScreen } from '../screens/AddExercisesScreen';
 import { ActiveSessionScreen } from '../screens/ActiveSessionScreen';
 import { SessionDetailScreen } from '../screens/SessionDetailScreen';
+import { WorkoutSummaryScreen } from '../screens/WorkoutSummaryScreen';
 import { colors } from '../theme';
 import { useSettingsStore } from '../store/useSettingsStore';
 
@@ -129,6 +130,14 @@ export function AppNavigator() {
         component={SessionDetailScreen}
         options={{
           presentation: 'card',
+        }}
+      />
+      <Stack.Screen
+        name="WorkoutSummary"
+        component={WorkoutSummaryScreen}
+        options={{
+          presentation: 'card',
+          gestureEnabled: false,
         }}
       />
     </Stack.Navigator>

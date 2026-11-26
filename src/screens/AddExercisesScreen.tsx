@@ -35,6 +35,7 @@ import {
   getExercisesForAddSelection,
   ExerciseSelectionItem,
 } from '../db/library';
+import { getExpoDb } from '../db/client';
 
 type RouteParams = RouteProp<RootStackParamList, 'AddExercises'>;
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -43,6 +44,8 @@ export const AddExercisesScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RouteParams>();
   const workoutId = route.params?.workoutId;
+  const sessionId = route.params?.sessionId;
+  const fromScreen = route.params?.fromScreen;
   const existingExerciseIds = useMemo(
     () => new Set(route.params?.existingExerciseIds || []),
     [route.params?.existingExerciseIds]
@@ -128,9 +131,9 @@ export const AddExercisesScreen: React.FC = () => {
     setSelectedIds([]);
   };
 
-  // Conclui adição e retorna para Editar Treino
+  // Conclui adição e retorna para Editar Treino ou ActiveSession
   const handleConfirmAdd = () => {
-    if (selectedIds.length === 0 || !workoutId) return;
+    if (selectedIds.length === 0) return;
     triggerHaptic('success');
 
     // Mapeia os IDs selecionados para os objetos de exercício na ordem selecionada
@@ -146,10 +149,50 @@ export const AddExercisesScreen: React.FC = () => {
         defaultRestS: e.defaultRestS,
       }));
 
-    navigation.navigate('EditWorkout', {
-      workoutId,
-      addedExercises: selectedObjects,
-    });
+    if (sessionId || fromScreen === 'ActiveSession') {
+      const activeSessionId = sessionId!;
+      try {
+        const rawDb = getExpoDb();
+        const maxPosRow = rawDb.getAllSync<{ maxPos: number | null }>(
+          `SELECT MAX(position) as maxPos FROM session_exercises WHERE session_id = ?`,
+          [activeSessionId]
+        );
+        let nextPos = (maxPosRow[0]?.maxPos ?? -1) + 1;
+
+        for (const item of selectedObjects) {
+          const seId = `se_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+          rawDb.runSync(
+            `INSERT INTO session_exercises (id, session_id, exercise_id, position, target_sets, rep_min, rep_max, rest_s, is_session_only)
+             VALUES (?, ?, ?, ?, 3, 8, 12, ?, 1)`,
+            [seId, activeSessionId, item.exerciseId, nextPos++, item.defaultRestS || 90]
+          );
+
+          // Insere 3 séries padrão
+          for (let s = 1; s <= 3; s++) {
+            const setId = `set_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+            rawDb.runSync(
+              `INSERT INTO sets (id, session_exercise_id, "index", weight, reps, is_warmup, is_pr_weight, is_pr_volume)
+               VALUES (?, ?, ?, 20.0, 10, 0, 0, 0)`,
+              [setId, seId, s]
+            );
+          }
+        }
+      } catch (err) {
+        console.warn('Erro ao inserir exercícios na sessão ativa:', err);
+      }
+
+      navigation.navigate('ActiveSession', {
+        sessionId: activeSessionId,
+      });
+      return;
+    }
+
+    if (workoutId) {
+      navigation.navigate('EditWorkout', {
+        workoutId,
+        addedExercises: selectedObjects,
+      });
+    }
   };
 
   // Ícone de equipamento

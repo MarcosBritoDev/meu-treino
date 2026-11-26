@@ -17,6 +17,7 @@ export interface BottomSheetProps {
   onClose: () => void;
   title?: string;
   children: React.ReactNode;
+  heightPercent?: number;
 }
 
 export const BottomSheet: React.FC<BottomSheetProps> = ({
@@ -24,6 +25,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   onClose,
   title,
   children,
+  heightPercent,
 }) => {
   const panResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => true,
@@ -58,7 +60,12 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
         />
 
         {/* Conteúdo do Sheet com raio 28px no topo */}
-        <View style={styles.sheetContainer}>
+        <View
+          style={[
+            styles.sheetContainer,
+            heightPercent ? { maxHeight: `${heightPercent}%` } : undefined,
+          ]}
+        >
           {/* Alça de arrastar (Drag Handle) */}
           <View {...panResponder.panHandlers} style={styles.handleArea}>
             <View style={styles.handle} />

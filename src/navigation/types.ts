@@ -27,9 +27,15 @@ export type RootStackParamList = {
       defaultRestS: number;
     }[];
   } | undefined;
-  AddExercises: { workoutId: string; existingExerciseIds: string[] } | undefined;
+  AddExercises: {
+    workoutId?: string;
+    sessionId?: string;
+    existingExerciseIds: string[];
+    fromScreen?: 'EditWorkout' | 'ActiveSession';
+  } | undefined;
   ActiveSession: { sessionId: string; workoutId?: string } | undefined;
   SessionDetail: { sessionId: string };
+  WorkoutSummary: { sessionId: string };
 };
 
 declare global {
