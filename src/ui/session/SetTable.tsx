@@ -44,6 +44,7 @@ import { triggerHaptic } from '../haptics';
 export interface SetVM {
   id: string;
   weightKg?: number; // active mode: sempre kg; conversão na exibição
+  weight?: number;
   reps?: number;
   rpe?: number | null;
   isWarmup?: boolean;
@@ -73,6 +74,10 @@ export interface SetVM {
   is_session_only?: boolean | number;
   completed?: boolean;
   previous?: PreviousVM | { weightKg?: number; weight?: number; reps: number; rpe?: number | null } | null;
+  drop_percent?: number | null;
+  dropPercent?: number | null;
+  manual_weight?: boolean;
+  manualWeight?: boolean;
 }
 
 export interface PreviousVM {
@@ -539,11 +544,13 @@ const SetRow = memo(function SetRow({
   const refExerciseId = set.effortRefExerciseId ?? set.effort_ref_exercise_id;
   const refName = refExerciseId ? refExerciseName?.(refExerciseId) : undefined;
   const effort =
-    setType === 'normal' || (!setType && !set.isWarmup && !set.isFailure)
-      ? formatEffort(set, unit, refName)
+    setType === 'normal' || setType === 'drop' || (!setType && !set.isWarmup && !set.isFailure)
+      ? (setType === 'drop' ? formatTarget(set, unit, refName) : formatEffort(set, unit, refName))
       : '';
 
-  const displayWeight = formatWeight(set.weightKg ?? 0, unit);
+  const isManualDrop = setType === 'drop' && Boolean(set.manual_weight || (set as any).manualWeight);
+  const rawWeight = set.weightKg ?? (set as any).weight;
+  const displayWeight = rawWeight !== null && rawWeight !== undefined ? formatWeight(rawWeight, unit) : '';
   const displayReps = set.reps !== null && set.reps !== undefined ? String(set.reps) : '';
 
   return (
@@ -610,7 +617,11 @@ const SetRow = memo(function SetRow({
           placeholderTextColor="#525257"
           keyboardType="decimal-pad"
           selectTextOnFocus
-          style={[s.activeBoxInput, done && s.activeBoxInputDone]}
+          style={[
+            s.activeBoxInput,
+            done && s.activeBoxInputDone,
+            isManualDrop && s.activeBoxInputManualDrop,
+          ]}
           accessibilityLabel={`Carga ${displayWeight} ${unit}`}
         />
       </View>
@@ -943,6 +954,11 @@ const s = StyleSheet.create({
   },
   activeBoxInputDone: {
     borderColor: 'rgba(245, 196, 0, 0.4)',
+  },
+  activeBoxInputManualDrop: {
+    borderColor: '#C084FC',
+    borderWidth: 1.5,
+    backgroundColor: 'rgba(192, 132, 252, 0.08)',
   },
   header: {
     flexDirection: 'row',

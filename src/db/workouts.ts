@@ -8,7 +8,7 @@ import {
   formatWorkoutSummary,
 } from '../domain/workouts';
 import { PlannedSet, SessionSet, SetType, RepsMode, EffortMode, Unit } from '../domain/types';
-import { suggestDropWeightKg, suggest1RmWeightKg } from '../domain/sessionMath';
+import { suggestDropWeightKg, suggest1RmWeightKg, calcDropFromWeightKg } from '../domain/sessionMath';
 
 export {
   formatTempoRelativoLog,
@@ -795,9 +795,12 @@ export function startWorkoutSession(workoutId?: string, workoutName?: string): s
               initialKg = suggest1RmWeightKg(ref1Rm, ps.effort_value, ex.defaultIncrement ?? 2.5);
             }
           }
-          // Regra 2: Se type === 'drop', calcular -20% da última série não-aquecimento já inicializada
+          // Regra 2: Se type === 'drop', calcular em cascata a partir da série imediatamente anterior usando calcDropFromWeightKg
           else if (ps.type === 'drop') {
-            initialKg = suggestDropWeightKg(initializedSets, ex.defaultIncrement ?? 2.5);
+            const prevSet = initializedSets[initializedSets.length - 1];
+            const prevKg = prevSet?.weight ?? null;
+            const dropPct = ps.drop_percent ?? 20;
+            initialKg = calcDropFromWeightKg(prevKg, dropPct, ex.defaultIncrement ?? 2.5);
           }
           // Regra 3: Buscar na última sessão completed carga compatível
           else {

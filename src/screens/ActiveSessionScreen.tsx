@@ -62,6 +62,8 @@ import {
   adjustRest,
   defaultRestFor,
   suggestDropWeightKg,
+  calcDropFromWeightKg,
+  recalculateDropCascade,
   canGeneratePR,
   SetType,
   RepsMode,
@@ -92,6 +94,8 @@ interface SetItem {
   effortRefExerciseId?: string | null;
   restS?: number | null;
   is_session_only: boolean;
+  drop_percent?: number | null;
+  manual_weight?: boolean;
 }
 
 interface ActiveExerciseItem {
@@ -320,9 +324,10 @@ export const ActiveSessionScreen: React.FC = () => {
           effort_ref_exercise_id?: string | null;
           rest_s?: number | null;
           is_session_only?: number;
+          drop_percent?: number | null;
         }>(
           `SELECT id, session_exercise_id, "index", weight, reps, rpe, is_warmup, completed_at, is_pr_weight, is_pr_volume,
-                  type, reps_mode, min_reps, max_reps, effort_mode, effort_value, effort_value_max, effort_ref_exercise_id, rest_s, is_session_only
+                  type, reps_mode, min_reps, max_reps, effort_mode, effort_value, effort_value_max, effort_ref_exercise_id, rest_s, is_session_only, drop_percent
            FROM sets
            WHERE session_exercise_id = ?
            ORDER BY "index" ASC`,
@@ -338,15 +343,15 @@ export const ActiveSessionScreen: React.FC = () => {
           for (let idx = 1; idx <= setsCount; idx++) {
             const newSetId = `set_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`;
             rawDb.runSync(
-              `INSERT INTO sets (id, session_exercise_id, "index", weight, reps, is_warmup, is_pr_weight, is_pr_volume, type, reps_mode, min_reps, max_reps, effort_mode, is_session_only)
-               VALUES (?, ?, ?, ?, ?, 0, 0, 0, 'normal', 'reps_range', ?, ?, 'none', 0)`,
+              `INSERT INTO sets (id, session_exercise_id, "index", weight, reps, is_warmup, is_pr_weight, is_pr_volume, type, reps_mode, min_reps, max_reps, effort_mode, is_session_only, drop_percent)
+               VALUES (?, ?, ?, ?, ?, 0, 0, 0, 'normal', 'reps_range', ?, ?, 'none', 0, NULL)`,
               [newSetId, ex.id, idx, initialWeight, initialReps, ex.rep_min || 8, ex.rep_max || 12]
             );
           }
 
           setRows = rawDb.getAllSync(
             `SELECT id, session_exercise_id, "index", weight, reps, rpe, is_warmup, completed_at, is_pr_weight, is_pr_volume,
-                    type, reps_mode, min_reps, max_reps, effort_mode, effort_value, effort_value_max, effort_ref_exercise_id, rest_s, is_session_only
+                    type, reps_mode, min_reps, max_reps, effort_mode, effort_value, effort_value_max, effort_ref_exercise_id, rest_s, is_session_only, drop_percent
              FROM sets
              WHERE session_exercise_id = ?
              ORDER BY "index" ASC`,
@@ -354,28 +359,33 @@ export const ActiveSessionScreen: React.FC = () => {
           );
         }
 
-        const sets: SetItem[] = setRows.map((r) => ({
-          id: r.id,
-          sessionExerciseId: r.session_exercise_id,
-          index: r.index,
-          weight: r.weight,
-          reps: r.reps,
-          rpe: r.rpe,
-          isWarmup: Boolean(r.is_warmup || r.type === 'warmup'),
-          completedAt: r.completed_at,
-          isPrWeight: Boolean(r.is_pr_weight),
-          isPrVolume: Boolean(r.is_pr_volume),
-          type: (r.type as SetType) || (r.is_warmup ? 'warmup' : 'normal'),
-          repsMode: (r.reps_mode as RepsMode) || 'reps_range',
-          minReps: r.min_reps,
-          maxReps: r.max_reps,
-          effortMode: (r.effort_mode as EffortMode) || 'none',
-          effortValue: r.effort_value,
-          effortValueMax: r.effort_value_max,
-          effortRefExerciseId: r.effort_ref_exercise_id,
-          restS: r.rest_s,
-          is_session_only: Boolean(r.is_session_only),
-        }));
+        const sets: SetItem[] = setRows.map((r) => {
+          const prevManual = exercises.find((e) => e.id === ex.id)?.sets.find((s) => s.id === r.id)?.manual_weight;
+          return {
+            id: r.id,
+            sessionExerciseId: r.session_exercise_id,
+            index: r.index,
+            weight: r.weight,
+            reps: r.reps,
+            rpe: r.rpe,
+            isWarmup: Boolean(r.is_warmup || r.type === 'warmup'),
+            completedAt: r.completed_at,
+            isPrWeight: Boolean(r.is_pr_weight),
+            isPrVolume: Boolean(r.is_pr_volume),
+            type: (r.type as SetType) || (r.is_warmup ? 'warmup' : 'normal'),
+            repsMode: (r.reps_mode as RepsMode) || 'reps_range',
+            minReps: r.min_reps,
+            maxReps: r.max_reps,
+            effortMode: (r.effort_mode as EffortMode) || 'none',
+            effortValue: r.effort_value,
+            effortValueMax: r.effort_value_max,
+            effortRefExerciseId: r.effort_ref_exercise_id,
+            restS: r.rest_s,
+            is_session_only: Boolean(r.is_session_only),
+            drop_percent: r.drop_percent,
+            manual_weight: prevManual ?? false,
+          };
+        });
 
         items.push({
           id: ex.id,
@@ -620,10 +630,25 @@ export const ActiveSessionScreen: React.FC = () => {
         )
       );
 
-      // Dispara o cronômetro de descanso: set.rest_s ?? session_exercise.rest_s ?? defaultRestFor(set.type)
-      const restTime = setItem.restS ?? exercise.restS ?? defaultRestFor(setItem.type);
-      if (restTime > 0) {
-        startRestTimer(restTime);
+      // Dispara o cronômetro de descanso ou aplica descanso inteligente para Drop
+      const currentIdx = exercise.sets.findIndex((s) => s.id === setItem.id);
+      const nextSet =
+        currentIdx >= 0 && currentIdx < exercise.sets.length - 1
+          ? exercise.sets[currentIdx + 1]
+          : null;
+
+      if (nextSet && nextSet.type === 'drop') {
+        // Se a próxima série for drop: NÃO inicia o cronômetro, zera descanso ativo e exibe toast
+        setRestActive(false);
+        setRestRemaining(0);
+        setRestTotalSeconds(0);
+        setToastMessage('Sem descanso! Reduza a carga para o Drop');
+        setToastVisible(true);
+      } else {
+        const restTime = setItem.restS ?? exercise.restS ?? defaultRestFor(setItem.type);
+        if (restTime > 0) {
+          startRestTimer(restTime);
+        }
       }
 
       // Se todas as séries deste exercício forem concluídas, expande o próximo
@@ -640,24 +665,78 @@ export const ActiveSessionScreen: React.FC = () => {
     }
   };
 
+  // Atualiza carga de série com suporte a cascata de Drop Sets e trava manual
+  const updateExerciseSetWeight = (
+    exerciseId: string,
+    setId: string,
+    weightKg: number | null,
+    isClear = false
+  ) => {
+    const rawDb = getExpoDb();
+    setExercises((prev) => {
+      const exIdx = prev.findIndex((e) => e.id === exerciseId);
+      if (exIdx === -1) return prev;
+      const ex = prev[exIdx];
+      const setIdx = ex.sets.findIndex((s) => s.id === setId);
+      if (setIdx === -1) return prev;
+
+      const targetSet = ex.sets[setIdx];
+      const updatedSets = ex.sets.map((s) => ({ ...s }));
+
+      if (isClear) {
+        if (targetSet.type === 'drop') {
+          updatedSets[setIdx].manual_weight = false;
+          const cascaded = recalculateDropCascade(
+            updatedSets,
+            setIdx - 1,
+            ex.defaultIncrement ?? defaultIncrement ?? 2.5
+          );
+          for (let i = setIdx; i < cascaded.length; i++) {
+            const s = cascaded[i];
+            rawDb.runSync(`UPDATE sets SET weight = ? WHERE id = ?`, [s.weight, s.id]);
+          }
+          return prev.map((e, idx) => (idx === exIdx ? { ...e, sets: cascaded } : e));
+        }
+        return prev;
+      }
+
+      if (weightKg !== null) {
+        const finalKg = Math.max(0, Number(weightKg.toFixed(2)));
+        updatedSets[setIdx].weight = finalKg;
+        if (targetSet.type === 'drop') {
+          updatedSets[setIdx].manual_weight = true;
+        }
+
+        const cascaded = recalculateDropCascade(
+          updatedSets,
+          setIdx,
+          ex.defaultIncrement ?? defaultIncrement ?? 2.5
+        );
+
+        for (let i = setIdx; i < cascaded.length; i++) {
+          const s = cascaded[i];
+          rawDb.runSync(`UPDATE sets SET weight = ? WHERE id = ?`, [s.weight, s.id]);
+        }
+
+        return prev.map((e, idx) => (idx === exIdx ? { ...e, sets: cascaded } : e));
+      }
+
+      return prev;
+    });
+  };
+
   // Alteração direta de carga ou repetições
   const handleActiveChange = (exerciseId: string, setId: string, field: string, value: any) => {
     const rawDb = getExpoDb();
     if (field === 'weight') {
-      const parsed = typeof value === 'number' ? value : parseNumber(String(value));
-      if (parsed !== null) {
-        const kg = unit === 'kg' ? parsed : displayToKg(parsed, unit);
-        rawDb.runSync(`UPDATE sets SET weight = ? WHERE id = ?`, [kg, setId]);
-        setExercises((prev) =>
-          prev.map((ex) =>
-            ex.id === exerciseId
-              ? {
-                  ...ex,
-                  sets: ex.sets.map((s) => (s.id === setId ? { ...s, weight: kg } : s)),
-                }
-              : ex
-          )
-        );
+      if (value === '' || value === null || (typeof value === 'string' && value.trim() === '')) {
+        updateExerciseSetWeight(exerciseId, setId, null, true);
+      } else {
+        const parsed = typeof value === 'number' ? value : parseNumber(String(value));
+        if (parsed !== null) {
+          const kg = unit === 'kg' ? parsed : displayToKg(parsed, unit);
+          updateExerciseSetWeight(exerciseId, setId, kg, false);
+        }
       }
     } else if (field === 'reps') {
       const parsed = typeof value === 'number' ? value : parseInt(String(value), 10);
@@ -718,7 +797,9 @@ export const ActiveSessionScreen: React.FC = () => {
       maxReps = null;
       effortMode = 'none';
       effortValue = null;
-      initialKg = suggestDropWeightKg(targetExercise.sets, targetExercise.defaultIncrement ?? 2.5);
+      const prevSet = targetExercise.sets[targetExercise.sets.length - 1];
+      const prevKg = prevSet?.weight ?? null;
+      initialKg = calcDropFromWeightKg(prevKg, 20, targetExercise.defaultIncrement ?? 2.5);
     }
 
     if (initialKg === null) {
@@ -879,22 +960,7 @@ export const ActiveSessionScreen: React.FC = () => {
 
   // Ajustes de carga e reps (steppers)
   const handleUpdateWeight = (exerciseId: string, setId: string, newWeight: number) => {
-    const finalWeight = Math.max(0, Number(newWeight.toFixed(1)));
-    try {
-      const rawDb = getExpoDb();
-      rawDb.runSync(`UPDATE sets SET weight = ? WHERE id = ?`, [finalWeight, setId]);
-    } catch {}
-
-    setExercises((prev) =>
-      prev.map((ex) =>
-        ex.id === exerciseId
-          ? {
-              ...ex,
-              sets: ex.sets.map((s) => (s.id === setId ? { ...s, weight: finalWeight } : s)),
-            }
-          : ex
-      )
-    );
+    updateExerciseSetWeight(exerciseId, setId, newWeight, false);
   };
 
   const handleUpdateReps = (exerciseId: string, setId: string, newReps: number) => {
