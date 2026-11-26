@@ -13,6 +13,7 @@ import {
   RefreshCw,
   MoreHorizontal,
   ChevronRight,
+  ChevronDown,
   Trash2,
   ArrowUp,
   ArrowDown,
@@ -38,6 +39,9 @@ export interface ExerciseCardProps {
   unit?: Unit;
   canMoveUp?: boolean;
   canMoveDown?: boolean;
+  isExpanded?: boolean;
+  defaultExpanded?: boolean;
+  onToggleExpand?: (exerciseId: string) => void;
   onCycleRest?: (exerciseId: string) => void;
   onUpdateNote?: (exerciseId: string, note: string) => void;
   onOpenAddSet?: (exerciseId: string) => void;
@@ -48,6 +52,7 @@ export interface ExerciseCardProps {
   onRowClick?: (exercise: any, set: any, badgeLabel: string) => void;
   onMenuAction?: (exerciseId: string, action: SetMenuAction, setId: string) => void;
   onHeaderPress?: (exerciseId: string) => void;
+  onOpenExerciseOptions?: (exerciseId: string) => void;
   // Callbacks para modo ativo (Etapa 5)
   onToggleComplete?: (exerciseId: string, set: SetVM) => void;
   onActiveChange?: (exerciseId: string, setId: string, field: string, value: any) => void;
@@ -60,6 +65,9 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
   unit = 'kg',
   canMoveUp = false,
   canMoveDown = false,
+  isExpanded: isExpandedProp,
+  defaultExpanded = true,
+  onToggleExpand,
   onCycleRest,
   onUpdateNote,
   onOpenAddSet,
@@ -70,10 +78,34 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
   onRowClick,
   onMenuAction,
   onHeaderPress,
+  onOpenExerciseOptions,
   onToggleComplete,
   onActiveChange,
 }) => {
   const [exerciseMenuVisible, setExerciseMenuVisible] = useState(false);
+  const [internalExpanded, setInternalExpanded] = useState(defaultExpanded);
+
+  const isExpanded = isExpandedProp !== undefined ? isExpandedProp : internalExpanded;
+
+  const handleToggle = () => {
+    triggerHaptic('light');
+    if (onToggleExpand) {
+      onToggleExpand(exercise.id);
+    } else {
+      setInternalExpanded((prev) => !prev);
+    }
+  };
+
+  const handleOpenOptions = () => {
+    triggerHaptic('light');
+    if (onHeaderPress) {
+      onHeaderPress(exercise.id);
+    } else if (onOpenExerciseOptions) {
+      onOpenExerciseOptions(exercise.id);
+    } else {
+      setExerciseMenuVisible(true);
+    }
+  };
 
   const restSeconds =
     exercise.restS ??
@@ -81,120 +113,183 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
     exercise.defaultRestS ??
     90;
 
+  const setsList = exercise.sets || [];
+  const completedCount = setsList.filter(
+    (s: any) => Boolean(s.completed || (s.completedAt !== null && s.completedAt !== undefined))
+  ).length;
+  const totalSets = setsList.length;
+  const isAllCompleted = mode === 'active' && totalSets > 0 && completedCount === totalSets;
+
+  let collapsedSubtitle = '';
+  if (mode === 'active') {
+    if (completedCount === totalSets && totalSets > 0) {
+      collapsedSubtitle = `${totalSets}/${totalSets} séries concluídas ✓`;
+    } else if (completedCount > 0) {
+      collapsedSubtitle = `${completedCount}/${totalSets} séries concluídas`;
+    } else {
+      collapsedSubtitle = `${totalSets} ${totalSets === 1 ? 'série' : 'séries'}`;
+    }
+  } else {
+    collapsedSubtitle = `${totalSets} ${totalSets === 1 ? 'série' : 'séries'}`;
+  }
+
   return (
-    <View style={styles.cardContainer}>
+    <View
+      style={[
+        styles.cardContainer,
+        !isExpanded && styles.cardContainerCollapsed,
+        !isExpanded && isAllCompleted && styles.cardContainerComplete,
+      ]}
+    >
       {/* 1. CABEÇALHO DO CARD */}
       <View style={styles.headerRow}>
         <Pressable
           style={styles.headerLeft}
-          onPress={() => onHeaderPress?.(exercise.id)}
+          onPress={handleToggle}
           accessibilityRole="button"
-          accessibilityLabel={`Exercício ${index + 1}: ${exercise.name}`}
+          accessibilityLabel={`Exercício ${index + 1}: ${exercise.name}. ${isExpanded ? 'Toque para minimizar' : 'Toque para expandir'}`}
         >
           <Text style={styles.indexText}>{index + 1}</Text>
-          <Text style={styles.exerciseNameText} numberOfLines={1}>
-            {exercise.name}
-          </Text>
-          <ChevronRight size={15} color="#71717A" strokeWidth={2} style={styles.chevron} />
+          <View style={styles.headerTitleWrap}>
+            <View style={styles.nameAndChevronRow}>
+              <Text style={styles.exerciseNameText} numberOfLines={1}>
+                {exercise.name}
+              </Text>
+              {isExpanded ? (
+                <ChevronDown size={15} color="#71717A" strokeWidth={2} style={styles.chevron} />
+              ) : (
+                <ChevronRight size={15} color="#71717A" strokeWidth={2} style={styles.chevron} />
+              )}
+            </View>
+            {!isExpanded && (
+              <Text
+                style={[
+                  styles.collapsedSubtitleText,
+                  isAllCompleted && styles.collapsedSubtitleTextComplete,
+                ]}
+                numberOfLines={1}
+              >
+                {collapsedSubtitle}
+              </Text>
+            )}
+          </View>
         </Pressable>
 
-        {/* Botão compacto de descanso */}
-        <Pressable
-          onPress={() => {
-            triggerHaptic('light');
-            onCycleRest?.(exercise.id);
-          }}
-          style={({ pressed }) => [
-            styles.restBadgeBtn,
-            pressed && { opacity: 0.75 },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel={`Descanso ${formatRestShort(restSeconds)}. Tocar para alternar.`}
-        >
-          <Clock size={13} color="#F5C400" strokeWidth={2.2} />
-          <Text style={styles.restBadgeText}>{formatRestShort(restSeconds)}</Text>
-        </Pressable>
-      </View>
-
-      {/* 2. NOTA INLINE DISCRETA */}
-      <TextInput
-        value={exercise.note || ''}
-        onChangeText={(text) => onUpdateNote?.(exercise.id, text)}
-        placeholder="Adicionar nota do exercício..."
-        placeholderTextColor="#636366"
-        style={styles.noteInput}
-        accessibilityLabel="Nota do exercício"
-      />
-
-      {/* 3. CORPO: SetTable */}
-      <SetTable
-        mode={mode}
-        sets={exercise.sets || []}
-        unit={unit}
-        previous={(exercise.sets || []).map((s: any) => s.previous ?? null)}
-        onRowClick={(set, badgeLabel) => onRowClick?.(exercise, set, badgeLabel)}
-        onMenuAction={(action, setId) => onMenuAction?.(exercise.id, action, setId)}
-        onToggle={(setId) => {
-          const targetSet = (exercise.sets || []).find((s) => s.id === setId);
-          if (targetSet) onToggleComplete?.(exercise.id, targetSet);
-        }}
-        onEditWeight={(setId) => onActiveChange?.(exercise.id, setId, 'weight', null)}
-        onEditReps={(setId) => onActiveChange?.(exercise.id, setId, 'reps', null)}
-        onActiveChange={(setId, field, val) => onActiveChange?.(exercise.id, setId, field, val)}
-      />
-
-      {/* 4. RODAPÉ DO CARD: + Adicionar série, Substituir, ••• */}
-      <View style={styles.footerRow}>
-        <View style={styles.footerActionsLeft}>
+        <View style={styles.headerRightControls}>
+          {/* Botão compacto de descanso */}
           <Pressable
             onPress={() => {
               triggerHaptic('light');
-              onOpenAddSet?.(exercise.id);
+              onCycleRest?.(exercise.id);
             }}
             style={({ pressed }) => [
-              styles.footerActionBtn,
-              pressed && { opacity: 0.7 },
+              styles.restBadgeBtn,
+              pressed && { opacity: 0.75 },
             ]}
             accessibilityRole="button"
-            accessibilityLabel="Adicionar série"
+            accessibilityLabel={`Descanso ${formatRestShort(restSeconds)}. Tocar para alternar.`}
           >
-            <Plus size={15} color="#FF6B57" strokeWidth={2.4} />
-            <Text style={styles.addSetText}>Adicionar série</Text>
+            <Clock size={13} color="#F5C400" strokeWidth={2.2} />
+            <Text style={styles.restBadgeText}>{formatRestShort(restSeconds)}</Text>
           </Pressable>
 
+          {/* Botão ••• no cabeçalho (para acessar opções mesmo minimizado) */}
           <Pressable
-            onPress={() => {
-              triggerHaptic('light');
-              onSwapExercise?.(exercise.id);
-            }}
+            onPress={handleOpenOptions}
             style={({ pressed }) => [
-              styles.footerActionBtn,
+              styles.headerMoreBtn,
               pressed && { opacity: 0.7 },
             ]}
+            hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel="Substituir exercício"
+            accessibilityLabel={`Mais opções para ${exercise.name}`}
           >
-            <RefreshCw size={13} color="#8E8E93" strokeWidth={2} />
-            <Text style={styles.swapText}>Substituir</Text>
+            <MoreHorizontal size={18} color="#8E8E93" />
           </Pressable>
         </View>
-
-        <Pressable
-          onPress={() => {
-            triggerHaptic('light');
-            setExerciseMenuVisible(true);
-          }}
-          style={({ pressed }) => [
-            styles.moreBtn,
-            pressed && { opacity: 0.7 },
-          ]}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel={`Mais opções para ${exercise.name}`}
-        >
-          <MoreHorizontal size={18} color="#8E8E93" />
-        </Pressable>
       </View>
+
+      {/* 2. CORPO EXPANDIDO */}
+      {isExpanded && (
+        <>
+          {/* NOTA INLINE DISCRETA */}
+          <TextInput
+            value={exercise.note || ''}
+            onChangeText={(text) => onUpdateNote?.(exercise.id, text)}
+            placeholder="Adicionar nota do exercício..."
+            placeholderTextColor="#636366"
+            style={styles.noteInput}
+            accessibilityLabel="Nota do exercício"
+          />
+
+          {/* CORPO: SetTable */}
+          <SetTable
+            mode={mode}
+            sets={exercise.sets || []}
+            unit={unit}
+            previous={(exercise.sets || []).map((s: any) => s.previous ?? null)}
+            onRowClick={(set, badgeLabel) => onRowClick?.(exercise, set, badgeLabel)}
+            onMenuAction={(action, setId) => onMenuAction?.(exercise.id, action, setId)}
+            onToggle={(setId) => {
+              const targetSet = (exercise.sets || []).find((s) => s.id === setId);
+              if (targetSet) onToggleComplete?.(exercise.id, targetSet);
+            }}
+            onEditWeight={(setId) => onActiveChange?.(exercise.id, setId, 'weight', null)}
+            onEditReps={(setId) => onActiveChange?.(exercise.id, setId, 'reps', null)}
+            onActiveChange={(setId, field, val) => onActiveChange?.(exercise.id, setId, field, val)}
+          />
+
+          {/* RODAPÉ DO CARD: + Adicionar série, Substituir, ••• */}
+          <View style={styles.footerRow}>
+            <View style={styles.footerActionsLeft}>
+              <Pressable
+                onPress={() => {
+                  triggerHaptic('light');
+                  onOpenAddSet?.(exercise.id);
+                }}
+                style={({ pressed }) => [
+                  styles.footerActionBtn,
+                  pressed && { opacity: 0.7 },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Adicionar série"
+              >
+                <Plus size={15} color="#FF6B57" strokeWidth={2.4} />
+                <Text style={styles.addSetText}>Adicionar série</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => {
+                  triggerHaptic('light');
+                  onSwapExercise?.(exercise.id);
+                }}
+                style={({ pressed }) => [
+                  styles.footerActionBtn,
+                  pressed && { opacity: 0.7 },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Substituir exercício"
+              >
+                <RefreshCw size={13} color="#8E8E93" strokeWidth={2} />
+                <Text style={styles.swapText}>Substituir</Text>
+              </Pressable>
+            </View>
+
+            <Pressable
+              onPress={handleOpenOptions}
+              style={({ pressed }) => [
+                styles.moreBtn,
+                pressed && { opacity: 0.7 },
+              ]}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={`Mais opções para ${exercise.name}`}
+            >
+              <MoreHorizontal size={18} color="#8E8E93" />
+            </Pressable>
+          </View>
+        </>
+      )}
 
       {/* MODAL DE OPÇÕES DO EXERCÍCIO (Remover, Reordenar) */}
       {exerciseMenuVisible && (
@@ -288,6 +383,13 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 12,
   },
+  cardContainerCollapsed: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  cardContainerComplete: {
+    borderColor: 'rgba(245, 166, 35, 0.4)',
+  },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -300,6 +402,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     minWidth: 0,
+  },
+  headerTitleWrap: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: 'center',
+  },
+  nameAndChevronRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 0,
+  },
+  collapsedSubtitleText: {
+    fontSize: 11.5,
+    color: '#8E8E93',
+    marginTop: 2,
+  },
+  collapsedSubtitleTextComplete: {
+    color: '#F5A623',
   },
   indexText: {
     fontSize: 12,
@@ -315,6 +435,16 @@ const styles = StyleSheet.create({
   },
   chevron: {
     marginLeft: 3,
+  },
+  headerRightControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerMoreBtn: {
+    padding: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   restBadgeBtn: {
     flexShrink: 0,

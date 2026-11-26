@@ -139,6 +139,7 @@ export const ActiveSessionScreen: React.FC = () => {
 
   const [exercises, setExercises] = useState<ActiveExerciseItem[]>([]);
   const [expandedExerciseId, setExpandedExerciseId] = useState<string | null>(null);
+  const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({});
 
   // Descanso (Timer fixo inferior)
   const [restActive, setRestActive] = useState(false);
@@ -407,6 +408,17 @@ export const ActiveSessionScreen: React.FC = () => {
 
       setExercises(items);
 
+      // Opção B: Inicializa mapa de expansão para cada exercício (iniciam abertos)
+      setExpandedMap((prev) => {
+        const next = { ...prev };
+        items.forEach((item) => {
+          if (next[item.id] === undefined) {
+            next[item.id] = true;
+          }
+        });
+        return next;
+      });
+
       // Expande o primeiro exercício com séries pendentes
       const firstIncomplete = items.find((item) =>
         item.sets.some((s) => s.completedAt === null)
@@ -659,7 +671,12 @@ export const ActiveSessionScreen: React.FC = () => {
       if (allOtherCompleted) {
         const currentIdx = exercises.findIndex((e) => e.id === exercise.id);
         if (currentIdx >= 0 && currentIdx < exercises.length - 1) {
-          setExpandedExerciseId(exercises[currentIdx + 1].id);
+          const nextExId = exercises[currentIdx + 1].id;
+          setExpandedExerciseId(nextExId);
+          setExpandedMap((prev) => ({
+            ...prev,
+            [nextExId]: true,
+          }));
         }
       }
     }
@@ -1222,8 +1239,21 @@ export const ActiveSessionScreen: React.FC = () => {
     triggerHaptic('light');
     const currentIdx = exercises.findIndex((e) => e.id === selectedExerciseForAction.id);
     if (currentIdx >= 0 && currentIdx < exercises.length - 1) {
-      setExpandedExerciseId(exercises[currentIdx + 1].id);
+      const nextExId = exercises[currentIdx + 1].id;
+      setExpandedExerciseId(nextExId);
+      setExpandedMap((prev) => ({
+        ...prev,
+        [nextExId]: true,
+      }));
     }
+  };
+
+  const handleToggleExerciseExpand = (exerciseId: string) => {
+    setExpandedMap((prev) => ({
+      ...prev,
+      [exerciseId]: prev[exerciseId] === false ? true : false,
+    }));
+    setExpandedExerciseId(exerciseId);
   };
 
   const handleRemoveExercise = () => {
@@ -1385,7 +1415,10 @@ export const ActiveSessionScreen: React.FC = () => {
           <Pressable
             onPress={() => {
               triggerHaptic('light');
-              const ex = exercises.find((e) => e.id === expandedExerciseId) || exercises[0];
+              const ex =
+                exercises.find((e) => e.id === expandedExerciseId && expandedMap[e.id] !== false) ||
+                exercises.find((e) => expandedMap[e.id] !== false) ||
+                exercises[0];
               const currentSet = ex?.sets.find((s) => s.completedAt === null) || ex?.sets[0];
               setPlateExerciseName(ex?.name || 'Exercício com barra');
               setPlateInitialWeight(currentSet ? currentSet.weight : 60);
@@ -1526,6 +1559,8 @@ export const ActiveSessionScreen: React.FC = () => {
                   }}
                   mode="active"
                   unit={unit}
+                  isExpanded={expandedMap[exercise.id] !== false}
+                  onToggleExpand={() => handleToggleExerciseExpand(exercise.id)}
                   canMoveUp={exIndex > 0}
                   canMoveDown={exIndex < exercises.length - 1}
                   onCycleRest={() => handleCycleExerciseRest(exercise)}

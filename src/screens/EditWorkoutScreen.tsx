@@ -59,6 +59,7 @@ export const EditWorkoutScreen: React.FC = () => {
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [isActive, setIsActive] = useState(true);
   const [exercises, setExercises] = useState<WorkoutExerciseForEdit[]>([]);
+  const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({});
   const [unit, setUnit] = useState<Unit>('kg');
 
   // Estado inicial para detecção de alterações pendentes (Dirty State)
@@ -526,6 +527,13 @@ export const EditWorkoutScreen: React.FC = () => {
     setEditingTarget(null);
   };
 
+  const handleToggleExpand = (exerciseId: string) => {
+    setExpandedMap((prev) => ({
+      ...prev,
+      [exerciseId]: prev[exerciseId] === false ? true : false,
+    }));
+  };
+
   if (!workoutId || !data) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -603,6 +611,8 @@ export const EditWorkoutScreen: React.FC = () => {
             exercise={ex}
             mode="preview"
             unit={unit}
+            isExpanded={expandedMap[ex.id] !== false}
+            onToggleExpand={() => handleToggleExpand(ex.id)}
             canMoveUp={idx > 0}
             canMoveDown={idx < exercises.length - 1}
             onCycleRest={handleCycleRest}
