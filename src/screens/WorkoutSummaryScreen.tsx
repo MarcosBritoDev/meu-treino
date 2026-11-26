@@ -29,6 +29,7 @@ import { Text } from '../ui/Text';
 import { Card } from '../ui/Card';
 import { triggerHaptic } from '../ui/haptics';
 import { getExpoDb } from '../db/client';
+import { calcularVolume } from '../domain/sessionMath';
 
 type RouteParams = RouteProp<RootStackParamList, 'WorkoutSummary'>;
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -135,12 +136,10 @@ export const WorkoutSummaryScreen: React.FC = () => {
       // 3. Métricas de séries e volume total
       const metricsRows = rawDb.getAllSync<{
         setsCount: number;
-        totalVol: number;
         avgRpe: number | null;
       }>(
         `SELECT 
           COUNT(st.id) AS setsCount,
-          COALESCE(SUM(st.weight * st.reps), 0) AS totalVol,
           AVG(st.rpe) AS avgRpe
          FROM session_exercises se
          JOIN sets st ON st.session_exercise_id = se.id
@@ -148,7 +147,40 @@ export const WorkoutSummaryScreen: React.FC = () => {
         [sessionId]
       );
 
-      const curVolume = metricsRows.length > 0 ? metricsRows[0].totalVol : 0;
+      // Volume total calculado com exclusão de aquecimento e contagem do par para Halteres
+      const exVolRows = rawDb.getAllSync<{
+        id: string;
+        equipment: string;
+      }>(
+        `SELECT se.id, e.equipment
+         FROM session_exercises se
+         JOIN exercises e ON se.exercise_id = e.id
+         WHERE se.session_id = ?`,
+        [sessionId]
+      );
+
+      let curVolume = 0;
+      for (const ex of exVolRows) {
+        const sRows = rawDb.getAllSync<{
+          weight: number;
+          reps: number;
+          is_warmup: number;
+          completed_at: number | null;
+        }>(
+          `SELECT weight, reps, is_warmup, completed_at FROM sets WHERE session_exercise_id = ?`,
+          [ex.id]
+        );
+        curVolume += calcularVolume(
+          sRows.map((r) => ({
+            weight: r.weight,
+            reps: r.reps,
+            isWarmup: Boolean(r.is_warmup),
+            completedAt: r.completed_at,
+          })),
+          ex.equipment
+        );
+      }
+
       const curSetsCount = metricsRows.length > 0 ? metricsRows[0].setsCount : 0;
       setTotalVolume(curVolume);
       setCompletedSets(curSetsCount);
@@ -178,23 +210,52 @@ export const WorkoutSummaryScreen: React.FC = () => {
 
       // 5. Comparativo com sessão anterior do mesmo treino
       if (currentWorkoutId) {
-        const prevSessRows = rawDb.getAllSync<{ prevVolume: number }>(
-          `SELECT 
-            COALESCE(SUM(st.weight * st.reps), 0) AS prevVolume
+        const prevSess = rawDb.getAllSync<{ id: string }>(
+          `SELECT s.id
            FROM sessions s
-           JOIN session_exercises se ON se.session_id = s.id
-           JOIN sets st ON st.session_exercise_id = se.id AND st.completed_at IS NOT NULL
            WHERE s.workout_id = ? AND s.status = 'completed' AND s.id != ? AND s.ended_at < ?
-           GROUP BY s.id
            ORDER BY s.ended_at DESC
            LIMIT 1`,
           [currentWorkoutId, sessionId, sessionEndedAt]
         );
 
-        if (prevSessRows.length > 0 && prevSessRows[0].prevVolume > 0) {
-          const prevVol = prevSessRows[0].prevVolume;
-          const diffPct = Math.round(((curVolume - prevVol) / prevVol) * 100);
-          setVolumeVariation(diffPct);
+        if (prevSess.length > 0) {
+          const prevExRows = rawDb.getAllSync<{ id: string; equipment: string }>(
+            `SELECT se.id, e.equipment
+             FROM session_exercises se
+             JOIN exercises e ON se.exercise_id = e.id
+             WHERE se.session_id = ?`,
+            [prevSess[0].id]
+          );
+
+          let prevVol = 0;
+          for (const ex of prevExRows) {
+            const sRows = rawDb.getAllSync<{
+              weight: number;
+              reps: number;
+              is_warmup: number;
+              completed_at: number | null;
+            }>(
+              `SELECT weight, reps, is_warmup, completed_at FROM sets WHERE session_exercise_id = ?`,
+              [ex.id]
+            );
+            prevVol += calcularVolume(
+              sRows.map((r) => ({
+                weight: r.weight,
+                reps: r.reps,
+                isWarmup: Boolean(r.is_warmup),
+                completedAt: r.completed_at,
+              })),
+              ex.equipment
+            );
+          }
+
+          if (prevVol > 0) {
+            const diffPct = Math.round(((curVolume - prevVol) / prevVol) * 100);
+            setVolumeVariation(diffPct);
+          } else {
+            setVolumeVariation(null);
+          }
         } else {
           setVolumeVariation(null);
         }

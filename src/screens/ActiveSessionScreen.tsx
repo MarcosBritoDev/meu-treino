@@ -30,6 +30,8 @@ import {
   Flame,
   Trash2,
   FileText,
+  ChevronRight,
+  Edit3,
 } from 'lucide-react-native';
 import { RootStackParamList } from '../navigation/types';
 import { colors, radii, fontFamilies } from '../theme';
@@ -42,10 +44,21 @@ import { ConfirmModal } from '../ui/ConfirmModal';
 import { PlateCalculatorSheet } from '../ui/PlateCalculatorSheet';
 import { ActiveExerciseActionSheet } from '../ui/ActiveExerciseActionSheet';
 import { EditSessionExerciseSheet } from '../ui/EditSessionExerciseSheet';
+import { QuickNumberPadSheet } from '../ui/QuickNumberPadSheet';
 import { triggerHaptic } from '../ui/haptics';
-import { detectarPR } from '../domain/pr';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { getExpoDb } from '../db/client';
+import { SetTable } from '../ui/session/SetTable';
+import { RestFooter } from '../ui/session/RestFooter';
+import {
+  Unit,
+  formatWeight,
+  parseNumber,
+  displayToKg,
+  detectarPR,
+  cycleRest,
+  adjustRest,
+} from '../domain/sessionMath';
 
 type RouteParams = RouteProp<RootStackParamList, 'ActiveSession'>;
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -76,6 +89,7 @@ interface ActiveExerciseItem {
   restS: number;
   note: string | null;
   previousLog: string;
+  previousSets: { weight: number; reps: number }[];
   sets: SetItem[];
 }
 
@@ -92,6 +106,9 @@ export const ActiveSessionScreen: React.FC = () => {
   // Estados principais da sessão
   const [sessionName, setSessionName] = useState('Treino em andamento');
   const [groupName, setGroupName] = useState<string | null>(null);
+  const [sessionNote, setSessionNote] = useState<string>('');
+  const [sessionNoteModalVisible, setSessionNoteModalVisible] = useState(false);
+  const [sessionNoteInput, setSessionNoteInput] = useState('');
   const [startedAt, setStartedAt] = useState<number>(Date.now());
   const [totalPausedS, setTotalPausedS] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
@@ -124,6 +141,7 @@ export const ActiveSessionScreen: React.FC = () => {
   const [numberModalVisible, setNumberModalVisible] = useState(false);
   const [numberModalTitle, setNumberModalTitle] = useState('');
   const [numberModalValue, setNumberModalValue] = useState('');
+  const [numberModalType, setNumberModalType] = useState<'weight' | 'reps'>('weight');
   const [numberModalCallback, setNumberModalCallback] = useState<(val: number) => void>(() => () => {});
 
   // Linha de RPE aberta para a série selecionada
@@ -151,6 +169,11 @@ export const ActiveSessionScreen: React.FC = () => {
     try {
       const rawDb = getExpoDb();
 
+      // Garantir coluna de notas da sessão
+      try {
+        rawDb.runSync(`ALTER TABLE sessions ADD COLUMN note TEXT;`);
+      } catch {}
+
       // Sessão
       const sessRows = rawDb.getAllSync<{
         id: string;
@@ -158,8 +181,9 @@ export const ActiveSessionScreen: React.FC = () => {
         name_snapshot: string;
         started_at: number;
         total_paused_s: number;
+        note?: string | null;
       }>(
-        `SELECT id, workout_id, name_snapshot, started_at, total_paused_s
+        `SELECT id, workout_id, name_snapshot, started_at, total_paused_s, note
          FROM sessions
          WHERE id = ?`,
         [sessionId]
@@ -171,6 +195,7 @@ export const ActiveSessionScreen: React.FC = () => {
       setSessionName(s.name_snapshot);
       setStartedAt(s.started_at);
       setTotalPausedS(s.total_paused_s || 0);
+      setSessionNote(s.note || '');
 
       // Nome do grupo se houver
       if (s.workout_id) {
@@ -222,21 +247,33 @@ export const ActiveSessionScreen: React.FC = () => {
       const items: ActiveExerciseItem[] = [];
 
       for (const ex of exRows) {
-        // Histórico anterior deste exercício para a coluna "Anterior"
-        const prevRows = rawDb.getAllSync<{ weight: number; reps: number }>(
-          `SELECT st.weight, st.reps
-           FROM sets st
-           JOIN session_exercises se ON st.session_exercise_id = se.id
-           JOIN sessions s ON se.session_id = s.id
-           WHERE se.exercise_id = ? AND s.status = 'completed' AND st.completed_at IS NOT NULL
-           ORDER BY s.ended_at DESC, st.completed_at DESC
+        // Histórico anterior deste exercício para a coluna "Anterior" (todas as séries sem aquecimento da última sessão concluída)
+        const lastSessRow = rawDb.getAllSync<{ id: string }>(
+          `SELECT s.id
+           FROM sessions s
+           JOIN session_exercises se ON se.session_id = s.id
+           WHERE se.exercise_id = ? AND s.status = 'completed'
+           ORDER BY s.ended_at DESC
            LIMIT 1`,
           [ex.exercise_id]
         );
 
+        let previousSets: { weight: number; reps: number }[] = [];
+        if (lastSessRow.length > 0) {
+          const prevRows = rawDb.getAllSync<{ weight: number; reps: number }>(
+            `SELECT st.weight, st.reps
+             FROM sets st
+             JOIN session_exercises se ON st.session_exercise_id = se.id
+             WHERE se.exercise_id = ? AND se.session_id = ? AND st.completed_at IS NOT NULL AND st.is_warmup = 0
+             ORDER BY st."index" ASC`,
+            [ex.exercise_id, lastSessRow[0].id]
+          );
+          previousSets = prevRows.map((r) => ({ weight: r.weight, reps: r.reps }));
+        }
+
         const previousLog =
-          prevRows.length > 0
-            ? `${prevRows[0].weight} ${unit} × ${prevRows[0].reps}`
+          previousSets.length > 0
+            ? `${formatWeight(previousSets[0].weight, unit)} ${unit} × ${previousSets[0].reps}`
             : '—';
 
         // Séries salvas desta sessão
@@ -262,8 +299,8 @@ export const ActiveSessionScreen: React.FC = () => {
         // Se nenhuma série existia ainda, inicializa com target_sets
         if (setRows.length === 0) {
           const setsCount = ex.target_sets || 3;
-          const initialWeight = prevRows.length > 0 ? prevRows[0].weight : 20.0;
-          const initialReps = prevRows.length > 0 ? prevRows[0].reps : (ex.rep_min || 10);
+          const initialWeight = previousSets.length > 0 ? previousSets[0].weight : 20.0;
+          const initialReps = previousSets.length > 0 ? previousSets[0].reps : (ex.rep_min || 10);
 
           for (let idx = 1; idx <= setsCount; idx++) {
             const newSetId = `set_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`;
@@ -309,6 +346,7 @@ export const ActiveSessionScreen: React.FC = () => {
           restS: ex.rest_s,
           note: ex.note,
           previousLog,
+          previousSets,
           sets,
         });
       }
@@ -430,8 +468,7 @@ export const ActiveSessionScreen: React.FC = () => {
     triggerHaptic('light');
     const newEnd = restEndTimestamp + deltaSeconds * 1000;
     setRestEndTimestamp(newEnd);
-    const newRemaining = Math.max(0, Math.ceil((newEnd - Date.now()) / 1000));
-    setRestRemaining(newRemaining);
+    setRestRemaining((prev) => adjustRest(prev, deltaSeconds));
     if (deltaSeconds > 0) {
       setRestTotalSeconds((prev) => prev + deltaSeconds);
     }
@@ -525,7 +562,7 @@ export const ActiveSessionScreen: React.FC = () => {
 
         if (pr.isPrWeight || pr.isPrVolume) {
           triggerHaptic('success');
-          setToastMessage(`Novo recorde: ${setItem.weight} ${unit} × ${setItem.reps}`);
+          setToastMessage(`Novo recorde: ${formatWeight(setItem.weight, unit)} ${unit} × ${setItem.reps}`);
           setToastVisible(true);
         } else {
           triggerHaptic('light');
@@ -552,8 +589,8 @@ export const ActiveSessionScreen: React.FC = () => {
         );
       }
 
-      // Abre faixa de RPE logo abaixo da série recém-concluída
-      setActiveRpeSetId(setItem.id);
+      // Linha de RPE só aparece ao tocar na série concluída (não ao marcar check)
+      setActiveRpeSetId(null);
 
       // Inicia descanso automático se habilitado
       if (autoRestTimer) {
@@ -751,12 +788,30 @@ export const ActiveSessionScreen: React.FC = () => {
     setSelectedExerciseForNote(null);
   };
 
+  // Salvar anotações da sessão como um todo
+  const handleSaveSessionNote = () => {
+    if (!sessionId) return;
+    triggerHaptic('light');
+    try {
+      const rawDb = getExpoDb();
+      const trimmed = sessionNoteInput.trim();
+      rawDb.runSync(`UPDATE sessions SET note = ? WHERE id = ?`, [
+        trimmed || null,
+        sessionId,
+      ]);
+      setSessionNote(trimmed);
+      setToastMessage('Anotações do treino salvas');
+      setToastVisible(true);
+    } catch (err) {
+      console.warn('Erro ao salvar notas da sessão:', err);
+    }
+    setSessionNoteModalVisible(false);
+  };
+
   // Ciclar descanso pré-definido só deste exercício
   const handleCycleExerciseRest = (exercise: ActiveExerciseItem) => {
     triggerHaptic('selection');
-    const presets = [60, 90, 120, 180];
-    const idx = presets.indexOf(exercise.restS);
-    const nextRest = idx === -1 || idx === presets.length - 1 ? presets[0] : presets[idx + 1];
+    const nextRest = cycleRest(exercise.restS);
     try {
       const rawDb = getExpoDb();
       rawDb.runSync(`UPDATE session_exercises SET rest_s = ? WHERE id = ?`, [
@@ -766,13 +821,55 @@ export const ActiveSessionScreen: React.FC = () => {
       setExercises((prev) =>
         prev.map((ex) => (ex.id === exercise.id ? { ...ex, restS: nextRest } : ex))
       );
-      setToastMessage(
-        `Descanso ajustado: ${nextRest >= 60 ? `${Math.round(nextRest / 60)} min` : `${nextRest}s`}`
-      );
+      const formatted =
+        nextRest >= 60
+          ? `${Math.floor(nextRest / 60)} min${nextRest % 60 ? ` ${nextRest % 60}s` : ''}`
+          : `${nextRest}s`;
+      setToastMessage(`Descanso de ${exercise.name}: ${formatted}`);
       setToastVisible(true);
     } catch (err) {
       console.warn('Erro ao atualizar descanso:', err);
     }
+  };
+
+  const findSet = (exercise: ActiveExerciseItem, setId: string) => {
+    return exercise.sets.find((s) => s.id === setId)!;
+  };
+
+  const openSetMenu = (exercise: ActiveExerciseItem, setId: string) => {
+    const set = exercise.sets.find((s) => s.id === setId);
+    if (!set) return;
+    triggerHaptic('selection');
+    setSelectedSetForMenu({ exercise, set });
+    setSetMenuVisible(true);
+  };
+
+  const openNumberModal = (
+    type: 'weight' | 'reps',
+    exercise: ActiveExerciseItem,
+    setId: string
+  ) => {
+    const setItem = exercise.sets.find((s) => s.id === setId);
+    if (!setItem) return;
+
+    setNumberModalType(type);
+    if (type === 'weight') {
+      const label = setItem.isWarmup ? 'W' : String(setItem.index);
+      setNumberModalTitle(`Carga (${unit}) • Série ${label}`);
+      setNumberModalValue(formatWeight(setItem.weight, unit));
+      setNumberModalCallback(() => (val: number) => {
+        const kg = displayToKg(val, unit);
+        handleUpdateWeight(exercise.id, setId, kg);
+      });
+    } else {
+      const label = setItem.isWarmup ? 'W' : String(setItem.index);
+      setNumberModalTitle(`Repetições • Série ${label}`);
+      setNumberModalValue(String(setItem.reps));
+      setNumberModalCallback(() => (val: number) => {
+        handleUpdateReps(exercise.id, setId, val);
+      });
+    }
+    setNumberModalVisible(true);
   };
 
   // 5. AÇÕES DO MENU DO EXERCÍCIO
@@ -930,41 +1027,66 @@ export const ActiveSessionScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-      {/* 1. BARRA SUPERIOR (HEADER FIXO) */}
+      {/* 1. BARRA SUPERIOR (ESTILO STITCH) */}
       <View style={styles.topBar}>
-        <View style={styles.topBarLeft}>
-          <View style={styles.timerChip}>
-            <Timer size={16} color={colors.onSurfaceVariant} strokeWidth={2.2} />
-            <Text variant="headline" style={styles.timerText}>
-              {formattedTimer}
-            </Text>
-          </View>
+        {/* Esquerda: Botões Rest e Calc */}
+        <View style={styles.topBarLeftButtons}>
+          <Pressable
+            onPress={() => {
+              triggerHaptic('light');
+              startRestTimer(defaultRestS || 90);
+            }}
+            style={styles.topToolButton}
+            accessibilityRole="button"
+            accessibilityLabel="Descanso"
+          >
+            <Timer size={19} color="#D1D1D6" strokeWidth={2} />
+            <Text style={styles.topToolLabel}>Descanso</Text>
+          </Pressable>
 
           <Pressable
+            onPress={() => {
+              triggerHaptic('light');
+              const ex = exercises.find((e) => e.id === expandedExerciseId) || exercises[0];
+              const currentSet = ex?.sets.find((s) => s.completedAt === null) || ex?.sets[0];
+              setPlateExerciseName(ex?.name || 'Exercício com barra');
+              setPlateInitialWeight(currentSet ? currentSet.weight : 60);
+              setPlateSheetVisible(true);
+            }}
+            style={styles.topToolButton}
+            accessibilityRole="button"
+            accessibilityLabel="Calculadora de anilhas"
+          >
+            <Calculator size={19} color="#D1D1D6" strokeWidth={2} />
+            <Text style={styles.topToolLabel}>Anilhas</Text>
+          </Pressable>
+        </View>
+
+        {/* Direita: Pílula de Tempo + Botão Finalizar Dourado */}
+        <View style={styles.topBarRightControls}>
+          <Pressable
             onPress={handleTogglePause}
-            style={styles.pauseButton}
-            hitSlop={8}
+            style={styles.liveTimerPill}
             accessibilityRole="button"
             accessibilityLabel={isPaused ? 'Retomar treino' : 'Pausar treino'}
           >
             {isPaused ? (
-              <Play size={18} color={colors.primary} fill={colors.primary} />
+              <Play size={12} color="#F5A623" fill="#F5A623" />
             ) : (
-              <Pause size={18} color={colors.onSurfaceVariant} strokeWidth={2.4} />
+              <Pause size={12} color="#FFFFFF" strokeWidth={2.4} />
             )}
+            <Text style={styles.liveTimerText}>{formattedTimer}</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => setFinishModalVisible(true)}
+            style={styles.finishGoldButton}
+            accessibilityRole="button"
+            accessibilityLabel="Finalizar treino"
+          >
+            <Text style={styles.finishGoldText}>Finalizar</Text>
           </Pressable>
         </View>
-
-        <Pressable
-          onPress={() => setFinishModalVisible(true)}
-          style={styles.finishHeaderButton}
-          accessibilityRole="button"
-          accessibilityLabel="Finalizar treino"
-        >
-          <Text variant="labelSmall" style={styles.finishHeaderText}>
-            Finalizar
-          </Text>
-        </Pressable>
       </View>
 
       <ScrollView
@@ -974,33 +1096,37 @@ export const ActiveSessionScreen: React.FC = () => {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* 2. TÍTULO E PROGRESSO DO TREINO */}
-        <View style={styles.titleSection}>
-          <Text variant="headline" style={styles.workoutMainTitle} numberOfLines={2}>
+        {/* 2. TÍTULO E NOTAS (ESTILO STITCH) */}
+        <View style={styles.workoutMetaSection}>
+          <Text style={styles.workoutMetaTitle} numberOfLines={2}>
             {sessionName}
           </Text>
 
-          <View style={styles.progressRow}>
-            <Text variant="bodySmall" style={styles.progressText}>
-              {groupName ? `Grupo ${groupName} · ` : ''}
-              {completedExercisesCount} de {exercises.length} {exercises.length === 1 ? 'exercício' : 'exercícios'}
+          <Pressable
+            onPress={() => {
+              triggerHaptic('light');
+              setSessionNoteInput(sessionNote);
+              setSessionNoteModalVisible(true);
+            }}
+            style={styles.addNotesRow}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Anotações gerais do treino"
+          >
+            <Edit3 size={13.5} color="#8E8E93" strokeWidth={2} />
+            <Text style={styles.addNotesText} numberOfLines={2}>
+              {sessionNote ? sessionNote : 'Adicionar notas aqui…'}
             </Text>
-            <View style={styles.progressBarTrack}>
-              <View
-                style={[
-                  styles.progressBarFill,
-                  { width: `${Math.round(progressRatio * 100)}%` },
-                ]}
-              />
-            </View>
-          </View>
+          </Pressable>
         </View>
+
+        <View style={styles.stitchDivider} />
 
         {/* 3. LISTA DE EXERCÍCIOS (ACCORDION: 1 EXPANDIDO POR VEZ) */}
         {exercises.length === 0 ? (
           /* Sessão livre avulsa sem exercícios */
           <Card variant="surface" style={styles.emptySessionCard}>
-            <Dumbbell size={36} color={colors.primary} strokeWidth={1.75} style={{ marginBottom: 8 }} />
+            <Dumbbell size={36} color="#F5A623" strokeWidth={1.75} style={{ marginBottom: 8 }} />
             <Text variant="headline" style={styles.emptySessionTitle}>
               Nenhum exercício adicionado
             </Text>
@@ -1010,7 +1136,7 @@ export const ActiveSessionScreen: React.FC = () => {
             <Button
               title="Adicionar exercício"
               variant="primary"
-              icon={<Plus size={20} color={colors.onPrimary} strokeWidth={2.4} />}
+              icon={<Plus size={20} color="#000000" strokeWidth={2.4} />}
               onPress={() =>
                 navigation.navigate('AddExercises', {
                   sessionId,
@@ -1018,352 +1144,128 @@ export const ActiveSessionScreen: React.FC = () => {
                   fromScreen: 'ActiveSession',
                 })
               }
-              style={{ marginTop: 12, height: 48, borderRadius: radii.pill }}
+              style={{ marginTop: 12, height: 48, borderRadius: radii.pill, backgroundColor: '#F5A623' }}
             />
           </Card>
         ) : (
           <View style={styles.exercisesList}>
             {exercises.map((exercise, exIndex) => {
               const isExpanded = expandedExerciseId === exercise.id;
-              const completedCount = exercise.sets.filter((s) => s.completedAt !== null).length;
-              const isExerciseComplete = completedCount === exercise.sets.length && exercise.sets.length > 0;
 
               return (
-                <View key={exercise.id}>
+                <View key={exercise.id} style={styles.exerciseBlockContainer}>
                   {isExpanded ? (
-                    /* ================= CARTÃO EXPANDIDO ================= */
-                    <Card variant="surface" style={styles.expandedCard}>
-                      {/* Topo do Exercício Expandido */}
-                      <View style={styles.expandedHeader}>
-                        <View style={styles.expandedHeaderLeft}>
-                          <View style={styles.exerciseNameRow}>
-                            <Text variant="headline" style={styles.exerciseTitleCoral}>
-                              {exercise.name}
-                            </Text>
-                            <Pressable
-                              onPress={() => {
-                                triggerHaptic('light');
-                                const currentSet = exercise.sets.find((s) => s.completedAt === null) || exercise.sets[0];
-                                setPlateExerciseName(exercise.name);
-                                setPlateInitialWeight(currentSet ? currentSet.weight : 60);
-                                setPlateSheetVisible(true);
-                              }}
-                              style={styles.calcIconButton}
-                              hitSlop={8}
-                              accessibilityRole="button"
-                              accessibilityLabel="Abrir calculadora de anilhas"
-                            >
-                              <Calculator size={18} color={colors.onSurfaceVariant} strokeWidth={2} />
-                            </Pressable>
-                          </View>
-
-                          {/* Subtítulo: Músculo · Equipamento */}
-                          <Text variant="bodySmall" style={styles.exerciseSubtitleText}>
-                            {exercise.muscleGroup} · {exercise.equipment}
-                          </Text>
-
-                          {/* Campo Notas (opcional) */}
+                    /* ================= BLOCO EXPANDIDO ================= */
+                    <View style={styles.expandedBlock}>
+                      {/* Topo do Exercício Expandido (Stitch) */}
+                      <View style={styles.stitchExerciseHeader}>
+                        <View style={styles.stitchExerciseTitleRow}>
+                          <Text style={styles.stitchExerciseIndex}>{exIndex + 1}</Text>
                           <Pressable
                             onPress={() => {
                               triggerHaptic('light');
-                              setSelectedExerciseForNote(exercise);
-                              setNoteModalValue(exercise.note || '');
-                              setNoteModalVisible(true);
+                              setExpandedExerciseId(null);
                             }}
-                            style={styles.notePressable}
+                            style={styles.stitchExerciseNameBtn}
                             accessibilityRole="button"
-                            accessibilityLabel="Adicionar ou editar notas do exercício"
+                            accessibilityLabel={`Recolher exercício ${exercise.name}`}
                           >
-                            <FileText size={13} color={exercise.note ? '#B7ADA3' : '#7D746B'} strokeWidth={2} />
-                            <Text
-                              variant="bodySmall"
-                              style={[
-                                styles.noteContentText,
-                                !exercise.note && styles.notePlaceholderText,
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {exercise.note || 'Adicionar notas…'}
+                            <Text style={styles.stitchExerciseNameText}>
+                              {exercise.name}
                             </Text>
-                          </Pressable>
-
-                          {/* Linha Descanso */}
-                          <Pressable
-                            onPress={() => handleCycleExerciseRest(exercise)}
-                            style={styles.restLinePressable}
-                            accessibilityRole="button"
-                            accessibilityLabel={`Descanso atual: ${exercise.restS >= 60 ? `${Math.round(exercise.restS / 60)} min` : `${exercise.restS}s`}. Toque para alterar.`}
-                          >
-                            <Clock size={13} color="#B7ADA3" strokeWidth={2.2} />
-                            <Text variant="bodySmall" style={styles.restLineText}>
-                              Descanso: {exercise.restS >= 60 ? `${Math.round(exercise.restS / 60)} min` : `${exercise.restS}s`}
-                            </Text>
+                            <ChevronRight size={18} color="#F5A623" strokeWidth={2.5} />
                           </Pressable>
                         </View>
 
+                        {/* Botão de descanso do exercício */}
                         <Pressable
-                          onPress={() => handleOpenActionMenu(exercise)}
-                          style={styles.menuButton}
-                          hitSlop={8}
+                          onPress={() => handleCycleExerciseRest(exercise)}
+                          style={styles.exerciseTimerBtn}
+                          hitSlop={10}
                           accessibilityRole="button"
-                          accessibilityLabel="Mais opções do exercício"
+                          accessibilityLabel={`Descanso atual: ${exercise.restS}s. Toque para ajustar`}
                         >
-                          <MoreVertical size={20} color={colors.onSurfaceVariant} strokeWidth={2} />
+                          <Clock size={16} color="#8E8E93" strokeWidth={2} />
                         </Pressable>
                       </View>
 
-                      {/* Cabeçalho das Colunas da Tabela: Série | Anterior | kg | Reps | ✓ */}
-                      <View style={styles.tableHeaderRow}>
-                        <Text style={styles.colHeaderSerie}>Série</Text>
-                        <Text style={styles.colHeaderAnterior}>Anterior</Text>
-                        <Text style={styles.colHeaderKg}>kg</Text>
-                        <Text style={styles.colHeaderReps}>Reps</Text>
-                        <Text style={styles.colHeaderCheck}>✓</Text>
-                      </View>
-
-                      {/* Linhas de Séries */}
-                      <View style={styles.setsTable}>
-                        {exercise.sets.map((setItem, sIdx) => {
-                          const isDone = setItem.completedAt !== null;
-                          const isCurrent =
-                            !isDone &&
-                            exercise.sets.slice(0, sIdx).every((s) => s.completedAt !== null);
-                          const isRpeOpen = activeRpeSetId === setItem.id;
-
-                          return (
-                            <View key={setItem.id} style={styles.setRowWrapper}>
-                              <View
-                                style={[
-                                  styles.setRow,
-                                  isDone && styles.setRowDone,
-                                  isCurrent && styles.setRowCurrent,
-                                ]}
-                              >
-                                {/* 1. Série (largura 44) - toque longo abre menu */}
-                                <Pressable
-                                  onLongPress={() => {
-                                    triggerHaptic('medium');
-                                    setSelectedSetForMenu({ exercise, set: setItem });
-                                    setSetMenuVisible(true);
-                                  }}
-                                  onPress={() => {
-                                    if (isDone) {
-                                      setActiveRpeSetId((prev) => (prev === setItem.id ? null : setItem.id));
-                                    }
-                                  }}
-                                  delayLongPress={350}
-                                  style={styles.colSerie}
-                                  accessibilityRole="button"
-                                  accessibilityLabel={`Série ${setItem.index}. Toque longo para opções.`}
-                                >
-                                  <Text
-                                    style={[
-                                      styles.serieIndexText,
-                                      setItem.isWarmup && styles.warmupText,
-                                      isDone && !setItem.isWarmup && styles.doneSerieText,
-                                    ]}
-                                  >
-                                    {setItem.isWarmup ? 'A' : setItem.index}
-                                  </Text>
-                                  {(setItem.isPrWeight || setItem.isPrVolume) && (
-                                    <Trophy size={13} color="#FFC46B" strokeWidth={2.4} style={styles.prTrophyIcon} />
-                                  )}
-                                </Pressable>
-
-                                {/* 2. Anterior (flex: 1) */}
-                                <Pressable
-                                  onPress={() => {
-                                    if (isDone) {
-                                      setActiveRpeSetId((prev) => (prev === setItem.id ? null : setItem.id));
-                                    }
-                                  }}
-                                  style={styles.colAnterior}
-                                >
-                                  <Text style={styles.previousLogText} numberOfLines={1}>
-                                    {exercise.previousLog}
-                                  </Text>
-                                </Pressable>
-
-                                {/* 3. kg (largura 64, sem caixas nem steppers) */}
-                                <Pressable
-                                  onPress={() => {
-                                    setNumberModalTitle(`Carga (${unit}) - Série ${setItem.isWarmup ? 'A' : setItem.index}`);
-                                    setNumberModalValue(String(setItem.weight));
-                                    setNumberModalCallback(() => (val: number) => {
-                                      handleUpdateWeight(exercise.id, setItem.id, val);
-                                    });
-                                    setNumberModalVisible(true);
-                                  }}
-                                  style={styles.colKg}
-                                  accessibilityRole="button"
-                                  accessibilityLabel={`Carga ${setItem.weight} ${unit}. Toque para alterar.`}
-                                >
-                                  <Text
-                                    style={[
-                                      styles.pureNumberText,
-                                      isCurrent && styles.currentNumberText,
-                                    ]}
-                                  >
-                                    {setItem.weight}
-                                  </Text>
-                                </Pressable>
-
-                                {/* 4. Reps (largura 64, sem caixas nem steppers) */}
-                                <Pressable
-                                  onPress={() => {
-                                    setNumberModalTitle(`Repetições - Série ${setItem.isWarmup ? 'A' : setItem.index}`);
-                                    setNumberModalValue(String(setItem.reps));
-                                    setNumberModalCallback(() => (val: number) => {
-                                      handleUpdateReps(exercise.id, setItem.id, val);
-                                    });
-                                    setNumberModalVisible(true);
-                                  }}
-                                  style={styles.colReps}
-                                  accessibilityRole="button"
-                                  accessibilityLabel={`Repetições ${setItem.reps}. Toque para alterar.`}
-                                >
-                                  <Text
-                                    style={[
-                                      styles.pureNumberText,
-                                      isCurrent && styles.currentNumberText,
-                                    ]}
-                                  >
-                                    {setItem.reps}
-                                  </Text>
-                                </Pressable>
-
-                                {/* 5. Check (largura 48, círculo 48x48) */}
-                                <View style={styles.colCheck}>
-                                  <Pressable
-                                    onPress={() => {
-                                      handleToggleSetCheck(exercise, setItem);
-                                    }}
-                                    style={styles.checkTouchArea}
-                                    accessibilityRole="button"
-                                    accessibilityLabel={`Marcar série ${setItem.index} como concluída`}
-                                  >
-                                    <View
-                                      style={[
-                                        styles.checkCircle,
-                                        isDone && styles.checkCircleDone,
-                                        isCurrent && styles.checkCircleCurrent,
-                                        !isDone && !isCurrent && styles.checkCirclePending,
-                                      ]}
-                                    >
-                                      {isDone && (
-                                        <Check size={20} color="#1A1715" strokeWidth={3} />
-                                      )}
-                                    </View>
-                                  </Pressable>
-                                </View>
-                              </View>
-
-                              {/* Linha de RPE: só aparece ao tocar na série concluída, numa faixa abaixo dela */}
-                              {isDone && isRpeOpen && (
-                                <View style={styles.rpeStripContainer}>
-                                  <Text style={styles.rpeStripLabel}>RPE (Esforço):</Text>
-                                  <ScrollView
-                                    horizontal
-                                    showsHorizontalScrollIndicator={false}
-                                    contentContainerStyle={styles.rpeStripScroll}
-                                  >
-                                    {[6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10].map((rVal) => {
-                                      const isSelected = setItem.rpe === rVal;
-                                      return (
-                                        <Pressable
-                                          key={rVal}
-                                          onPress={() => handleUpdateRpe(exercise.id, setItem.id, rVal)}
-                                          style={[
-                                            styles.rpeChipButton,
-                                            isSelected && styles.rpeChipButtonSelected,
-                                          ]}
-                                        >
-                                          <Text
-                                            style={[
-                                              styles.rpeChipBtnText,
-                                              isSelected && styles.rpeChipBtnTextSelected,
-                                            ]}
-                                          >
-                                            {rVal}
-                                          </Text>
-                                        </Pressable>
-                                      );
-                                    })}
-                                  </ScrollView>
-                                </View>
-                              )}
-                            </View>
-                          );
-                        })}
-                      </View>
-
-                      {/* Botão + Adicionar Série */}
-                      <Pressable
-                        onPress={() => handleAddSet(exercise)}
-                        style={styles.addSetButton}
-                        accessibilityRole="button"
-                        accessibilityLabel="Adicionar nova série ao exercício"
-                      >
-                        <Plus size={18} color="#EDE0D5" strokeWidth={2.4} />
-                        <Text style={styles.addSetText}>
-                          Adicionar série
-                        </Text>
-                      </Pressable>
-                    </Card>
+                      {/* Tabela de Séries (6 Colunas) */}
+                      <SetTable
+                        sets={exercise.sets.map((x) => ({
+                          id: x.id,
+                          weightKg: x.weight,
+                          reps: x.reps,
+                          rpe: x.rpe,
+                          isWarmup: x.isWarmup,
+                          isFailure: x.rpe === 10,
+                          completedAt: x.completedAt,
+                          isPr: x.isPrWeight || x.isPrVolume,
+                        }))}
+                        previous={(exercise.previousSets || []).map((p) =>
+                          p ? { weightKg: p.weight, reps: p.reps, rpe: null } : null
+                        )}
+                        targets={exercise.sets.map(() => ({
+                          weightKg: exercise.sets[0]?.weight,
+                          repsMin: exercise.repMin,
+                          repsMax: exercise.repMax,
+                          note: exercise.defaultIncrement ? `+${exercise.defaultIncrement} ${unit}` : `${exercise.repMin}-${exercise.repMax} reps`,
+                        }))}
+                        unit={unit}
+                        openRpeId={activeRpeSetId}
+                        onToggle={(id) => handleToggleSetCheck(exercise, findSet(exercise, id))}
+                        onEditWeight={(id) => openNumberModal('weight', exercise, id)}
+                        onEditReps={(id) => openNumberModal('reps', exercise, id)}
+                        onOpenMenu={(id) => openSetMenu(exercise, id)}
+                        onToggleRpe={(id) => setActiveRpeSetId((p) => (p === id ? null : id))}
+                        onCloseRpe={() => setActiveRpeSetId(null)}
+                        onChangeRpe={(id, v) => {
+                          handleUpdateRpe(exercise.id, id, v);
+                          setActiveRpeSetId(null);
+                        }}
+                        onAddSet={() => handleAddSet(exercise)}
+                        onSwapExercise={() => {
+                          navigation.navigate('AddExercises', {
+                            sessionId,
+                            existingExerciseIds: exercises.map((e) => e.exerciseId),
+                            fromScreen: 'ActiveSession',
+                          });
+                        }}
+                        onOpenExerciseOptions={() => handleOpenActionMenu(exercise)}
+                      />
+                    </View>
                   ) : (
-                    /* ================= CARTÃO RECOLHIDO ================= */
-                    <Pressable
-                      onPress={() => {
-                        triggerHaptic('light');
-                        setExpandedExerciseId(exercise.id);
-                      }}
-                      style={({ pressed }) => [
-                        styles.collapsedCard,
-                        isExerciseComplete && styles.collapsedCardComplete,
-                        pressed && { opacity: 0.9 },
-                      ]}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Expandir exercício: ${exercise.name}`}
-                    >
-                      <View style={styles.collapsedLeft}>
-                        <View
-                          style={[
-                            styles.collapsedIndexCircle,
-                            isExerciseComplete && styles.collapsedIndexCircleComplete,
-                          ]}
+                    /* ================= BLOCO RECOLHIDO (STITCH) ================= */
+                    <View style={styles.stitchCollapsedBlock}>
+                      <View style={styles.stitchExerciseTitleRow}>
+                        <Text style={styles.stitchExerciseIndex}>{exIndex + 1}</Text>
+                        <Pressable
+                          onPress={() => {
+                            triggerHaptic('light');
+                            setExpandedExerciseId(exercise.id);
+                          }}
+                          style={styles.stitchExerciseNameBtn}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Expandir exercício ${exercise.name}`}
                         >
-                          <Text
-                            variant="labelSmall"
-                            style={[
-                              styles.collapsedIndexText,
-                              isExerciseComplete && { color: colors.background, fontWeight: '700' },
-                            ]}
-                          >
-                            {exIndex + 1}
-                          </Text>
-                        </View>
-
-                        <View style={styles.collapsedInfo}>
-                          <Text variant="bodyLarge" style={styles.collapsedNameText}>
+                          <Text style={styles.stitchExerciseNameText}>
                             {exercise.name}
                           </Text>
-                          <Text variant="bodySmall" color="secondary">
-                            {completedCount > 0 ? `${completedCount}/${exercise.sets.length} séries · ` : ''}
-                            {exercise.targetSets} séries · {exercise.repMin}-{exercise.repMax} reps
-                          </Text>
-                        </View>
+                          <ChevronRight size={18} color="#F5A623" strokeWidth={2.5} />
+                        </Pressable>
                       </View>
 
-                      <View style={styles.collapsedRight}>
-                        {isExerciseComplete ? (
-                          <View style={styles.completeCheckBadge}>
-                            <Check size={14} color={colors.onPrimary} strokeWidth={3} />
-                          </View>
-                        ) : null}
-                        <ChevronDown size={20} color={colors.onSurfaceVariant} strokeWidth={2} />
-                      </View>
-                    </Pressable>
+                      <Pressable
+                        onPress={() => handleCycleExerciseRest(exercise)}
+                        style={styles.exerciseTimerBtn}
+                        hitSlop={10}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Descanso atual: ${exercise.restS}s. Toque para ajustar`}
+                      >
+                        <Clock size={16} color="#8E8E93" strokeWidth={2} />
+                      </Pressable>
+                    </View>
                   )}
+                  {exIndex < exercises.length - 1 && <View style={styles.stitchDivider} />}
                 </View>
               );
             })}
@@ -1377,11 +1279,14 @@ export const ActiveSessionScreen: React.FC = () => {
                   fromScreen: 'ActiveSession',
                 })
               }
-              style={styles.addExerciseFooterButton}
+              style={({ pressed }) => [
+                styles.addExerciseFooterButton,
+                pressed && { opacity: 0.8, transform: [{ scale: 0.99 }] },
+              ]}
               accessibilityRole="button"
               accessibilityLabel="Adicionar exercício a este treino"
             >
-              <Plus size={18} color={colors.primary} strokeWidth={2.4} />
+              <Plus size={18} color="#F5A623" strokeWidth={2.4} />
               <Text variant="bodyMedium" style={styles.addExerciseFooterText}>
                 Adicionar exercício
               </Text>
@@ -1392,63 +1297,16 @@ export const ActiveSessionScreen: React.FC = () => {
 
       {/* 4. RODAPÉ FIXO DE DESCANSO (APARECE SOMENTE DURANTE O DESCANSO) */}
       {restActive && (
-        <View style={styles.restFloatingFooter}>
-          <View style={styles.restCard}>
-            <View style={styles.restTopRow}>
-              {/* Botão −15 s */}
-              <Pressable
-                onPress={() => handleAdjustRest(-15)}
-                style={styles.restAdjustButton}
-                hitSlop={4}
-                accessibilityRole="button"
-                accessibilityLabel="Diminuir 15 segundos de descanso"
-              >
-                <Text style={styles.restAdjustText}>−15 s</Text>
-              </Pressable>
-
-              {/* Contagem regressiva grande em Outfit */}
-              <Text style={styles.restCountdownTextOutfit}>
-                {formattedRest}
-              </Text>
-
-              {/* Ações da direita: +15 s e Pular */}
-              <View style={styles.restRightActions}>
-                <Pressable
-                  onPress={() => handleAdjustRest(15)}
-                  style={styles.restAdjustButton}
-                  hitSlop={4}
-                  accessibilityRole="button"
-                  accessibilityLabel="Aumentar 15 segundos de descanso"
-                >
-                  <Text style={styles.restAdjustText}>+15 s</Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={() => {
-                    triggerHaptic('light');
-                    setRestActive(false);
-                  }}
-                  style={styles.restSkipPill}
-                  hitSlop={4}
-                  accessibilityRole="button"
-                  accessibilityLabel="Pular descanso"
-                >
-                  <Text style={styles.restSkipPillText}>Pular</Text>
-                </Pressable>
-              </View>
-            </View>
-
-            {/* Barra de Progresso do Descanso */}
-            <View style={styles.restProgressBarTrack}>
-              <View
-                style={[
-                  styles.restProgressBarFill,
-                  { width: `${Math.round(restProgress * 100)}%` },
-                ]}
-              />
-            </View>
-          </View>
-        </View>
+        <RestFooter
+          remainingS={restRemaining}
+          totalS={restTotalSeconds}
+          onAdjust={handleAdjustRest}
+          onSkip={() => {
+            triggerHaptic('light');
+            setRestActive(false);
+            setRestRemaining(0);
+          }}
+        />
       )}
 
       {/* 5. SHEETS E MODAIS */}
@@ -1518,51 +1376,62 @@ export const ActiveSessionScreen: React.FC = () => {
         onCancel={() => setDiscardModalVisible(false)}
       />
 
-      {/* MODAL POPUP PARA ENTRADA NUMÉRICA RÁPIDA */}
-      <Modal
+      {/* BOTTOM SHEET ERGONÔMICO PARA ENTRADA NUMÉRICA RÁPIDA (STITCH) */}
+      <QuickNumberPadSheet
         visible={numberModalVisible}
+        onClose={() => setNumberModalVisible(false)}
+        title={numberModalTitle}
+        initialValue={numberModalValue}
+        type={numberModalType}
+        unit={unit}
+        onConfirm={(val) => {
+          numberModalCallback(val);
+        }}
+      />
+
+      {/* MODAL PARA ADICIONAR / EDITAR ANOTAÇÕES GERAIS DO TREINO */}
+      <Modal
+        visible={sessionNoteModalVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setNumberModalVisible(false)}
+        onRequestClose={() => setSessionNoteModalVisible(false)}
       >
-        <Pressable
-          style={styles.numberModalOverlay}
-          onPress={() => setNumberModalVisible(false)}
-        >
-          <Pressable style={styles.numberModalContent} onPress={(e) => e.stopPropagation()}>
-            <Text variant="headline" style={styles.numberModalTitle}>
-              {numberModalTitle}
+        <View style={styles.numberModalOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setSessionNoteModalVisible(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Fechar anotações"
+          />
+          <View style={styles.noteModalContent}>
+            <Text variant="headline" style={styles.noteModalTitle}>
+              Anotações do treino
             </Text>
             <TextInput
-              style={styles.numberModalInput}
-              keyboardType="numeric"
-              value={numberModalValue}
-              onChangeText={setNumberModalValue}
+              style={styles.noteModalInput}
+              value={sessionNoteInput}
+              onChangeText={setSessionNoteInput}
+              placeholder="Como foi a sessão de hoje? Ex: Foco em sobrecarga, energia alta..."
+              placeholderTextColor="#7D746B"
+              multiline
               autoFocus
-              selectTextOnFocus
             />
-            <View style={styles.numberModalActions}>
+            <View style={styles.noteModalActions}>
               <Button
                 title="Cancelar"
                 variant="secondary"
-                onPress={() => setNumberModalVisible(false)}
+                onPress={() => setSessionNoteModalVisible(false)}
                 style={{ flex: 1, height: 44, borderRadius: radii.pill }}
               />
               <Button
                 title="Salvar"
                 variant="primary"
-                onPress={() => {
-                  const num = parseFloat(numberModalValue.replace(',', '.'));
-                  if (!isNaN(num)) {
-                    numberModalCallback(num);
-                  }
-                  setNumberModalVisible(false);
-                }}
+                onPress={handleSaveSessionNote}
                 style={{ flex: 1, height: 44, borderRadius: radii.pill }}
               />
             </View>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
 
       {/* MODAL DE OPÇÕES DA SÉRIE (TOQUE LONGO NO NÚMERO) */}
@@ -1572,14 +1441,14 @@ export const ActiveSessionScreen: React.FC = () => {
         animationType="fade"
         onRequestClose={() => setSetMenuVisible(false)}
       >
-        <Pressable
-          style={styles.menuOverlay}
-          onPress={() => setSetMenuVisible(false)}
-        >
+        <View style={styles.menuOverlay}>
           <Pressable
-            style={styles.menuSheet}
-            onPress={(e) => e.stopPropagation()}
-          >
+            style={StyleSheet.absoluteFill}
+            onPress={() => setSetMenuVisible(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Fechar opções"
+          />
+          <View style={styles.menuSheet}>
             <Text variant="headline" style={styles.menuTitle}>
               {selectedSetForMenu?.set.isWarmup
                 ? 'Série de aquecimento'
@@ -1592,7 +1461,7 @@ export const ActiveSessionScreen: React.FC = () => {
               accessibilityRole="button"
               accessibilityLabel="Alternar série de aquecimento"
             >
-              <Flame size={20} color={colors.primary} strokeWidth={2} />
+              <Flame size={20} color="#F5A623" strokeWidth={2} />
               <Text variant="bodyLarge" style={styles.menuOptionText}>
                 {selectedSetForMenu?.set.isWarmup
                   ? 'Desmarcar aquecimento'
@@ -1614,8 +1483,8 @@ export const ActiveSessionScreen: React.FC = () => {
                 Remover série
               </Text>
             </Pressable>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
 
       {/* MODAL PARA ADICIONAR / EDITAR NOTAS DO EXERCÍCIO */}
@@ -1625,14 +1494,14 @@ export const ActiveSessionScreen: React.FC = () => {
         animationType="fade"
         onRequestClose={() => setNoteModalVisible(false)}
       >
-        <Pressable
-          style={styles.numberModalOverlay}
-          onPress={() => setNoteModalVisible(false)}
-        >
+        <View style={styles.numberModalOverlay}>
           <Pressable
-            style={styles.noteModalContent}
-            onPress={(e) => e.stopPropagation()}
-          >
+            style={StyleSheet.absoluteFill}
+            onPress={() => setNoteModalVisible(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Fechar notas"
+          />
+          <View style={styles.noteModalContent}>
             <Text variant="headline" style={styles.noteModalTitle}>
               Notas do exercício
             </Text>
@@ -1659,8 +1528,8 @@ export const ActiveSessionScreen: React.FC = () => {
                 style={{ flex: 1, height: 44, borderRadius: radii.pill }}
               />
             </View>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
 
       {/* TOAST DE RECORDE */}
@@ -1676,8 +1545,151 @@ export const ActiveSessionScreen: React.FC = () => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: '#181818',
   },
+  stitchTopBar: {
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    backgroundColor: '#181818',
+  },
+  topBarLeftButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 18,
+  },
+  topToolButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  topToolLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#D1D1D6',
+  },
+  topBarRightControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  liveTimerPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#2C2C2E',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  liveTimerText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    fontVariant: ['tabular-nums'],
+  },
+  finishGoldButton: {
+    backgroundColor: '#F5A623',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  finishGoldText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#000000',
+  },
+
+  // 2. Título e Notas
+  workoutMetaSection: {
+    paddingHorizontal: 4,
+    paddingTop: 8,
+    gap: 4,
+  },
+  workoutMetaTitle: {
+    fontSize: 24,
+    fontFamily: fontFamilies.outfitBold,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
+  },
+  addNotesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    marginTop: 2,
+  },
+  addNotesText: {
+    fontSize: 13,
+    fontStyle: 'italic',
+    color: '#8E8E93',
+  },
+  stitchDivider: {
+    height: 1,
+    backgroundColor: '#242426',
+    marginVertical: 12,
+  },
+
+  // 3. Blocos de Exercício
+  exerciseBlockContainer: {
+    width: '100%',
+  },
+  expandedBlock: {
+    gap: 10,
+  },
+  stitchExerciseHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+  },
+  stitchExerciseTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  stitchExerciseIndex: {
+    fontSize: 16,
+    fontFamily: fontFamilies.outfitBold,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  stitchExerciseNameBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flex: 1,
+  },
+  stitchExerciseNameText: {
+    fontSize: 16,
+    fontFamily: fontFamilies.outfitBold,
+    fontWeight: '700',
+    color: '#F5A623',
+  },
+  exerciseTimerBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#242426',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stitchCollapsedBlock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    paddingHorizontal: 2,
+    opacity: 0.95,
+  },
+
   topBar: {
     height: 56,
     flexDirection: 'row',
@@ -1686,7 +1698,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.06)',
-    backgroundColor: 'rgba(26, 23, 21, 0.95)',
+    backgroundColor: '#181818',
   },
   topBarLeft: {
     flexDirection: 'row',
@@ -1806,6 +1818,11 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 3,
     paddingRight: 8,
+  },
+  expandedHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   exerciseNameRow: {
     flexDirection: 'row',
@@ -2126,21 +2143,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   addExerciseFooterButton: {
-    height: 46,
+    height: 48,
     borderRadius: radii.pill,
-    backgroundColor: colors.surfaceContainer,
+    backgroundColor: '#1C1C1E',
     borderWidth: 1,
-    borderColor: 'rgba(255, 122, 89, 0.3)',
+    borderColor: '#2C2C2E',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    marginTop: 8,
+    marginTop: 12,
   },
   addExerciseFooterText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: colors.primary,
+    fontFamily: fontFamilies.outfitBold,
+    fontWeight: '700',
+    color: '#F5A623',
   },
 
   /* FIXED REST BOTTOM BAR */

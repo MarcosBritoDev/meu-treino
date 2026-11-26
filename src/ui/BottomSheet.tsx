@@ -63,7 +63,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
         <View
           style={[
             styles.sheetContainer,
-            heightPercent ? { maxHeight: `${heightPercent}%` } : undefined,
+            heightPercent ? { height: `${heightPercent}%`, maxHeight: `${heightPercent}%` } : undefined,
           ]}
         >
           {/* Alça de arrastar (Drag Handle) */}
@@ -71,16 +71,12 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
             <View style={styles.handle} />
           </View>
 
-          {/* Cabeçalho do sheet com título e botão fechar */}
-          {(title || Boolean(onClose)) && (
+          {/* Cabeçalho do sheet com título e botão fechar (apenas se title fornecido) */}
+          {Boolean(title) && (
             <View style={styles.header}>
-              {title ? (
-                <Text variant="headline" style={styles.titleText}>
-                  {title}
-                </Text>
-              ) : (
-                <View style={styles.headerSpacer} />
-              )}
+              <Text variant="headline" style={styles.titleText}>
+                {title}
+              </Text>
               <Pressable
                 onPress={() => {
                   triggerHaptic('light');
@@ -96,7 +92,9 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
             </View>
           )}
 
-          <View style={styles.body}>{children}</View>
+          <View style={[styles.body, heightPercent ? styles.bodyFlex : undefined]}>
+            {children}
+          </View>
         </View>
       </View>
     </Modal>
@@ -121,6 +119,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderBottomWidth: 0,
     borderColor: colors.outlineVariant,
+    maxHeight: '92%',
   },
   handleArea: {
     paddingVertical: spacing.gutter,
@@ -154,5 +153,8 @@ const styles = StyleSheet.create({
   },
   body: {
     paddingBottom: spacing.sm,
+  },
+  bodyFlex: {
+    flex: 1,
   },
 });

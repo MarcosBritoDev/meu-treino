@@ -36,7 +36,7 @@ export const ActiveExerciseActionSheet: React.FC<ActiveExerciseActionSheetProps>
   onRemoveExercise,
 }) => {
   return (
-    <BottomSheet visible={visible} onClose={onClose} heightPercent={48}>
+    <BottomSheet visible={visible} onClose={onClose}>
       <View style={styles.container}>
         {/* CABEÇALHO */}
         <View style={styles.header}>
@@ -64,86 +64,94 @@ export const ActiveExerciseActionSheet: React.FC<ActiveExerciseActionSheetProps>
 
         {/* OPÇÕES DE AÇÃO */}
         <View style={styles.actionsList}>
-          {/* 1. Editar só esta sessão */}
+          {/* 1. Editar metas deste treino */}
           <Pressable
             onPress={() => {
               onClose();
               onEditThisSession();
             }}
             style={styles.actionItem}
+            accessibilityRole="button"
+            accessibilityLabel="Editar metas deste treino"
           >
             <View style={styles.actionIconCircle}>
               <Edit3 size={18} color={colors.primary} strokeWidth={2} />
             </View>
             <View style={styles.actionTextContainer}>
               <Text variant="bodyLarge" style={styles.actionTitle}>
-                Editar só esta sessão
+                Editar metas deste treino
               </Text>
               <Text variant="bodySmall" color="secondary">
-                Ajustar séries, metas de repetições ou descanso
+                Ajustar séries alvo, metas de repetições ou descanso
               </Text>
             </View>
           </Pressable>
 
-          {/* 2. Pular exercício */}
+          {/* 2. Pular exercício hoje */}
           <Pressable
             onPress={() => {
               onClose();
               onSkipExercise();
             }}
             style={styles.actionItem}
+            accessibilityRole="button"
+            accessibilityLabel="Pular exercício hoje"
           >
             <View style={styles.actionIconCircle}>
               <SkipForward size={18} color={colors.onSurfaceVariant} strokeWidth={2} />
             </View>
             <View style={styles.actionTextContainer}>
               <Text variant="bodyLarge" style={styles.actionTitle}>
-                Pular exercício
+                Pular exercício hoje
               </Text>
               <Text variant="bodySmall" color="secondary">
-                Passar para o próximo exercício sem computar séries
+                Avança para o próximo exercício sem registrar séries
               </Text>
             </View>
           </Pressable>
 
-          {/* 3. Substituir exercício */}
+          {/* 3. Substituir por outro */}
           <Pressable
             onPress={() => {
               onClose();
               onReplaceExercise();
             }}
             style={styles.actionItem}
+            accessibilityRole="button"
+            accessibilityLabel="Substituir por outro exercício"
           >
             <View style={styles.actionIconCircle}>
               <RefreshCw size={18} color={colors.onSurfaceVariant} strokeWidth={2} />
             </View>
             <View style={styles.actionTextContainer}>
               <Text variant="bodyLarge" style={styles.actionTitle}>
-                Substituir exercício
+                Substituir por outro
               </Text>
               <Text variant="bodySmall" color="secondary">
-                Escolher outro exercício na biblioteca para o lugar deste
+                Escolher outro exercício na biblioteca para o treino de hoje
               </Text>
             </View>
           </Pressable>
 
-          {/* 4. Remover da sessão */}
+          {/* 4. Remover do treino de hoje */}
           <Pressable
             onPress={() => {
               onClose();
               onRemoveExercise();
             }}
             style={styles.actionItem}
+            accessibilityRole="button"
+            accessibilityLabel="Remover do treino de hoje"
           >
             <View style={[styles.actionIconCircle, { backgroundColor: 'rgba(255, 180, 171, 0.12)' }]}>
               <Trash2 size={18} color={colors.error} strokeWidth={2} />
             </View>
             <View style={styles.actionTextContainer}>
               <Text variant="bodyLarge" style={[styles.actionTitle, { color: colors.error }]}>
-                Remover da sessão
+                Remover do treino de hoje
               </Text>
               <Text variant="bodySmall" color="secondary">
-                Tirar este bloco apenas deste treino de hoje
+                Exclui este bloco desta sessão sem alterar sua rotina fixa
               </Text>
             </View>
           </Pressable>
@@ -155,9 +163,7 @@ export const ActiveExerciseActionSheet: React.FC<ActiveExerciseActionSheetProps>
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 8,
+    paddingTop: 4,
   },
   header: {
     flexDirection: 'row',

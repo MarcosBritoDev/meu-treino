@@ -51,9 +51,9 @@ describe('Tela 4.3 - Refatoração da Tabela de Séries (ActiveSession Table)', 
 
     it('não conta séries de aquecimento para o volume total de treino', () => {
       const sets = [
-        { isWarmup: true, weight: 20, reps: 15, completedAt: '2026-11-25T10:00:00' },
-        { isWarmup: false, weight: 40, reps: 10, completedAt: '2026-11-25T10:05:00' },
-        { isWarmup: false, weight: 40, reps: 10, completedAt: '2026-11-25T10:10:00' },
+        { isWarmup: true, weight: 20, reps: 15, completedAt: 1700000000000 },
+        { isWarmup: false, weight: 40, reps: 10, completedAt: 1700000005000 },
+        { isWarmup: false, weight: 40, reps: 10, completedAt: 1700000010000 },
       ];
 
       const volume = calcularVolume(sets);
@@ -67,7 +67,7 @@ describe('Tela 4.3 - Refatoração da Tabela de Séries (ActiveSession Table)', 
       const currentSet = { weight: 50, reps: 10 };
 
       // Se for aquecimento, bypass PR
-      const prResult = isWarmup ? null : detectarPR(currentSet.weight, currentSet.reps, history);
+      const prResult = isWarmup ? null : detectarPR(history, { weight: currentSet.weight, reps: currentSet.reps });
       expect(prResult).toBeNull();
     });
   });
