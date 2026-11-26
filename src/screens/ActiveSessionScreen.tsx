@@ -727,7 +727,11 @@ export const ActiveSessionScreen: React.FC = () => {
       initialKg = lastNonWarmup?.weight ?? (targetExercise.previousSets?.[0]?.weight || 20.0);
     }
 
-    const initialReps = minReps ?? (targetExercise.previousSets?.[0]?.reps || 10);
+    const initialReps =
+      (repsMode === 'reps_max' ? maxReps : minReps) ??
+      minReps ??
+      maxReps ??
+      (targetExercise.previousSets?.[0]?.reps || 10);
 
     rawDb.runSync(
       `INSERT INTO sets (

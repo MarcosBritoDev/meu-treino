@@ -227,6 +227,8 @@ describe('ETAPA 3 — Componentes e Regras de UI: StyledDropdown, SetTypeSheet, 
       expect(formatRepsShort({ type: 'drop' })).toBe('Falha');
       expect(formatRepsShort({ type: 'normal', repsMode: 'time', minReps: 45 })).toBe('45s');
       expect(formatRepsShort({ type: 'normal', repsMode: 'time_range', minReps: 30, maxReps: 45 })).toBe('30–45s');
+      expect(formatRepsShort({ type: 'normal', repsMode: 'reps_max', maxReps: 9 })).toBe('Máx 9');
+      expect(formatRepsTarget({ type: 'normal', repsMode: 'reps_max', maxReps: 9 })).toBe('Até 9 reps');
     });
 
     it('calcula sugestão de drop (-20% da última série válida)', () => {

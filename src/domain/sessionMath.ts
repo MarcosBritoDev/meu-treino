@@ -104,7 +104,8 @@ export function formatRepsTarget(set: SetTargetLike): string {
     return min !== null ? `${min} reps` : '—';
   }
   if (mode === 'reps_max') {
-    return 'Reps Max';
+    const val = max ?? min;
+    return val !== null ? `Até ${val} reps` : 'Reps Max';
   }
   if (mode === 'amrap') {
     return 'AMRAP';
@@ -146,7 +147,8 @@ export function formatRepsShort(set: SetTargetLike): string {
     return min !== null ? String(min) : '—';
   }
   if (mode === 'reps_max') {
-    return 'Max';
+    const val = max ?? min;
+    return val !== null ? `Máx ${val}` : 'Max';
   }
   if (mode === 'amrap') {
     return 'AMRAP';
@@ -356,11 +358,15 @@ export function sanitizePlannedSet<T extends Record<string, any>>(set: T): T {
     }
 
     const repsMode = s.repsMode ?? (s as any).reps_mode ?? 'reps_range';
-    if (repsMode === 'reps_max' || repsMode === 'amrap') {
+    if (repsMode === 'amrap') {
       s.minReps = null;
       if ('min_reps' in s) (s as any).min_reps = null;
       s.maxReps = null;
       if ('max_reps' in s) (s as any).max_reps = null;
+    } else if (repsMode === 'reps_max') {
+      s.minReps = null;
+      if ('min_reps' in s) (s as any).min_reps = null;
+      // Preserva maxReps / max_reps para indicar o teto de repetições
     } else if (repsMode === 'reps' || repsMode === 'time') {
       s.maxReps = null;
       if ('max_reps' in s) (s as any).max_reps = null;

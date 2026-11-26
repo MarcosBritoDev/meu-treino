@@ -195,6 +195,7 @@ describe('ETAPA 2 — Formatação com vírgula decimal e padrão pt-BR', () => 
 
     // 3. reps_max
     expect(formatRepsTarget({ type: 'normal', repsMode: 'reps_max' })).toBe('Reps Max');
+    expect(formatRepsTarget({ type: 'normal', repsMode: 'reps_max', maxReps: 9 })).toBe('Até 9 reps');
 
     // 4. amrap
     expect(formatRepsTarget({ type: 'normal', repsMode: 'amrap' })).toBe('AMRAP');
@@ -214,6 +215,7 @@ describe('ETAPA 2 — Formatação com vírgula decimal e padrão pt-BR', () => 
     expect(formatRepsShort({ type: 'normal', repsMode: 'reps_range', minReps: 8, maxReps: 10 })).toBe('8–10');
     expect(formatRepsShort({ type: 'normal', repsMode: 'reps_range', minReps: 8, maxReps: 8 })).toBe('8');
     expect(formatRepsShort({ type: 'normal', repsMode: 'reps_max' })).toBe('Max');
+    expect(formatRepsShort({ type: 'normal', repsMode: 'reps_max', maxReps: 9 })).toBe('Máx 9');
     expect(formatRepsShort({ type: 'normal', repsMode: 'amrap' })).toBe('AMRAP');
     expect(formatRepsShort({ type: 'normal', repsMode: 'time', minReps: 45 })).toBe('45s');
     expect(formatRepsShort({ type: 'normal', repsMode: 'time_range', minReps: 30, maxReps: 45 })).toBe('30–45s');
@@ -405,16 +407,16 @@ describe('ETAPA 2 — Numeração visual vs position e sanitização', () => {
       expect(sanitizedDrop.minReps).toBeNull();
     });
 
-    it('se normal com modo reps_max ou amrap, limpa minReps e maxReps', () => {
+    it('se normal com modo amrap limpa minReps e maxReps; se reps_max limpa minReps e preserva maxReps', () => {
       const sanitizedMax = sanitizePlannedSet({
         type: 'normal',
         repsMode: 'reps_max',
         minReps: 8,
-        maxReps: 12,
+        maxReps: 9,
         effortMode: 'none',
       });
       expect(sanitizedMax.minReps).toBeNull();
-      expect(sanitizedMax.maxReps).toBeNull();
+      expect(sanitizedMax.maxReps).toBe(9);
 
       const sanitizedAmrap = sanitizePlannedSet({
         type: 'normal',

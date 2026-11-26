@@ -753,7 +753,9 @@ export function startWorkoutSession(workoutId?: string, workoutName?: string): s
           }
 
           const initialReps =
+            (ps.reps_mode === 'reps_max' ? ps.max_reps : ps.min_reps) ??
             ps.min_reps ??
+            ps.max_reps ??
             (isWarmup
               ? 10
               : prevSets.filter((s) => !s.isWarmup)[normalIdx]?.reps ?? ex.repMin ?? 10);

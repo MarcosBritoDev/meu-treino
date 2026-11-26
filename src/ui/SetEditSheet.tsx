@@ -151,7 +151,7 @@ export const SetEditSheet: React.FC<SetEditSheetProps> = ({
       const rawMax = set.maxReps ?? set.max_reps;
       const isTime = rMode.startsWith('time');
       setMinVal(rawMin ?? (isTime ? 30 : 8));
-      setMaxVal(rawMax ?? (isTime ? 45 : 10));
+      setMaxVal(rawMax ?? (rMode === 'reps_max' ? (rawMin ?? 10) : isTime ? 45 : 10));
 
       const rawEffortMode = (set.effortMode || set.effort_mode || 'none') as EffortMode;
       const eMode = currentType === 'normal' ? rawEffortMode : 'none';
@@ -224,6 +224,8 @@ export const SetEditSheet: React.FC<SetEditSheetProps> = ({
     } else if (newMode === 'reps_range') {
       setMinVal(8);
       setMaxVal(10);
+    } else if (newMode === 'reps_max') {
+      setMaxVal((prev) => (prev && prev > 0 ? prev : 10));
     }
   };
 
@@ -250,11 +252,12 @@ export const SetEditSheet: React.FC<SetEditSheetProps> = ({
 
   const handleSave = () => {
     triggerHaptic('light');
-    const hideReps = isFailureLike || repsMode === 'reps_max' || repsMode === 'amrap';
+    const hideReps = isFailureLike || repsMode === 'amrap';
     const isSingleVal = repsMode === 'reps' || repsMode === 'time';
+    const isMaxReps = repsMode === 'reps_max';
 
-    const cleanMin = hideReps ? null : minVal;
-    const cleanMax = hideReps ? null : isSingleVal ? minVal : Math.max(minVal, maxVal);
+    const cleanMin = hideReps || isMaxReps ? null : minVal;
+    const cleanMax = hideReps ? null : isMaxReps ? maxVal : isSingleVal ? minVal : Math.max(minVal, maxVal);
     const cleanEffortMode = type === 'normal' ? effortMode : 'none';
 
     let cleanEffortVal: number | null = null;
@@ -413,17 +416,25 @@ export const SetEditSheet: React.FC<SetEditSheetProps> = ({
                     placeholder="Selecione o tipo de meta"
                   />
 
-                  {/* 1 Stepper (Reps ou Tempo) */}
-                  {(repsMode === 'reps' || repsMode === 'time') && (
+                  {/* 1 Stepper (Reps, Tempo ou Reps Max) */}
+                  {(repsMode === 'reps' || repsMode === 'time' || repsMode === 'reps_max') && (
                     <View style={styles.stepperCard}>
                       <Text style={styles.stepperLabel}>
-                        {isTimeMode ? 'Duração alvo (seg)' : 'Repetições alvo'}
+                        {isTimeMode
+                          ? 'Duração alvo (seg)'
+                          : repsMode === 'reps_max'
+                          ? 'Máximo de repetições'
+                          : 'Repetições alvo'}
                       </Text>
                       <View style={styles.stepperControls}>
                         <Pressable
-                          onPress={() =>
-                            setMinVal(Math.max(stepAmount, minVal - stepAmount))
-                          }
+                          onPress={() => {
+                            if (repsMode === 'reps_max') {
+                              setMaxVal(Math.max(1, maxVal - 1));
+                            } else {
+                              setMinVal(Math.max(stepAmount, minVal - stepAmount));
+                            }
+                          }}
                           style={styles.stepperBtn}
                           accessibilityRole="button"
                           accessibilityLabel="Diminuir"
@@ -431,11 +442,17 @@ export const SetEditSheet: React.FC<SetEditSheetProps> = ({
                           <Text style={styles.stepperBtnText}>-</Text>
                         </Pressable>
                         <Text style={styles.stepperValue}>
-                          {minVal}
+                          {repsMode === 'reps_max' ? maxVal : minVal}
                           {isTimeMode ? 's' : ''}
                         </Text>
                         <Pressable
-                          onPress={() => setMinVal(minVal + stepAmount)}
+                          onPress={() => {
+                            if (repsMode === 'reps_max') {
+                              setMaxVal(maxVal + 1);
+                            } else {
+                              setMinVal(minVal + stepAmount);
+                            }
+                          }}
                           style={styles.stepperBtn}
                           accessibilityRole="button"
                           accessibilityLabel="Aumentar"
