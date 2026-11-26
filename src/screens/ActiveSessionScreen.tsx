@@ -25,6 +25,11 @@ import {
   AlertTriangle,
   Minus,
   X,
+  Clock,
+  Trophy,
+  Flame,
+  Trash2,
+  FileText,
 } from 'lucide-react-native';
 import { RootStackParamList } from '../navigation/types';
 import { colors, radii, fontFamilies } from '../theme';
@@ -52,6 +57,7 @@ interface SetItem {
   weight: number;
   reps: number;
   rpe: number | null;
+  isWarmup: boolean;
   completedAt: number | null;
   isPrWeight: boolean;
   isPrVolume: boolean;
@@ -119,6 +125,21 @@ export const ActiveSessionScreen: React.FC = () => {
   const [numberModalTitle, setNumberModalTitle] = useState('');
   const [numberModalValue, setNumberModalValue] = useState('');
   const [numberModalCallback, setNumberModalCallback] = useState<(val: number) => void>(() => () => {});
+
+  // Linha de RPE aberta para a série selecionada
+  const [activeRpeSetId, setActiveRpeSetId] = useState<string | null>(null);
+
+  // Menu de opções da série (toque longo: aquecimento / remover)
+  const [setMenuVisible, setSetMenuVisible] = useState(false);
+  const [selectedSetForMenu, setSelectedSetForMenu] = useState<{
+    exercise: ActiveExerciseItem;
+    set: SetItem;
+  } | null>(null);
+
+  // Edição rápida de notas do exercício
+  const [noteModalVisible, setNoteModalVisible] = useState(false);
+  const [selectedExerciseForNote, setSelectedExerciseForNote] = useState<ActiveExerciseItem | null>(null);
+  const [noteModalValue, setNoteModalValue] = useState('');
 
   // Toast para notificações de PR e avisos
   const [toastVisible, setToastVisible] = useState(false);
@@ -226,11 +247,12 @@ export const ActiveSessionScreen: React.FC = () => {
           weight: number;
           reps: number;
           rpe: number | null;
+          is_warmup: number;
           completed_at: number | null;
           is_pr_weight: number;
           is_pr_volume: number;
         }>(
-          `SELECT id, session_exercise_id, "index", weight, reps, rpe, completed_at, is_pr_weight, is_pr_volume
+          `SELECT id, session_exercise_id, "index", weight, reps, rpe, is_warmup, completed_at, is_pr_weight, is_pr_volume
            FROM sets
            WHERE session_exercise_id = ?
            ORDER BY "index" ASC`,
@@ -253,7 +275,7 @@ export const ActiveSessionScreen: React.FC = () => {
           }
 
           setRows = rawDb.getAllSync(
-            `SELECT id, session_exercise_id, "index", weight, reps, rpe, completed_at, is_pr_weight, is_pr_volume
+            `SELECT id, session_exercise_id, "index", weight, reps, rpe, is_warmup, completed_at, is_pr_weight, is_pr_volume
              FROM sets
              WHERE session_exercise_id = ?
              ORDER BY "index" ASC`,
@@ -268,6 +290,7 @@ export const ActiveSessionScreen: React.FC = () => {
           weight: r.weight,
           reps: r.reps,
           rpe: r.rpe,
+          isWarmup: Boolean(r.is_warmup),
           completedAt: r.completed_at,
           isPrWeight: Boolean(r.is_pr_weight),
           isPrVolume: Boolean(r.is_pr_volume),
@@ -422,6 +445,7 @@ export const ActiveSessionScreen: React.FC = () => {
     if (isAlreadyCompleted) {
       // Desmarca a série
       triggerHaptic('light');
+      if (activeRpeSetId === setItem.id) setActiveRpeSetId(null);
       rawDb.runSync(
         `UPDATE sets SET completed_at = NULL, is_pr_weight = 0, is_pr_volume = 0 WHERE id = ?`,
         [setItem.id]
@@ -450,55 +474,86 @@ export const ActiveSessionScreen: React.FC = () => {
       // Conclui a série
       const completedTime = Date.now();
 
-      // Histórico anterior para detectar PR
-      const historyRows = rawDb.getAllSync<{ weight: number; reps: number }>(
-        `SELECT st.weight, st.reps
-         FROM sets st
-         JOIN session_exercises se ON st.session_exercise_id = se.id
-         WHERE se.exercise_id = ? AND st.completed_at IS NOT NULL AND st.id != ?`,
-        [exercise.exerciseId, setItem.id]
-      );
-
-      const pr = detectarPR(historyRows, {
-        weight: setItem.weight,
-        reps: setItem.reps,
-      });
-
-      rawDb.runSync(
-        `UPDATE sets 
-         SET completed_at = ?, is_pr_weight = ?, is_pr_volume = ?
-         WHERE id = ?`,
-        [completedTime, pr.isPrWeight ? 1 : 0, pr.isPrVolume ? 1 : 0, setItem.id]
-      );
-
-      if (pr.isPrWeight || pr.isPrVolume) {
-        triggerHaptic('success');
-        setToastMessage(`Novo recorde: ${setItem.weight} ${unit} × ${setItem.reps}`);
-        setToastVisible(true);
-      } else {
+      if (setItem.isWarmup) {
+        // Aquecimento não conta no volume nem em PR
+        rawDb.runSync(
+          `UPDATE sets SET completed_at = ?, is_pr_weight = 0, is_pr_volume = 0 WHERE id = ?`,
+          [completedTime, setItem.id]
+        );
         triggerHaptic('light');
+
+        setExercises((prev) =>
+          prev.map((ex) =>
+            ex.id === exercise.id
+              ? {
+                  ...ex,
+                  sets: ex.sets.map((s) =>
+                    s.id === setItem.id
+                      ? {
+                          ...s,
+                          completedAt: completedTime,
+                          isPrWeight: false,
+                          isPrVolume: false,
+                        }
+                      : s
+                  ),
+                }
+              : ex
+          )
+        );
+      } else {
+        // Série regular: calcula PR
+        const historyRows = rawDb.getAllSync<{ weight: number; reps: number }>(
+          `SELECT st.weight, st.reps
+           FROM sets st
+           JOIN session_exercises se ON st.session_exercise_id = se.id
+           WHERE se.exercise_id = ? AND st.completed_at IS NOT NULL AND st.id != ? AND st.is_warmup = 0`,
+          [exercise.exerciseId, setItem.id]
+        );
+
+        const pr = detectarPR(historyRows, {
+          weight: setItem.weight,
+          reps: setItem.reps,
+        });
+
+        rawDb.runSync(
+          `UPDATE sets 
+           SET completed_at = ?, is_pr_weight = ?, is_pr_volume = ?
+           WHERE id = ?`,
+          [completedTime, pr.isPrWeight ? 1 : 0, pr.isPrVolume ? 1 : 0, setItem.id]
+        );
+
+        if (pr.isPrWeight || pr.isPrVolume) {
+          triggerHaptic('success');
+          setToastMessage(`Novo recorde: ${setItem.weight} ${unit} × ${setItem.reps}`);
+          setToastVisible(true);
+        } else {
+          triggerHaptic('light');
+        }
+
+        setExercises((prev) =>
+          prev.map((ex) =>
+            ex.id === exercise.id
+              ? {
+                  ...ex,
+                  sets: ex.sets.map((s) =>
+                    s.id === setItem.id
+                      ? {
+                          ...s,
+                          completedAt: completedTime,
+                          isPrWeight: pr.isPrWeight,
+                          isPrVolume: pr.isPrVolume,
+                        }
+                      : s
+                  ),
+                }
+              : ex
+          )
+        );
       }
 
-      // Atualiza estado local
-      setExercises((prev) =>
-        prev.map((ex) =>
-          ex.id === exercise.id
-            ? {
-                ...ex,
-                sets: ex.sets.map((s) =>
-                  s.id === setItem.id
-                    ? {
-                        ...s,
-                        completedAt: completedTime,
-                        isPrWeight: pr.isPrWeight,
-                        isPrVolume: pr.isPrVolume,
-                      }
-                    : s
-                ),
-              }
-            : ex
-        )
-      );
+      // Abre faixa de RPE logo abaixo da série recém-concluída
+      setActiveRpeSetId(setItem.id);
 
       // Inicia descanso automático se habilitado
       if (autoRestTimer) {
@@ -600,6 +655,7 @@ export const ActiveSessionScreen: React.FC = () => {
       weight,
       reps,
       rpe: null,
+      isWarmup: false,
       completedAt: null,
       isPrWeight: false,
       isPrVolume: false,
@@ -608,6 +664,115 @@ export const ActiveSessionScreen: React.FC = () => {
     setExercises((prev) =>
       prev.map((ex) => (ex.id === exercise.id ? { ...ex, sets: [...ex.sets, newSet] } : ex))
     );
+  };
+
+  // Alternar marcação de aquecimento na série
+  const handleToggleWarmup = () => {
+    if (!selectedSetForMenu) return;
+    const { exercise, set } = selectedSetForMenu;
+    const newWarmup = !set.isWarmup;
+    try {
+      const rawDb = getExpoDb();
+      rawDb.runSync(
+        `UPDATE sets SET is_warmup = ?, is_pr_weight = 0, is_pr_volume = 0 WHERE id = ?`,
+        [newWarmup ? 1 : 0, set.id]
+      );
+      setExercises((prev) =>
+        prev.map((ex) =>
+          ex.id === exercise.id
+            ? {
+                ...ex,
+                sets: ex.sets.map((s) =>
+                  s.id === set.id
+                    ? { ...s, isWarmup: newWarmup, isPrWeight: false, isPrVolume: false }
+                    : s
+                ),
+              }
+            : ex
+        )
+      );
+      triggerHaptic('selection');
+      setToastMessage(newWarmup ? 'Série marcada como aquecimento' : 'Série marcada como normal');
+      setToastVisible(true);
+    } catch (err) {
+      console.warn('Erro ao alternar aquecimento:', err);
+    }
+    setSetMenuVisible(false);
+    setSelectedSetForMenu(null);
+  };
+
+  // Remover série individual
+  const handleDeleteSet = () => {
+    if (!selectedSetForMenu) return;
+    const { exercise, set } = selectedSetForMenu;
+    try {
+      const rawDb = getExpoDb();
+      rawDb.runSync(`DELETE FROM sets WHERE id = ?`, [set.id]);
+      setExercises((prev) =>
+        prev.map((ex) =>
+          ex.id === exercise.id
+            ? {
+                ...ex,
+                sets: ex.sets.filter((s) => s.id !== set.id),
+              }
+            : ex
+        )
+      );
+      triggerHaptic('medium');
+      setToastMessage('Série removida');
+      setToastVisible(true);
+    } catch (err) {
+      console.warn('Erro ao remover série:', err);
+    }
+    setSetMenuVisible(false);
+    setSelectedSetForMenu(null);
+  };
+
+  // Salvar nota rápida do exercício
+  const handleSaveNote = () => {
+    if (!selectedExerciseForNote) return;
+    const noteVal = noteModalValue.trim() || null;
+    try {
+      const rawDb = getExpoDb();
+      rawDb.runSync(`UPDATE session_exercises SET note = ? WHERE id = ?`, [
+        noteVal,
+        selectedExerciseForNote.id,
+      ]);
+      setExercises((prev) =>
+        prev.map((ex) =>
+          ex.id === selectedExerciseForNote.id ? { ...ex, note: noteVal } : ex
+        )
+      );
+      triggerHaptic('success');
+    } catch (err) {
+      console.warn('Erro ao salvar nota:', err);
+    }
+    setNoteModalVisible(false);
+    setSelectedExerciseForNote(null);
+  };
+
+  // Ciclar descanso pré-definido só deste exercício
+  const handleCycleExerciseRest = (exercise: ActiveExerciseItem) => {
+    triggerHaptic('selection');
+    const presets = [60, 90, 120, 180];
+    const idx = presets.indexOf(exercise.restS);
+    const nextRest = idx === -1 || idx === presets.length - 1 ? presets[0] : presets[idx + 1];
+    try {
+      const rawDb = getExpoDb();
+      rawDb.runSync(`UPDATE session_exercises SET rest_s = ? WHERE id = ?`, [
+        nextRest,
+        exercise.id,
+      ]);
+      setExercises((prev) =>
+        prev.map((ex) => (ex.id === exercise.id ? { ...ex, restS: nextRest } : ex))
+      );
+      setToastMessage(
+        `Descanso ajustado: ${nextRest >= 60 ? `${Math.round(nextRest / 60)} min` : `${nextRest}s`}`
+      );
+      setToastVisible(true);
+    } catch (err) {
+      console.warn('Erro ao atualizar descanso:', err);
+    }
   };
 
   // 5. AÇÕES DO MENU DO EXERCÍCIO
@@ -872,7 +1037,7 @@ export const ActiveSessionScreen: React.FC = () => {
                       <View style={styles.expandedHeader}>
                         <View style={styles.expandedHeaderLeft}>
                           <View style={styles.exerciseNameRow}>
-                            <Text variant="headline" style={styles.exerciseTitle}>
+                            <Text variant="headline" style={styles.exerciseTitleCoral}>
                               {exercise.name}
                             </Text>
                             <Pressable
@@ -892,15 +1057,48 @@ export const ActiveSessionScreen: React.FC = () => {
                             </Pressable>
                           </View>
 
-                          {exercise.note ? (
-                            <Text variant="bodySmall" style={styles.exerciseNoteText}>
-                              {exercise.note}
+                          {/* Subtítulo: Músculo · Equipamento */}
+                          <Text variant="bodySmall" style={styles.exerciseSubtitleText}>
+                            {exercise.muscleGroup} · {exercise.equipment}
+                          </Text>
+
+                          {/* Campo Notas (opcional) */}
+                          <Pressable
+                            onPress={() => {
+                              triggerHaptic('light');
+                              setSelectedExerciseForNote(exercise);
+                              setNoteModalValue(exercise.note || '');
+                              setNoteModalVisible(true);
+                            }}
+                            style={styles.notePressable}
+                            accessibilityRole="button"
+                            accessibilityLabel="Adicionar ou editar notas do exercício"
+                          >
+                            <FileText size={13} color={exercise.note ? '#B7ADA3' : '#7D746B'} strokeWidth={2} />
+                            <Text
+                              variant="bodySmall"
+                              style={[
+                                styles.noteContentText,
+                                !exercise.note && styles.notePlaceholderText,
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {exercise.note || 'Adicionar notas…'}
                             </Text>
-                          ) : (
-                            <Text variant="bodySmall" style={styles.exerciseMuscleText}>
-                              {exercise.muscleGroup} · {exercise.equipment}
+                          </Pressable>
+
+                          {/* Linha Descanso */}
+                          <Pressable
+                            onPress={() => handleCycleExerciseRest(exercise)}
+                            style={styles.restLinePressable}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Descanso atual: ${exercise.restS >= 60 ? `${Math.round(exercise.restS / 60)} min` : `${exercise.restS}s`}. Toque para alterar.`}
+                          >
+                            <Clock size={13} color="#B7ADA3" strokeWidth={2.2} />
+                            <Text variant="bodySmall" style={styles.restLineText}>
+                              Descanso: {exercise.restS >= 60 ? `${Math.round(exercise.restS / 60)} min` : `${exercise.restS}s`}
                             </Text>
-                          )}
+                          </Pressable>
                         </View>
 
                         <Pressable
@@ -914,23 +1112,13 @@ export const ActiveSessionScreen: React.FC = () => {
                         </Pressable>
                       </View>
 
-                      {/* Cabeçalho das Colunas da Tabela */}
+                      {/* Cabeçalho das Colunas da Tabela: Série | Anterior | kg | Reps | ✓ */}
                       <View style={styles.tableHeaderRow}>
-                        <Text variant="labelSmall" style={styles.colSerie}>
-                          Série
-                        </Text>
-                        <Text variant="labelSmall" style={styles.colAnterior}>
-                          Anterior
-                        </Text>
-                        <Text variant="labelSmall" style={styles.colCarga}>
-                          Carga ({unit})
-                        </Text>
-                        <Text variant="labelSmall" style={styles.colReps}>
-                          Reps
-                        </Text>
-                        <Text variant="labelSmall" style={styles.colCheck}>
-                          Check
-                        </Text>
+                        <Text style={styles.colHeaderSerie}>Série</Text>
+                        <Text style={styles.colHeaderAnterior}>Anterior</Text>
+                        <Text style={styles.colHeaderKg}>kg</Text>
+                        <Text style={styles.colHeaderReps}>Reps</Text>
+                        <Text style={styles.colHeaderCheck}>✓</Text>
                       </View>
 
                       {/* Linhas de Séries */}
@@ -940,6 +1128,7 @@ export const ActiveSessionScreen: React.FC = () => {
                           const isCurrent =
                             !isDone &&
                             exercise.sets.slice(0, sIdx).every((s) => s.completedAt !== null);
+                          const isRpeOpen = activeRpeSetId === setItem.id;
 
                           return (
                             <View key={setItem.id} style={styles.setRowWrapper}>
@@ -948,190 +1137,151 @@ export const ActiveSessionScreen: React.FC = () => {
                                   styles.setRow,
                                   isDone && styles.setRowDone,
                                   isCurrent && styles.setRowCurrent,
-                                  !isDone && !isCurrent && styles.setRowPending,
                                 ]}
                               >
-                                {/* 1. Número da Série */}
-                                <View style={styles.colSerie}>
-                                  <View
+                                {/* 1. Série (largura 44) - toque longo abre menu */}
+                                <Pressable
+                                  onLongPress={() => {
+                                    triggerHaptic('medium');
+                                    setSelectedSetForMenu({ exercise, set: setItem });
+                                    setSetMenuVisible(true);
+                                  }}
+                                  onPress={() => {
+                                    if (isDone) {
+                                      setActiveRpeSetId((prev) => (prev === setItem.id ? null : setItem.id));
+                                    }
+                                  }}
+                                  delayLongPress={350}
+                                  style={styles.colSerie}
+                                  accessibilityRole="button"
+                                  accessibilityLabel={`Série ${setItem.index}. Toque longo para opções.`}
+                                >
+                                  <Text
                                     style={[
-                                      styles.setIndexCircle,
-                                      isDone && styles.setIndexCircleDone,
-                                      isCurrent && styles.setIndexCircleCurrent,
+                                      styles.serieIndexText,
+                                      setItem.isWarmup && styles.warmupText,
+                                      isDone && !setItem.isWarmup && styles.doneSerieText,
                                     ]}
                                   >
-                                    <Text
-                                      variant="labelSmall"
-                                      style={[
-                                        styles.setIndexText,
-                                        isCurrent && { color: colors.background, fontWeight: '700' },
-                                      ]}
-                                    >
-                                      {setItem.index}
-                                    </Text>
-                                  </View>
-                                </View>
+                                    {setItem.isWarmup ? 'A' : setItem.index}
+                                  </Text>
+                                  {(setItem.isPrWeight || setItem.isPrVolume) && (
+                                    <Trophy size={13} color="#FFC46B" strokeWidth={2.4} style={styles.prTrophyIcon} />
+                                  )}
+                                </Pressable>
 
-                                {/* 2. Anterior */}
-                                <View style={styles.colAnterior}>
-                                  <Text variant="bodySmall" style={styles.previousLogText} numberOfLines={1}>
+                                {/* 2. Anterior (flex: 1) */}
+                                <Pressable
+                                  onPress={() => {
+                                    if (isDone) {
+                                      setActiveRpeSetId((prev) => (prev === setItem.id ? null : setItem.id));
+                                    }
+                                  }}
+                                  style={styles.colAnterior}
+                                >
+                                  <Text style={styles.previousLogText} numberOfLines={1}>
                                     {exercise.previousLog}
                                   </Text>
-                                </View>
+                                </Pressable>
 
-                                {/* 3. Carga (kg) com steppers */}
-                                <View style={styles.colCarga}>
-                                  <View style={styles.stepperContainer}>
-                                    <Pressable
-                                      onPress={() =>
-                                        handleUpdateWeight(
-                                          exercise.id,
-                                          setItem.id,
-                                          setItem.weight - defaultIncrement
-                                        )
-                                      }
-                                      style={styles.microStepButton}
-                                      hitSlop={4}
-                                    >
-                                      <Minus size={12} color={colors.onSurfaceVariant} strokeWidth={2.4} />
-                                    </Pressable>
+                                {/* 3. kg (largura 64, sem caixas nem steppers) */}
+                                <Pressable
+                                  onPress={() => {
+                                    setNumberModalTitle(`Carga (${unit}) - Série ${setItem.isWarmup ? 'A' : setItem.index}`);
+                                    setNumberModalValue(String(setItem.weight));
+                                    setNumberModalCallback(() => (val: number) => {
+                                      handleUpdateWeight(exercise.id, setItem.id, val);
+                                    });
+                                    setNumberModalVisible(true);
+                                  }}
+                                  style={styles.colKg}
+                                  accessibilityRole="button"
+                                  accessibilityLabel={`Carga ${setItem.weight} ${unit}. Toque para alterar.`}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.pureNumberText,
+                                      isCurrent && styles.currentNumberText,
+                                    ]}
+                                  >
+                                    {setItem.weight}
+                                  </Text>
+                                </Pressable>
 
-                                    <Pressable
-                                      onPress={() => {
-                                        setNumberModalTitle(`Carga (${unit}) - Série ${setItem.index}`);
-                                        setNumberModalValue(String(setItem.weight));
-                                        setNumberModalCallback(() => (val: number) => {
-                                          handleUpdateWeight(exercise.id, setItem.id, val);
-                                        });
-                                        setNumberModalVisible(true);
-                                      }}
-                                      style={styles.numberBox}
-                                    >
-                                      <Text
-                                        variant="headline"
-                                        style={[
-                                          styles.numberBoxText,
-                                          isCurrent && { color: colors.primary },
-                                        ]}
-                                      >
-                                        {setItem.weight}
-                                      </Text>
-                                    </Pressable>
+                                {/* 4. Reps (largura 64, sem caixas nem steppers) */}
+                                <Pressable
+                                  onPress={() => {
+                                    setNumberModalTitle(`Repetições - Série ${setItem.isWarmup ? 'A' : setItem.index}`);
+                                    setNumberModalValue(String(setItem.reps));
+                                    setNumberModalCallback(() => (val: number) => {
+                                      handleUpdateReps(exercise.id, setItem.id, val);
+                                    });
+                                    setNumberModalVisible(true);
+                                  }}
+                                  style={styles.colReps}
+                                  accessibilityRole="button"
+                                  accessibilityLabel={`Repetições ${setItem.reps}. Toque para alterar.`}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.pureNumberText,
+                                      isCurrent && styles.currentNumberText,
+                                    ]}
+                                  >
+                                    {setItem.reps}
+                                  </Text>
+                                </Pressable>
 
-                                    <Pressable
-                                      onPress={() =>
-                                        handleUpdateWeight(
-                                          exercise.id,
-                                          setItem.id,
-                                          setItem.weight + defaultIncrement
-                                        )
-                                      }
-                                      style={styles.microStepButton}
-                                      hitSlop={4}
-                                    >
-                                      <Plus size={12} color={colors.onSurfaceVariant} strokeWidth={2.4} />
-                                    </Pressable>
-                                  </View>
-                                </View>
-
-                                {/* 4. Reps com steppers */}
-                                <View style={styles.colReps}>
-                                  <View style={styles.stepperContainer}>
-                                    <Pressable
-                                      onPress={() =>
-                                        handleUpdateReps(exercise.id, setItem.id, setItem.reps - 1)
-                                      }
-                                      style={styles.microStepButton}
-                                      hitSlop={4}
-                                    >
-                                      <Minus size={12} color={colors.onSurfaceVariant} strokeWidth={2.4} />
-                                    </Pressable>
-
-                                    <Pressable
-                                      onPress={() => {
-                                        setNumberModalTitle(`Repetições - Série ${setItem.index}`);
-                                        setNumberModalValue(String(setItem.reps));
-                                        setNumberModalCallback(() => (val: number) => {
-                                          handleUpdateReps(exercise.id, setItem.id, val);
-                                        });
-                                        setNumberModalVisible(true);
-                                      }}
-                                      style={styles.numberBox}
-                                    >
-                                      <Text
-                                        variant="headline"
-                                        style={[
-                                          styles.numberBoxText,
-                                          isCurrent && { color: colors.primary },
-                                        ]}
-                                      >
-                                        {setItem.reps}
-                                      </Text>
-                                    </Pressable>
-
-                                    <Pressable
-                                      onPress={() =>
-                                        handleUpdateReps(exercise.id, setItem.id, setItem.reps + 1)
-                                      }
-                                      style={styles.microStepButton}
-                                      hitSlop={4}
-                                    >
-                                      <Plus size={12} color={colors.onSurfaceVariant} strokeWidth={2.4} />
-                                    </Pressable>
-                                  </View>
-                                </View>
-
-                                {/* 5. Check Button 48px */}
+                                {/* 5. Check (largura 48, círculo 48x48) */}
                                 <View style={styles.colCheck}>
                                   <Pressable
-                                    onPress={() => handleToggleSetCheck(exercise, setItem)}
-                                    style={[
-                                      styles.checkButton,
-                                      isDone && styles.checkButtonDone,
-                                      isCurrent && styles.checkButtonCurrent,
-                                      !isDone && !isCurrent && styles.checkButtonPending,
-                                    ]}
+                                    onPress={() => {
+                                      handleToggleSetCheck(exercise, setItem);
+                                    }}
+                                    style={styles.checkTouchArea}
                                     accessibilityRole="button"
                                     accessibilityLabel={`Marcar série ${setItem.index} como concluída`}
                                   >
-                                    {isDone ? (
-                                      <Check size={22} color={colors.onPrimary} strokeWidth={3} />
-                                    ) : isCurrent ? (
-                                      <Check size={20} color={colors.primary} strokeWidth={2.5} />
-                                    ) : (
-                                      <Check size={18} color="rgba(255, 255, 255, 0.15)" strokeWidth={2} />
-                                    )}
+                                    <View
+                                      style={[
+                                        styles.checkCircle,
+                                        isDone && styles.checkCircleDone,
+                                        isCurrent && styles.checkCircleCurrent,
+                                        !isDone && !isCurrent && styles.checkCirclePending,
+                                      ]}
+                                    >
+                                      {isDone && (
+                                        <Check size={20} color="#1A1715" strokeWidth={3} />
+                                      )}
+                                    </View>
                                   </Pressable>
                                 </View>
                               </View>
 
-                              {/* Linha recolhível de RPE opcional após conclusão da série */}
-                              {isDone && (
-                                <View style={styles.rpeRow}>
-                                  <Text variant="labelSmall" color="secondary" style={styles.rpeLabel}>
-                                    RPE:
-                                  </Text>
+                              {/* Linha de RPE: só aparece ao tocar na série concluída, numa faixa abaixo dela */}
+                              {isDone && isRpeOpen && (
+                                <View style={styles.rpeStripContainer}>
+                                  <Text style={styles.rpeStripLabel}>RPE (Esforço):</Text>
                                   <ScrollView
                                     horizontal
                                     showsHorizontalScrollIndicator={false}
-                                    contentContainerStyle={styles.rpeScroll}
+                                    contentContainerStyle={styles.rpeStripScroll}
                                   >
                                     {[6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10].map((rVal) => {
-                                      const isRpeSelected = setItem.rpe === rVal;
+                                      const isSelected = setItem.rpe === rVal;
                                       return (
                                         <Pressable
                                           key={rVal}
                                           onPress={() => handleUpdateRpe(exercise.id, setItem.id, rVal)}
                                           style={[
-                                            styles.rpeChip,
-                                            isRpeSelected && styles.rpeChipSelected,
+                                            styles.rpeChipButton,
+                                            isSelected && styles.rpeChipButtonSelected,
                                           ]}
                                         >
                                           <Text
-                                            variant="labelSmall"
                                             style={[
-                                              styles.rpeChipText,
-                                              isRpeSelected && styles.rpeChipTextSelected,
+                                              styles.rpeChipBtnText,
+                                              isSelected && styles.rpeChipBtnTextSelected,
                                             ]}
                                           >
                                             {rVal}
@@ -1140,12 +1290,6 @@ export const ActiveSessionScreen: React.FC = () => {
                                       );
                                     })}
                                   </ScrollView>
-
-                                  {setItem.isPrWeight && (
-                                    <View style={{ marginLeft: 8 }}>
-                                      <PRBadge label="PR" />
-                                    </View>
-                                  )}
                                 </View>
                               )}
                             </View>
@@ -1160,8 +1304,8 @@ export const ActiveSessionScreen: React.FC = () => {
                         accessibilityRole="button"
                         accessibilityLabel="Adicionar nova série ao exercício"
                       >
-                        <Plus size={16} color={colors.onSurfaceVariant} strokeWidth={2.4} />
-                        <Text variant="bodyMedium" style={styles.addSetText}>
+                        <Plus size={18} color="#EDE0D5" strokeWidth={2.4} />
+                        <Text style={styles.addSetText}>
                           Adicionar série
                         </Text>
                       </Pressable>
@@ -1251,40 +1395,32 @@ export const ActiveSessionScreen: React.FC = () => {
         <View style={styles.restFloatingFooter}>
           <View style={styles.restCard}>
             <View style={styles.restTopRow}>
-              <View style={styles.restInfo}>
-                <View style={styles.restIconCircle}>
-                  <Timer size={20} color={colors.primary} strokeWidth={2.4} />
-                </View>
-                <View>
-                  <Text variant="labelSmall" style={styles.restLabel}>
-                    Descanso
-                  </Text>
-                  <Text variant="headline" style={styles.restCountdownText}>
-                    {formattedRest}
-                  </Text>
-                </View>
-              </View>
+              {/* Botão −15 s */}
+              <Pressable
+                onPress={() => handleAdjustRest(-15)}
+                style={styles.restAdjustButton}
+                hitSlop={4}
+                accessibilityRole="button"
+                accessibilityLabel="Diminuir 15 segundos de descanso"
+              >
+                <Text style={styles.restAdjustText}>−15 s</Text>
+              </Pressable>
 
-              {/* Botões sem quebra de texto */}
-              <View style={styles.restActionsRow}>
-                <Pressable
-                  onPress={() => handleAdjustRest(-15)}
-                  style={styles.restPillButton}
-                  hitSlop={4}
-                >
-                  <Text variant="labelSmall" style={styles.restPillText}>
-                    −15 s
-                  </Text>
-                </Pressable>
+              {/* Contagem regressiva grande em Outfit */}
+              <Text style={styles.restCountdownTextOutfit}>
+                {formattedRest}
+              </Text>
 
+              {/* Ações da direita: +15 s e Pular */}
+              <View style={styles.restRightActions}>
                 <Pressable
-                  onPress={() => handleAdjustRest(+30)}
-                  style={[styles.restPillButton, styles.restPillButtonCoral]}
+                  onPress={() => handleAdjustRest(15)}
+                  style={styles.restAdjustButton}
                   hitSlop={4}
+                  accessibilityRole="button"
+                  accessibilityLabel="Aumentar 15 segundos de descanso"
                 >
-                  <Text variant="labelSmall" style={styles.restPillTextCoral}>
-                    +30 s
-                  </Text>
+                  <Text style={styles.restAdjustText}>+15 s</Text>
                 </Pressable>
 
                 <Pressable
@@ -1292,12 +1428,12 @@ export const ActiveSessionScreen: React.FC = () => {
                     triggerHaptic('light');
                     setRestActive(false);
                   }}
-                  style={styles.restSkipButton}
+                  style={styles.restSkipPill}
                   hitSlop={4}
+                  accessibilityRole="button"
+                  accessibilityLabel="Pular descanso"
                 >
-                  <Text variant="labelSmall" style={styles.restSkipText}>
-                    Pular
-                  </Text>
+                  <Text style={styles.restSkipPillText}>Pular</Text>
                 </Pressable>
               </View>
             </View>
@@ -1422,6 +1558,104 @@ export const ActiveSessionScreen: React.FC = () => {
                   }
                   setNumberModalVisible(false);
                 }}
+                style={{ flex: 1, height: 44, borderRadius: radii.pill }}
+              />
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* MODAL DE OPÇÕES DA SÉRIE (TOQUE LONGO NO NÚMERO) */}
+      <Modal
+        visible={setMenuVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSetMenuVisible(false)}
+      >
+        <Pressable
+          style={styles.menuOverlay}
+          onPress={() => setSetMenuVisible(false)}
+        >
+          <Pressable
+            style={styles.menuSheet}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text variant="headline" style={styles.menuTitle}>
+              {selectedSetForMenu?.set.isWarmup
+                ? 'Série de aquecimento'
+                : `Série ${selectedSetForMenu?.set.index}`}
+            </Text>
+
+            <Pressable
+              onPress={handleToggleWarmup}
+              style={styles.menuOption}
+              accessibilityRole="button"
+              accessibilityLabel="Alternar série de aquecimento"
+            >
+              <Flame size={20} color={colors.primary} strokeWidth={2} />
+              <Text variant="bodyLarge" style={styles.menuOptionText}>
+                {selectedSetForMenu?.set.isWarmup
+                  ? 'Desmarcar aquecimento'
+                  : 'Marcar como aquecimento'}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={handleDeleteSet}
+              style={styles.menuOption}
+              accessibilityRole="button"
+              accessibilityLabel="Remover série"
+            >
+              <Trash2 size={20} color={colors.error} strokeWidth={2} />
+              <Text
+                variant="bodyLarge"
+                style={[styles.menuOptionText, { color: colors.error }]}
+              >
+                Remover série
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* MODAL PARA ADICIONAR / EDITAR NOTAS DO EXERCÍCIO */}
+      <Modal
+        visible={noteModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setNoteModalVisible(false)}
+      >
+        <Pressable
+          style={styles.numberModalOverlay}
+          onPress={() => setNoteModalVisible(false)}
+        >
+          <Pressable
+            style={styles.noteModalContent}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text variant="headline" style={styles.noteModalTitle}>
+              Notas do exercício
+            </Text>
+            <TextInput
+              style={styles.noteModalInput}
+              value={noteModalValue}
+              onChangeText={setNoteModalValue}
+              placeholder="Ex: Banco a 30°, pegada pronada..."
+              placeholderTextColor="#7D746B"
+              multiline
+              autoFocus
+            />
+            <View style={styles.noteModalActions}>
+              <Button
+                title="Cancelar"
+                variant="secondary"
+                onPress={() => setNoteModalVisible(false)}
+                style={{ flex: 1, height: 44, borderRadius: radii.pill }}
+              />
+              <Button
+                title="Salvar"
+                variant="primary"
+                onPress={handleSaveNote}
                 style={{ flex: 1, height: 44, borderRadius: radii.pill }}
               />
             </View>
@@ -1557,10 +1791,11 @@ const styles = StyleSheet.create({
   /* EXPANDED CARD */
   expandedCard: {
     borderRadius: 20,
-    padding: 16,
-    gap: 14,
+    padding: 14,
+    gap: 12,
     borderWidth: 1,
     borderColor: '#3A3531',
+    backgroundColor: colors.surfaceContainer,
   },
   expandedHeader: {
     flexDirection: 'row',
@@ -1578,11 +1813,39 @@ const styles = StyleSheet.create({
     gap: 8,
     flexWrap: 'wrap',
   },
-  exerciseTitle: {
+  exerciseTitleCoral: {
     fontSize: 20,
     fontFamily: fontFamilies.outfitBold,
     fontWeight: '700',
-    color: colors.primary,
+    color: '#FF7A59',
+  },
+  exerciseSubtitleText: {
+    fontSize: 13,
+    color: '#B7ADA3',
+  },
+  notePressable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
+  },
+  noteContentText: {
+    fontSize: 13,
+    color: '#B7ADA3',
+  },
+  notePlaceholderText: {
+    color: '#7D746B',
+    fontStyle: 'italic',
+  },
+  restLinePressable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
+  },
+  restLineText: {
+    fontSize: 13,
+    color: '#B7ADA3',
   },
   calcIconButton: {
     width: 32,
@@ -1590,210 +1853,216 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.surfaceContainer,
-  },
-  exerciseNoteText: {
-    fontSize: 13,
-    color: colors.onSurfaceVariant,
-    fontStyle: 'italic',
-  },
-  exerciseMuscleText: {
-    fontSize: 12,
-    color: colors.onSurfaceVariant,
+    backgroundColor: colors.surfaceContainerHigh,
   },
   menuButton: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
+
+  /* TABELA DE SÉRIES: Série 44, Anterior flex, kg 64, Reps 64, Check 48 */
   tableHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingBottom: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 6,
   },
-  colSerie: {
+  colHeaderSerie: {
     width: 44,
-    alignItems: 'flex-start',
-    fontSize: 11,
-    color: colors.onSurfaceVariant,
+    fontSize: 12,
+    color: '#7D746B',
+    textAlign: 'left',
   },
-  colAnterior: {
-    flex: 1.1,
-    alignItems: 'flex-start',
-    fontSize: 11,
-    color: colors.onSurfaceVariant,
+  colHeaderAnterior: {
+    flex: 1,
+    fontSize: 12,
+    color: '#7D746B',
+    textAlign: 'left',
   },
-  colCarga: {
-    flex: 1.2,
-    alignItems: 'center',
-    fontSize: 11,
-    color: colors.onSurfaceVariant,
+  colHeaderKg: {
+    width: 64,
+    fontSize: 12,
+    color: '#7D746B',
     textAlign: 'center',
   },
-  colReps: {
-    flex: 1.1,
-    alignItems: 'center',
-    fontSize: 11,
-    color: colors.onSurfaceVariant,
+  colHeaderReps: {
+    width: 64,
+    fontSize: 12,
+    color: '#7D746B',
     textAlign: 'center',
   },
-  colCheck: {
+  colHeaderCheck: {
     width: 48,
-    alignItems: 'center',
-    fontSize: 11,
-    color: colors.onSurfaceVariant,
+    fontSize: 12,
+    color: '#7D746B',
     textAlign: 'center',
   },
+
   setsTable: {
-    gap: 8,
+    gap: 2,
   },
   setRowWrapper: {
-    gap: 6,
+    marginVertical: 2,
   },
   setRow: {
+    height: 52,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderRadius: 14,
-    backgroundColor: 'rgba(26, 23, 21, 0.4)',
-  },
-  setRowDone: {
-    backgroundColor: 'rgba(26, 23, 21, 0.6)',
-  },
-  setRowCurrent: {
-    backgroundColor: colors.surfaceContainer,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 122, 89, 0.5)',
-  },
-  setRowPending: {
-    opacity: 0.7,
-  },
-  setIndexCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#352F28',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  setIndexCircleDone: {
-    backgroundColor: '#352F28',
-  },
-  setIndexCircleCurrent: {
-    backgroundColor: colors.primary,
-  },
-  setIndexText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.onSurfaceVariant,
-  },
-  previousLogText: {
-    fontSize: 12,
-    color: colors.onSurfaceVariant,
-  },
-  stepperContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  microStepButton: {
-    width: 22,
-    height: 28,
-    borderRadius: 6,
-    backgroundColor: colors.surfaceContainerHigh,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  numberBox: {
-    minWidth: 36,
-    height: 36,
-    paddingHorizontal: 4,
     borderRadius: 10,
-    backgroundColor: colors.surfaceContainerHigh,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  numberBoxText: {
-    fontSize: 16,
-    fontFamily: fontFamilies.outfitBold,
-    fontWeight: '700',
-    color: colors.onSurface,
-  },
-  checkButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkButtonDone: {
-    backgroundColor: colors.primary,
-  },
-  checkButtonCurrent: {
-    borderWidth: 2,
-    borderColor: colors.primary,
-    backgroundColor: 'rgba(255, 122, 89, 0.12)',
-  },
-  checkButtonPending: {
-    borderWidth: 1,
-    borderColor: '#4D463E',
-  },
-  rpeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    gap: 6,
-  },
-  rpeLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  rpeScroll: {
-    flexDirection: 'row',
-    gap: 6,
-    alignItems: 'center',
-  },
-  rpeChip: {
-    backgroundColor: colors.surfaceContainer,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radii.pill,
+    paddingHorizontal: 4,
     borderWidth: 1,
     borderColor: 'transparent',
   },
-  rpeChipSelected: {
-    backgroundColor: 'rgba(255, 122, 89, 0.18)',
-    borderColor: colors.primary,
+  setRowDone: {
+    backgroundColor: 'rgba(123, 201, 143, 0.14)',
   },
-  rpeChipText: {
-    fontSize: 11,
-    color: colors.onSurfaceVariant,
+  setRowCurrent: {
+    borderWidth: 1,
+    borderColor: '#FF7A59',
   },
-  rpeChipTextSelected: {
+  colSerie: {
+    width: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    height: 52,
+  },
+  serieIndexText: {
+    fontSize: 16,
+    fontFamily: fontFamilies.outfitBold,
+    color: colors.onSurface,
+  },
+  warmupText: {
+    color: '#B7ADA3',
+  },
+  doneSerieText: {
+    color: '#7BC98F',
+  },
+  prTrophyIcon: {
+    marginLeft: 3,
+  },
+  colAnterior: {
+    flex: 1,
+    height: 52,
+    justifyContent: 'center',
+    paddingRight: 4,
+  },
+  previousLogText: {
+    fontSize: 13,
+    color: '#7D746B',
+  },
+  colKg: {
+    width: 64,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  colReps: {
+    width: 64,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pureNumberText: {
+    fontSize: 20,
+    fontFamily: fontFamilies.outfitBold,
+    color: colors.onSurface,
+    textAlign: 'center',
+  },
+  currentNumberText: {
     color: colors.primary,
-    fontWeight: '700',
   },
+  colCheck: {
+    width: 48,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkTouchArea: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkCircleDone: {
+    backgroundColor: '#7BC98F',
+  },
+  checkCircleCurrent: {
+    borderWidth: 2,
+    borderColor: '#FF7A59',
+    backgroundColor: 'transparent',
+  },
+  checkCirclePending: {
+    borderWidth: 2,
+    borderColor: '#3A3531',
+    backgroundColor: 'transparent',
+  },
+
+  /* RPE STRIP */
+  rpeStripContainer: {
+    marginTop: 4,
+    marginBottom: 4,
+    backgroundColor: '#1C1917',
+    borderRadius: 10,
+    padding: 8,
+    gap: 6,
+  },
+  rpeStripLabel: {
+    fontSize: 11,
+    color: '#B7ADA3',
+    fontWeight: '600',
+  },
+  rpeStripScroll: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  rpeChipButton: {
+    height: 36,
+    paddingHorizontal: 12,
+    borderRadius: radii.pill,
+    backgroundColor: '#2D2925',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rpeChipButtonSelected: {
+    backgroundColor: '#FF7A59',
+  },
+  rpeChipBtnText: {
+    fontSize: 13,
+    fontFamily: fontFamilies.outfitBold,
+    color: '#EDE0D5',
+  },
+  rpeChipBtnTextSelected: {
+    color: '#1A1715',
+  },
+
+  /* ADICIONAR SÉRIE BUTTON */
   addSetButton: {
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: colors.background,
+    width: '100%',
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: '#2D2925',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    marginTop: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
+    gap: 8,
+    marginTop: 8,
   },
   addSetText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.onSurfaceVariant,
+    fontSize: 14,
+    fontFamily: fontFamilies.outfitSemiBold,
+    color: '#EDE0D5',
   },
 
   /* COLLAPSED CARD */
@@ -1900,70 +2169,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  restInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  restIconCircle: {
-    width: 38,
+  restAdjustButton: {
     height: 38,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 122, 89, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  restLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.onSurfaceVariant,
-  },
-  restCountdownText: {
-    fontSize: 24,
-    fontFamily: fontFamilies.outfitBold,
-    fontWeight: '700',
-    color: colors.primary,
-    lineHeight: 28,
-  },
-  restActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  restPillButton: {
-    height: 34,
-    paddingHorizontal: 10,
-    borderRadius: radii.pill,
-    backgroundColor: '#23201D',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  restPillButtonCoral: {
-    backgroundColor: '#23201D',
-  },
-  restPillText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.onSurface,
-  },
-  restPillTextCoral: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  restSkipButton: {
-    height: 34,
-    paddingHorizontal: 12,
-    borderRadius: radii.pill,
+    paddingHorizontal: 14,
+    borderRadius: 100,
     borderWidth: 1,
     borderColor: 'rgba(255, 122, 89, 0.5)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  restSkipText: {
-    fontSize: 12,
-    fontWeight: '600',
+  restAdjustText: {
+    fontSize: 13,
+    fontFamily: fontFamilies.outfitSemiBold,
     color: colors.primary,
+  },
+  restCountdownTextOutfit: {
+    fontSize: 28,
+    fontFamily: fontFamilies.outfitBold,
+    color: '#EDE0D5',
+  },
+  restRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  restSkipPill: {
+    height: 38,
+    paddingHorizontal: 18,
+    borderRadius: 100,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  restSkipPillText: {
+    fontSize: 13,
+    fontFamily: fontFamilies.outfitBold,
+    color: '#1A1715',
   },
   restProgressBarTrack: {
     height: 4,
@@ -1976,6 +2217,75 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: colors.primary,
     borderRadius: 2,
+  },
+
+  /* SET ACTION MODAL */
+  menuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    justifyContent: 'flex-end',
+  },
+  menuSheet: {
+    backgroundColor: colors.surfaceContainer,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    paddingBottom: 36,
+    gap: 12,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderColor: colors.outlineVariant,
+  },
+  menuTitle: {
+    fontSize: 18,
+    fontFamily: fontFamilies.outfitBold,
+    color: colors.onSurface,
+    marginBottom: 6,
+  },
+  menuOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  menuOptionText: {
+    fontSize: 16,
+    fontFamily: fontFamilies.outfitSemiBold,
+    color: colors.onSurface,
+  },
+
+  /* NOTE MODAL */
+  noteModalContent: {
+    width: '100%',
+    maxWidth: 340,
+    backgroundColor: colors.surfaceContainer,
+    borderRadius: 20,
+    padding: 20,
+    gap: 16,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+  },
+  noteModalTitle: {
+    fontSize: 18,
+    fontFamily: fontFamilies.outfitBold,
+    color: colors.onSurface,
+  },
+  noteModalInput: {
+    minHeight: 80,
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    padding: 12,
+    color: colors.onSurface,
+    fontSize: 14,
+    textAlignVertical: 'top',
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+  },
+  noteModalActions: {
+    flexDirection: 'row',
+    gap: 12,
   },
 
   /* MODAL NUMÉRICO POPUP */
