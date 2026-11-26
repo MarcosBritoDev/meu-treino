@@ -18,8 +18,14 @@ export function detectarPR(
   const weight = Number(novaSerie.weight) || 0;
   const reps = Number(novaSerie.reps) || 0;
 
-  // Séries sem carga ou sem repetições não geram PR
-  if (weight <= 0 || reps <= 0) {
+  // Séries sem carga, sem repetições, ou do tipo aquecimento/drop não geram PR
+  if (
+    weight <= 0 ||
+    reps <= 0 ||
+    (novaSerie as any).isWarmup ||
+    (novaSerie as any).type === 'warmup' ||
+    (novaSerie as any).type === 'drop'
+  ) {
     return { isPrWeight: false, isPrVolume: false };
   }
 

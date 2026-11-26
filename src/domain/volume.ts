@@ -26,7 +26,7 @@ export function calcularVolume(
 
   for (const set of sets) {
     // Ignora séries de aquecimento
-    if (set.isWarmup) {
+    if (set.isWarmup || (set as any).type === 'warmup') {
       continue;
     }
 
