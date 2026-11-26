@@ -4,8 +4,10 @@ import {
   formatTempoRelativoLog,
   calculateNextScheduledWorkoutIndex,
 } from '../domain/workouts';
+import { PlannedSet, SetType, RepsMode, EffortMode } from '../domain/types';
 
 export { formatTempoRelativoLog, calculateNextScheduledWorkoutIndex };
+export type { PlannedSet, SetType, RepsMode, EffortMode };
 
 export interface WorkoutItemDetail {
   id: string;
@@ -289,6 +291,7 @@ export function duplicateGroup(groupId: string): void {
 
     // Consulta exercícios daquele treino
     const exRows = rawDb.getAllSync<{
+      id: string;
       exerciseId: string;
       position: number;
       targetSets: number;
@@ -297,7 +300,7 @@ export function duplicateGroup(groupId: string): void {
       restS: number;
       note: string | null;
     }>(
-      `SELECT exercise_id AS exerciseId, position, target_sets AS targetSets, rep_min AS repMin, rep_max AS repMax, rest_s AS restS, note
+      `SELECT id, exercise_id AS exerciseId, position, target_sets AS targetSets, rep_min AS repMin, rep_max AS repMax, rest_s AS restS, note
        FROM workout_exercises WHERE workout_id = ?`,
       [w.id]
     );
@@ -319,6 +322,14 @@ export function duplicateGroup(groupId: string): void {
           ex.note,
         ]
       );
+
+      const existingSets = getWorkoutExerciseSets(ex.id);
+      if (existingSets.length > 0) {
+        saveWorkoutExerciseSets(
+          newWeId,
+          existingSets.map((s, sIdx) => ({ ...s, id: `wes_${newWeId}_${sIdx}` }))
+        );
+      }
     }
   }
 }
@@ -401,11 +412,19 @@ export function seedDefaultPPLGroup(): string {
   ];
 
   pushExercises.forEach((item, pos) => {
+    const weId = `we_push_${pos}_${Date.now()}`;
     rawDb.runSync(
       `INSERT INTO workout_exercises (id, workout_id, exercise_id, position, target_sets, rep_min, rep_max, rest_s)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [`we_push_${pos}_${Date.now()}`, pushId, item.id, pos, item.sets, item.min, item.max, item.rest]
+      [weId, pushId, item.id, pos, item.sets, item.min, item.max, item.rest]
     );
+    for (let sIdx = 0; sIdx < item.sets; sIdx++) {
+      rawDb.runSync(
+        `INSERT INTO workout_exercise_sets (id, workout_exercise_id, position, type, reps_mode, min_reps, max_reps, effort_mode, rest_s)
+         VALUES (?, ?, ?, 'normal', 'reps_range', ?, ?, 'none', NULL)`,
+        [`wes_${weId}_${sIdx}`, weId, sIdx, item.min, item.max]
+      );
+    }
   });
 
   // 2. Pull A
@@ -425,11 +444,19 @@ export function seedDefaultPPLGroup(): string {
   ];
 
   pullExercises.forEach((item, pos) => {
+    const weId = `we_pull_${pos}_${Date.now()}`;
     rawDb.runSync(
       `INSERT INTO workout_exercises (id, workout_id, exercise_id, position, target_sets, rep_min, rep_max, rest_s)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [`we_pull_${pos}_${Date.now()}`, pullId, item.id, pos, item.sets, item.min, item.max, item.rest]
+      [weId, pullId, item.id, pos, item.sets, item.min, item.max, item.rest]
     );
+    for (let sIdx = 0; sIdx < item.sets; sIdx++) {
+      rawDb.runSync(
+        `INSERT INTO workout_exercise_sets (id, workout_exercise_id, position, type, reps_mode, min_reps, max_reps, effort_mode, rest_s)
+         VALUES (?, ?, ?, 'normal', 'reps_range', ?, ?, 'none', NULL)`,
+        [`wes_${weId}_${sIdx}`, weId, sIdx, item.min, item.max]
+      );
+    }
   });
 
   // 3. Legs A
@@ -449,11 +476,19 @@ export function seedDefaultPPLGroup(): string {
   ];
 
   legsExercises.forEach((item, pos) => {
+    const weId = `we_legs_${pos}_${Date.now()}`;
     rawDb.runSync(
       `INSERT INTO workout_exercises (id, workout_id, exercise_id, position, target_sets, rep_min, rep_max, rest_s)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [`we_legs_${pos}_${Date.now()}`, legsId, item.id, pos, item.sets, item.min, item.max, item.rest]
+      [weId, legsId, item.id, pos, item.sets, item.min, item.max, item.rest]
     );
+    for (let sIdx = 0; sIdx < item.sets; sIdx++) {
+      rawDb.runSync(
+        `INSERT INTO workout_exercise_sets (id, workout_exercise_id, position, type, reps_mode, min_reps, max_reps, effort_mode, rest_s)
+         VALUES (?, ?, ?, 'normal', 'reps_range', ?, ?, 'none', NULL)`,
+        [`wes_${weId}_${sIdx}`, weId, sIdx, item.min, item.max]
+      );
+    }
   });
 
   return groupId;
@@ -673,6 +708,13 @@ export function createWorkoutFromPopularTemplate(templateType: 'superior_a' | 'p
          VALUES (?, ?, ?, ?, 3, 8, 12, ?)`,
         [weId, workoutId, ex.id, currentPos++, ex.default_rest_s || 90]
       );
+      for (let sIdx = 0; sIdx < 3; sIdx++) {
+        rawDb.runSync(
+          `INSERT INTO workout_exercise_sets (id, workout_exercise_id, position, type, reps_mode, min_reps, max_reps, effort_mode, rest_s)
+           VALUES (?, ?, ?, 'normal', 'reps_range', 8, 12, 'none', NULL)`,
+          [`wes_${weId}_${sIdx}`, weId, sIdx]
+        );
+      }
     }
   }
 
@@ -900,6 +942,7 @@ export function duplicateWorkout(workoutId: string): string {
   );
 
   const exRows = rawDb.getAllSync<{
+    id: string;
     exerciseId: string;
     position: number;
     targetSets: number;
@@ -908,7 +951,7 @@ export function duplicateWorkout(workoutId: string): string {
     restS: number;
     note: string | null;
   }>(
-    `SELECT exercise_id AS exerciseId, position, target_sets AS targetSets, rep_min AS repMin, rep_max AS repMax, rest_s AS restS, note
+    `SELECT id, exercise_id AS exerciseId, position, target_sets AS targetSets, rep_min AS repMin, rep_max AS repMax, rest_s AS restS, note
      FROM workout_exercises WHERE workout_id = ?`,
     [workoutId]
   );
@@ -920,6 +963,14 @@ export function duplicateWorkout(workoutId: string): string {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [newWeId, newId, ex.exerciseId, ex.position, ex.targetSets, ex.repMin, ex.repMax, ex.restS, ex.note]
     );
+
+    const origSets = getWorkoutExerciseSets(ex.id);
+    if (origSets.length > 0) {
+      saveWorkoutExerciseSets(
+        newWeId,
+        origSets.map((s, sIdx) => ({ ...s, id: `wes_${newWeId}_${sIdx}` }))
+      );
+    }
   }
 
   return newId;
@@ -1026,6 +1077,7 @@ export interface WorkoutExerciseForEdit {
   repMax: number;
   restS: number;
   note?: string | null;
+  sets?: PlannedSet[];
 }
 
 export interface WorkoutForEdit {
@@ -1037,6 +1089,130 @@ export interface WorkoutForEdit {
   isActive: boolean;
   exercises: WorkoutExerciseForEdit[];
   allGroups: { id: string; name: string }[];
+}
+
+/**
+ * Consulta todas as séries planejadas de um exercício da ficha.
+ * Caso não haja registros ainda, realiza backfill automático com base em target_sets.
+ */
+export function getWorkoutExerciseSets(workoutExerciseId: string): PlannedSet[] {
+  const rawDb = getExpoDb();
+  const rows = rawDb.getAllSync<{
+    id: string;
+    workoutExerciseId: string;
+    position: number;
+    type: SetType;
+    repsMode: RepsMode;
+    minReps: number | null;
+    maxReps: number | null;
+    effortMode: EffortMode;
+    effortValue: number | null;
+    effortValueMax: number | null;
+    effortRefExerciseId: string | null;
+    restS: number | null;
+  }>(
+    `SELECT 
+       id,
+       workout_exercise_id AS workoutExerciseId,
+       position,
+       type,
+       reps_mode AS repsMode,
+       min_reps AS minReps,
+       max_reps AS maxReps,
+       effort_mode AS effortMode,
+       effort_value AS effortValue,
+       effort_value_max AS effortValueMax,
+       effort_ref_exercise_id AS effortRefExerciseId,
+       rest_s AS restS
+     FROM workout_exercise_sets
+     WHERE workout_exercise_id = ?
+     ORDER BY position ASC`,
+    [workoutExerciseId]
+  );
+
+  if (rows.length === 0) {
+    const weRows = rawDb.getAllSync<{
+      targetSets: number;
+      repMin: number;
+      repMax: number;
+    }>(
+      `SELECT target_sets AS targetSets, rep_min AS repMin, rep_max AS repMax
+       FROM workout_exercises WHERE id = ? LIMIT 1`,
+      [workoutExerciseId]
+    );
+
+    if (weRows.length > 0) {
+      const we = weRows[0];
+      const count = we.targetSets > 0 ? we.targetSets : 3;
+      const generated: PlannedSet[] = [];
+      for (let pos = 0; pos < count; pos++) {
+        const setId = `wes_${workoutExerciseId}_${pos}`;
+        rawDb.runSync(
+          `INSERT INTO workout_exercise_sets (
+             id, workout_exercise_id, position, type, reps_mode, min_reps, max_reps, effort_mode, rest_s
+           ) VALUES (?, ?, ?, 'normal', 'reps_range', ?, ?, 'none', NULL)`,
+          [setId, workoutExerciseId, pos, we.repMin, we.repMax]
+        );
+        generated.push({
+          id: setId,
+          workoutExerciseId,
+          position: pos,
+          type: 'normal',
+          repsMode: 'reps_range',
+          minReps: we.repMin,
+          maxReps: we.repMax,
+          effortMode: 'none',
+          effortValue: null,
+          effortValueMax: null,
+          effortRefExerciseId: null,
+          restS: null,
+        });
+      }
+      return generated;
+    }
+  }
+
+  return rows;
+}
+
+/**
+ * Salva a lista de séries planejadas de um exercício, garantindo reindexação
+ * contígua de position (0..N-1) sem buracos.
+ */
+export function saveWorkoutExerciseSets(
+  workoutExerciseId: string,
+  sets: Array<Omit<PlannedSet, 'position'> | PlannedSet>
+): void {
+  const rawDb = getExpoDb();
+  rawDb.runSync(`DELETE FROM workout_exercise_sets WHERE workout_exercise_id = ?`, [workoutExerciseId]);
+
+  for (let i = 0; i < sets.length; i++) {
+    const s = sets[i];
+    const id =
+      s.id && !s.id.startsWith('new_')
+        ? s.id
+        : `wes_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 6)}`;
+
+    rawDb.runSync(
+      `INSERT INTO workout_exercise_sets (
+         id, workout_exercise_id, position, type, reps_mode, min_reps, max_reps, effort_mode, effort_value, effort_value_max, effort_ref_exercise_id, rest_s
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        workoutExerciseId,
+        i, // Reindexação contígua garantida 0..N-1
+        s.type || 'normal',
+        s.repsMode || 'reps_range',
+        s.minReps ?? null,
+        s.maxReps ?? null,
+        s.effortMode || 'none',
+        s.effortValue ?? null,
+        s.effortValueMax ?? null,
+        s.effortRefExerciseId ?? null,
+        s.restS ?? null,
+      ]
+    );
+  }
 }
 
 /**
@@ -1116,6 +1292,11 @@ export function getWorkoutForEdit(workoutId: string): WorkoutForEdit | null {
     [workoutId]
   );
 
+  const exercises: WorkoutExerciseForEdit[] = exRows.map((ex) => ({
+    ...ex,
+    sets: getWorkoutExerciseSets(ex.id),
+  }));
+
   const allGroups = rawDb.getAllSync<{ id: string; name: string }>(
     `SELECT id, name FROM groups ORDER BY position ASC`
   );
@@ -1127,13 +1308,13 @@ export function getWorkoutForEdit(workoutId: string): WorkoutForEdit | null {
     code,
     name: w.name,
     isActive: w.isActive === 1,
-    exercises: exRows,
+    exercises,
     allGroups,
   };
 }
 
 /**
- * Salva as alterações de um treino (nome, grupo, status ativo e lista de exercícios reordenados).
+ * Salva as alterações de um treino (nome, grupo, status ativo, exercícios e séries planejadas).
  * Conforme regra: não altera sessões passadas já concluídas.
  */
 export function saveWorkout(
@@ -1159,6 +1340,16 @@ export function saveWorkout(
     ]
   );
 
+  // Armazena as séries para reinserir se já existirem
+  const setsByExerciseIndex: (PlannedSet[] | undefined)[] = data.exercises.map((ex) => {
+    if (ex.sets && ex.sets.length > 0) return ex.sets;
+    if (ex.id) {
+      const existing = getWorkoutExerciseSets(ex.id);
+      if (existing.length > 0) return existing;
+    }
+    return undefined;
+  });
+
   // Substitui os exercícios da ficha mantendo integridade
   rawDb.runSync(`DELETE FROM workout_exercises WHERE workout_id = ?`, [workoutId]);
 
@@ -1169,6 +1360,9 @@ export function saveWorkout(
         ? ex.id
         : `we_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 6)}`;
 
+    const setsToSave = setsByExerciseIndex[i];
+    const targetSets = setsToSave && setsToSave.length > 0 ? setsToSave.length : (ex.targetSets || 3);
+
     rawDb.runSync(
       `INSERT INTO workout_exercises (
          id, workout_id, exercise_id, position, target_sets, rep_min, rep_max, rest_s, note
@@ -1178,13 +1372,36 @@ export function saveWorkout(
         workoutId,
         ex.exerciseId,
         i, // Nova posição reordenada
-        ex.targetSets,
+        targetSets,
         ex.repMin,
         ex.repMax,
         ex.restS,
         ex.note || null,
       ]
     );
+
+    if (setsToSave && setsToSave.length > 0) {
+      saveWorkoutExerciseSets(newId, setsToSave);
+    } else {
+      const defaultSets: PlannedSet[] = [];
+      for (let sIdx = 0; sIdx < targetSets; sIdx++) {
+        defaultSets.push({
+          id: `wes_${newId}_${sIdx}`,
+          workoutExerciseId: newId,
+          position: sIdx,
+          type: 'normal',
+          repsMode: 'reps_range',
+          minReps: ex.repMin,
+          maxReps: ex.repMax,
+          effortMode: 'none',
+          effortValue: null,
+          effortValueMax: null,
+          effortRefExerciseId: null,
+          restS: null,
+        });
+      }
+      saveWorkoutExerciseSets(newId, defaultSets);
+    }
   }
 }
 

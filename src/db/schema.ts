@@ -78,6 +78,29 @@ export const workoutExercises = sqliteTable('workout_exercises', {
 });
 
 /**
+ * 5.1. Workout Exercise Sets (Séries planejadas individuais de um exercício na ficha)
+ * type: 'warmup' | 'normal' | 'failure' | 'drop'
+ * reps_mode: 'reps' | 'reps_range' | 'reps_max' | 'amrap' | 'time' | 'time_range'
+ * effort_mode: 'none' | 'rpe' | 'rpe_range' | 'rir' | 'percent_1rm' | 'percent_1rm_exercise' | 'last_week_plus' | 'last_session_plus'
+ */
+export const workoutExerciseSets = sqliteTable('workout_exercise_sets', {
+  id: text('id').primaryKey(),
+  workoutExerciseId: text('workout_exercise_id')
+    .notNull()
+    .references(() => workoutExercises.id, { onDelete: 'cascade' }),
+  position: integer('position').notNull(),
+  type: text('type').notNull().default('normal'),
+  repsMode: text('reps_mode').notNull().default('reps_range'),
+  minReps: integer('min_reps'),
+  maxReps: integer('max_reps'),
+  effortMode: text('effort_mode').notNull().default('none'),
+  effortValue: real('effort_value'),
+  effortValueMax: real('effort_value_max'),
+  effortRefExerciseId: text('effort_ref_exercise_id'),
+  restS: integer('rest_s'),
+});
+
+/**
  * 6. Sessions (Sessões de treino executadas ou em andamento)
  * status: 'in_progress' | 'completed' | 'discarded'
  */
@@ -122,6 +145,18 @@ export const sets = sqliteTable('sets', {
   completedAt: integer('completed_at'),
   isPrWeight: integer('is_pr_weight', { mode: 'boolean' }).notNull().default(false),
   isPrVolume: integer('is_pr_volume', { mode: 'boolean' }).notNull().default(false),
+
+  // Snapshot do planejamento de treino
+  type: text('type').notNull().default('normal'),
+  repsMode: text('reps_mode').notNull().default('reps_range'),
+  minReps: integer('min_reps'),
+  maxReps: integer('max_reps'),
+  effortMode: text('effort_mode').notNull().default('none'),
+  effortValue: real('effort_value'),
+  effortValueMax: real('effort_value_max'),
+  effortRefExerciseId: text('effort_ref_exercise_id'),
+  restS: integer('rest_s'),
+  isSessionOnly: integer('is_session_only', { mode: 'boolean' }).notNull().default(false),
 });
 
 export type Setting = typeof settings.$inferSelect;
@@ -134,6 +169,8 @@ export type Workout = typeof workouts.$inferSelect;
 export type InsertWorkout = typeof workouts.$inferInsert;
 export type WorkoutExercise = typeof workoutExercises.$inferSelect;
 export type InsertWorkoutExercise = typeof workoutExercises.$inferInsert;
+export type WorkoutExerciseSet = typeof workoutExerciseSets.$inferSelect;
+export type InsertWorkoutExerciseSet = typeof workoutExerciseSets.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
 export type InsertSession = typeof sessions.$inferInsert;
 export type SessionExercise = typeof sessionExercises.$inferSelect;

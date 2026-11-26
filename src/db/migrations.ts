@@ -140,4 +140,58 @@ export const migrations: Migration[] = [
       `ALTER TABLE settings ADD COLUMN user_name TEXT;`,
     ],
   },
+  {
+    version: 5,
+    name: '0003_planned_sets',
+    sql: [
+      `CREATE TABLE IF NOT EXISTS workout_exercise_sets (
+        id TEXT PRIMARY KEY,
+        workout_exercise_id TEXT NOT NULL REFERENCES workout_exercises(id) ON DELETE CASCADE,
+        position INTEGER NOT NULL,
+        type TEXT NOT NULL CHECK (type IN ('warmup','normal','failure','drop')) DEFAULT 'normal',
+        reps_mode TEXT NOT NULL CHECK (reps_mode IN ('reps','reps_range','reps_max','amrap','time','time_range')) DEFAULT 'reps_range',
+        min_reps INTEGER,
+        max_reps INTEGER,
+        effort_mode TEXT NOT NULL CHECK (effort_mode IN ('none','rpe','rpe_range','rir','percent_1rm','percent_1rm_exercise','last_week_plus','last_session_plus')) DEFAULT 'none',
+        effort_value REAL,
+        effort_value_max REAL,
+        effort_ref_exercise_id TEXT,
+        rest_s INTEGER
+      );`,
+      `ALTER TABLE sets ADD COLUMN type TEXT NOT NULL DEFAULT 'normal';`,
+      `ALTER TABLE sets ADD COLUMN reps_mode TEXT NOT NULL DEFAULT 'reps_range';`,
+      `ALTER TABLE sets ADD COLUMN min_reps INTEGER;`,
+      `ALTER TABLE sets ADD COLUMN max_reps INTEGER;`,
+      `ALTER TABLE sets ADD COLUMN effort_mode TEXT NOT NULL DEFAULT 'none';`,
+      `ALTER TABLE sets ADD COLUMN effort_value REAL;`,
+      `ALTER TABLE sets ADD COLUMN effort_value_max REAL;`,
+      `ALTER TABLE sets ADD COLUMN effort_ref_exercise_id TEXT;`,
+      `ALTER TABLE sets ADD COLUMN rest_s INTEGER;`,
+      `ALTER TABLE sets ADD COLUMN is_session_only INTEGER NOT NULL DEFAULT 0;`,
+      `UPDATE sets SET type = 'warmup' WHERE is_warmup = 1;`,
+      `INSERT INTO workout_exercise_sets (id, workout_exercise_id, position, type, reps_mode, min_reps, max_reps, effort_mode, rest_s)
+       SELECT 
+         'wes_' || we.id || '_' || n.pos AS id,
+         we.id AS workout_exercise_id,
+         n.pos AS position,
+         'normal' AS type,
+         'reps_range' AS reps_mode,
+         we.rep_min AS min_reps,
+         we.rep_max AS max_reps,
+         'none' AS effort_mode,
+         NULL AS rest_s
+       FROM workout_exercises we
+       JOIN (
+         WITH RECURSIVE cnt(pos) AS (
+           SELECT 0
+           UNION ALL
+           SELECT pos + 1 FROM cnt WHERE pos < 100
+         )
+         SELECT pos FROM cnt
+       ) n ON n.pos < we.target_sets
+       WHERE NOT EXISTS (
+         SELECT 1 FROM workout_exercise_sets wes WHERE wes.workout_exercise_id = we.id
+       );`,
+    ],
+  },
 ];

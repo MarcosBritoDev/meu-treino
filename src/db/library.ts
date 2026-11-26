@@ -433,6 +433,15 @@ export function addExerciseToWorkout(workoutId: string, exerciseId: string): voi
     ) VALUES (?, ?, ?, ?, 3, 8, 12, ?, NULL)`,
     [id, workoutId, exerciseId, nextPos, defaultRestS]
   );
+
+  for (let sIdx = 0; sIdx < 3; sIdx++) {
+    rawDb.runSync(
+      `INSERT INTO workout_exercise_sets (
+        id, workout_exercise_id, position, type, reps_mode, min_reps, max_reps, effort_mode, rest_s
+      ) VALUES (?, ?, ?, 'normal', 'reps_range', 8, 12, 'none', NULL)`,
+      [`wes_${id}_${sIdx}`, id, sIdx]
+    );
+  }
 }
 
 /**
