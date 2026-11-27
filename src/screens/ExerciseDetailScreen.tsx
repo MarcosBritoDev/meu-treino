@@ -5,6 +5,7 @@ import {
   View,
   Pressable,
   Modal,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
@@ -87,6 +88,8 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 export const ExerciseDetailScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isCompact = width <= 360;
   const route = useRoute<RouteProp<RootStackParamList, 'ExerciseDetail'>>();
   const exerciseId = route.params?.exerciseId;
 
@@ -330,7 +333,7 @@ export const ExerciseDetailScreen: React.FC = () => {
             </Text>
           </View>
 
-          {/* Seletor de período */}
+          {/* Seletor de período ergonômico em trilho com alvos >= 48dp */}
           <View style={styles.periodChipsRow}>
             {(['4 sem', '3 meses', 'tudo'] as const).map((p) => {
               const isSelected = period === p;
@@ -341,6 +344,7 @@ export const ExerciseDetailScreen: React.FC = () => {
                     triggerHaptic('selection');
                     setPeriod(p);
                   }}
+                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                   style={[
                     styles.periodChip,
                     isSelected && styles.periodChipSelected,
@@ -390,6 +394,7 @@ export const ExerciseDetailScreen: React.FC = () => {
               fill={colors.onSurfaceVariant}
               fontSize={10}
               fontFamily="Outfit"
+              fontWeight="600"
             >
               {formatarPeso(yMax, unit)}
             </SvgText>
@@ -409,6 +414,7 @@ export const ExerciseDetailScreen: React.FC = () => {
               fill={colors.onSurfaceVariant}
               fontSize={10}
               fontFamily="Outfit"
+              fontWeight="600"
             >
               {formatarPeso(midWeight, unit)}
             </SvgText>
@@ -427,6 +433,7 @@ export const ExerciseDetailScreen: React.FC = () => {
               fill={colors.onSurfaceVariant}
               fontSize={10}
               fontFamily="Outfit"
+              fontWeight="600"
             >
               {formatarPeso(yMin, unit)}
             </SvgText>
@@ -498,7 +505,7 @@ export const ExerciseDetailScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       {/* 1. CABEÇALHO */}
       <ScreenHeader
         title="Detalhes do exercício"
@@ -554,7 +561,7 @@ export const ExerciseDetailScreen: React.FC = () => {
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: insets.bottom + 90 },
+          { paddingBottom: insets.bottom + 100 },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -573,7 +580,7 @@ export const ExerciseDetailScreen: React.FC = () => {
             {exercise.name}
           </Text>
 
-          {/* Linha de chips informativos */}
+          {/* Linha de chips informativos principais (Músculo e Equipamento) */}
           <View style={styles.chipsRow}>
             {/* Músculo principal destacado em #3A251F / #FF7A59 */}
             <View style={styles.primaryMuscleChip}>
@@ -589,30 +596,16 @@ export const ExerciseDetailScreen: React.FC = () => {
                 {exercise.equipment}
               </Text>
             </View>
-
-            {/* Tipo de meta padrão */}
-            <View style={styles.infoPill}>
-              <Text variant="labelSmall" style={styles.infoPillTextMuted}>
-                {exercise.defaultTargetType === 'time' ? 'Meta: tempo' : 'Meta: repetições'}
-              </Text>
-            </View>
-
-            {/* Tipo (Composto / Isolamento) */}
-            {exercise.kind ? (
-              <View style={styles.infoPill}>
-                <Text variant="labelSmall" style={styles.infoPillTextMuted}>
-                  {exercise.kind === 'composto' ? 'Composto' : 'Isolamento'}
-                </Text>
-              </View>
-            ) : null}
           </View>
 
-          {/* Linha discreta para músculos secundários */}
-          {secondaryMusclesList.length > 0 && (
-            <Text variant="bodySmall" color="secondary" style={styles.secondaryMusclesLine}>
-              Secundários: {secondaryMusclesList.join(', ')}
+          {/* Linha discreta de metadados técnicos (Meta, Composto/Isolamento e Secundários) */}
+          <View style={styles.metaTextRow}>
+            <Text variant="bodySmall" color="secondary" style={styles.metaInlineText}>
+              {exercise.defaultTargetType === 'time' ? 'Meta por tempo' : 'Meta por repetições'}
+              {exercise.kind ? ` • ${exercise.kind === 'composto' ? 'Composto' : 'Isolamento'}` : ''}
+              {secondaryMusclesList.length > 0 ? ` • Secundários: ${secondaryMusclesList.join(', ')}` : ''}
             </Text>
-          )}
+          </View>
         </View>
 
         {/* 3. RECORDES PESSOAIS (GRADE 2 COLUNAS, RADII.CARD 24PX, FLAT TONAL) */}
@@ -634,21 +627,27 @@ export const ExerciseDetailScreen: React.FC = () => {
           {hasRecords ? (
             <View style={styles.bentoGrid}>
               {/* Card 1: Maior carga */}
-              <View style={styles.bentoCard}>
+              <View style={[styles.bentoCard, isCompact && styles.bentoCardCompact]}>
                 <View>
                   <View style={styles.recordHeaderRow}>
-                    <Text variant="labelSmall" color="secondary">
+                    <Text variant="labelSmall" color="secondary" numberOfLines={1}>
                       Maior carga
                     </Text>
                     {isDumbbell && (
-                      <Text variant="labelSmall" color="secondary" style={styles.dumbbellPill}>
-                        Halteres (2×)
+                      <Text variant="labelSmall" color="secondary" style={styles.dumbbellPill} numberOfLines={1}>
+                        {isCompact ? '(2×)' : 'Halteres (2×)'}
                       </Text>
                     )}
                   </View>
 
                   <View style={styles.recordValueRow}>
-                    <Text variant="displayLarge" tabular style={styles.recordNumber}>
+                    <Text
+                      variant="displayLarge"
+                      tabular
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      style={[styles.recordNumber, isCompact && styles.recordNumberCompact]}
+                    >
                       {records.maxWeight?.weight ?? '—'}
                     </Text>
                     <Text variant="bodyLarge" style={styles.recordUnit}>
@@ -658,31 +657,37 @@ export const ExerciseDetailScreen: React.FC = () => {
                 </View>
 
                 <View style={styles.recordFooter}>
-                  <Text variant="labelSmall" tabular style={styles.recordReps}>
+                  <Text variant="labelSmall" tabular style={styles.recordReps} numberOfLines={1}>
                     {records.maxWeight ? `× ${records.maxWeight.reps} reps` : '—'}
                   </Text>
-                  <Text variant="labelSmall" color="secondary">
+                  <Text variant="labelSmall" color="secondary" numberOfLines={1}>
                     {formatPtBrDateMedium(records.maxWeight?.completedAt ?? null)}
                   </Text>
                 </View>
               </View>
 
               {/* Card 2: Melhor volume */}
-              <View style={styles.bentoCard}>
+              <View style={[styles.bentoCard, isCompact && styles.bentoCardCompact]}>
                 <View>
                   <View style={styles.recordHeaderRow}>
-                    <Text variant="labelSmall" color="secondary">
+                    <Text variant="labelSmall" color="secondary" numberOfLines={1}>
                       Melhor volume
                     </Text>
                     {isDumbbell && (
-                      <Text variant="labelSmall" color="secondary" style={styles.dumbbellPill}>
-                        Volume total (2×)
+                      <Text variant="labelSmall" color="secondary" style={styles.dumbbellPill} numberOfLines={1}>
+                        {isCompact ? 'Total (2×)' : 'Volume total (2×)'}
                       </Text>
                     )}
                   </View>
 
                   <View style={styles.recordValueRow}>
-                    <Text variant="displayLarge" tabular style={styles.recordNumber}>
+                    <Text
+                      variant="displayLarge"
+                      tabular
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      style={[styles.recordNumber, isCompact && styles.recordNumberCompact]}
+                    >
                       {records.maxVolume ? Math.round(records.maxVolume.volume) : '—'}
                     </Text>
                     <Text variant="bodyLarge" style={styles.recordUnit}>
@@ -692,12 +697,12 @@ export const ExerciseDetailScreen: React.FC = () => {
                 </View>
 
                 <View style={styles.recordFooter}>
-                  <Text variant="labelSmall" tabular style={styles.recordReps}>
+                  <Text variant="labelSmall" tabular style={styles.recordReps} numberOfLines={1} adjustsFontSizeToFit>
                     {records.maxVolume
                       ? `${formatarPeso(records.maxVolume.weight, unit)} × ${records.maxVolume.reps}`
                       : '—'}
                   </Text>
-                  <Text variant="labelSmall" color="secondary">
+                  <Text variant="labelSmall" color="secondary" numberOfLines={1}>
                     Volume série
                   </Text>
                 </View>
@@ -706,7 +711,7 @@ export const ExerciseDetailScreen: React.FC = () => {
           ) : (
             <View style={styles.emptyRecordsCard}>
               <View style={styles.bentoGrid}>
-                <View style={styles.bentoCard}>
+                <View style={[styles.bentoCard, isCompact && styles.bentoCardCompact]}>
                   <Text variant="labelSmall" color="secondary">
                     Maior carga
                   </Text>
@@ -717,7 +722,7 @@ export const ExerciseDetailScreen: React.FC = () => {
                     Sem registros
                   </Text>
                 </View>
-                <View style={styles.bentoCard}>
+                <View style={[styles.bentoCard, isCompact && styles.bentoCardCompact]}>
                   <Text variant="labelSmall" color="secondary">
                     Melhor volume
                   </Text>
@@ -1111,11 +1116,14 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     fontSize: 12,
   },
-  secondaryMusclesLine: {
+  metaTextRow: {
+    marginTop: spacing.xs + 2,
+  },
+  metaInlineText: {
     fontSize: 13,
     lineHeight: 18,
-    marginTop: spacing.xs + 2,
     color: colors.onSurfaceVariant,
+    fontFamily: fontFamilies.dmSansRegular,
   },
 
   // Seções gerais
@@ -1162,6 +1170,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     minHeight: 124,
   },
+  bentoCardCompact: {
+    padding: spacing.gutter, // 12px em telas <= 360px
+    minHeight: 116,
+  },
   recordHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1184,6 +1196,10 @@ const styles = StyleSheet.create({
     fontSize: 32,
     lineHeight: 36,
     color: colors.onSurface,
+  },
+  recordNumberCompact: {
+    fontSize: 26,
+    lineHeight: 30,
   },
   recordNumberEmpty: {
     color: colors.onSurfaceVariant,
@@ -1260,24 +1276,28 @@ const styles = StyleSheet.create({
   },
   periodChipsRow: {
     flexDirection: 'row',
-    gap: 4,
-  },
-  periodChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radii.pill,
+    alignItems: 'center',
     backgroundColor: colors.surfaceContainerHigh,
+    borderRadius: radii.pill,
+    padding: 3,
     borderWidth: 1,
     borderColor: colors.outlineVariant,
+    gap: 2,
+  },
+  periodChip: {
+    paddingHorizontal: 10,
+    minHeight: 40,
+    borderRadius: radii.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   periodChipSelected: {
     backgroundColor: colors.primary,
-    borderColor: colors.primary,
   },
   periodChipText: {
     color: colors.onSurfaceVariant,
-    fontSize: 11,
-    fontFamily: fontFamilies.dmSansRegular,
+    fontSize: 12,
+    fontFamily: fontFamilies.dmSansMedium,
     fontWeight: '500',
   },
   periodChipTextSelected: {
@@ -1303,6 +1323,7 @@ const styles = StyleSheet.create({
     color: colors.onSurfaceVariant,
     fontSize: 11,
     fontFamily: fontFamilies.outfitSemiBold,
+    fontVariant: ['tabular-nums'],
   },
   xAxisLabelLast: {
     color: colors.primary,
@@ -1416,7 +1437,6 @@ const styles = StyleSheet.create({
   },
   ctaButton: {
     width: '100%',
-    minHeight: 52,
   },
 
   // Modal de opções (…)

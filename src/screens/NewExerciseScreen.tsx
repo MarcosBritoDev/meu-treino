@@ -8,8 +8,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   BackHandler,
-  Alert,
-  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -34,6 +32,7 @@ import {
   ScreenHeader,
   Text,
   TextField,
+  Button,
   ConfirmModal,
   triggerHaptic,
   MuscleIcon,
@@ -124,6 +123,7 @@ export const NewExerciseScreen: React.FC = () => {
   const [musclePickerVisible, setMusclePickerVisible] = useState(false);
   const [secondaryPickerVisible, setSecondaryPickerVisible] = useState(false);
   const [showDiscardModal, setShowDiscardModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   const [existingExercises, setExistingExercises] = useState<ExerciseItemData[]>([]);
 
@@ -304,40 +304,37 @@ export const NewExerciseScreen: React.FC = () => {
     navigation,
   ]);
 
-  // Excluir exercício customizado (protegido por Alert nativo)
+  // Excluir exercício customizado (protegido por ConfirmModal temático)
   const handleConfirmDelete = useCallback(() => {
     if (!exerciseId) return;
+    triggerHaptic('warning');
+    setShowDeleteModal(true);
+  }, [exerciseId]);
 
-    triggerHaptic('medium');
-    Alert.alert(
-      'Excluir exercício',
-      'Tem certeza que deseja excluir este exercício? Esta ação não pode ser desfeita.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Excluir',
-          style: 'destructive',
-          onPress: () => {
-            setIsSaving(true);
-            const success = deleteCustomExercise(exerciseId);
-            if (success) {
-              triggerHaptic('success');
-              if (fromScreen === 'Biblioteca') {
-                navigation.navigate('MainTabs', { screen: 'Biblioteca' } as any);
-              } else {
-                navigation.goBack();
-              }
-            } else {
-              setIsSaving(false);
-            }
-          },
-        },
-      ]
-    );
+  const executeDelete = useCallback(() => {
+    if (!exerciseId) return;
+    setIsSaving(true);
+    setShowDeleteModal(false);
+    try {
+      const success = deleteCustomExercise(exerciseId);
+      if (success) {
+        triggerHaptic('success');
+        if (fromScreen === 'Biblioteca') {
+          navigation.navigate('MainTabs', { screen: 'Biblioteca' } as any);
+        } else {
+          navigation.goBack();
+        }
+      } else {
+        setIsSaving(false);
+      }
+    } catch (err) {
+      console.warn('Erro ao excluir exercício:', err);
+      setIsSaving(false);
+    }
   }, [exerciseId, fromScreen, navigation]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       {/* Cabeçalho com botão voltar 48x48dp e título semântico */}
       <ScreenHeader
         title={isEditMode ? 'Editar exercício' : 'Novo exercício'}
@@ -347,11 +344,12 @@ export const NewExerciseScreen: React.FC = () => {
       <KeyboardAvoidingView
         style={styles.flexOne}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <ScrollView
           contentContainerStyle={[
             styles.scrollContent,
-            { paddingBottom: isEditMode && isCustom ? 140 : 100 },
+            { paddingBottom: (isEditMode && isCustom ? 160 : 120) + insets.bottom },
           ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -514,11 +512,18 @@ export const NewExerciseScreen: React.FC = () => {
                   <Text style={styles.rowLabel}>Músculos secundários (opcional)</Text>
                   {secondaryMuscles.length > 0 ? (
                     <View style={styles.chipsWrap}>
-                      {secondaryMuscles.map((muscle) => (
+                      {secondaryMuscles.slice(0, 3).map((muscle) => (
                         <View key={muscle} style={styles.chipTag}>
                           <Text style={styles.chipTagText}>{muscle}</Text>
                         </View>
                       ))}
+                      {secondaryMuscles.length > 3 && (
+                        <View style={[styles.chipTag, styles.chipTagMore]}>
+                          <Text style={styles.chipTagMoreText}>
+                            {`+${secondaryMuscles.length - 3}`}
+                          </Text>
+                        </View>
+                      )}
                     </View>
                   ) : (
                     <Text style={styles.emptySecondaryText}>Nenhum selecionado</Text>
@@ -570,52 +575,31 @@ export const NewExerciseScreen: React.FC = () => {
         <View
           style={[
             styles.fixedFooter,
-            { paddingBottom: Math.max(spacing.md, insets.bottom + 12) },
+            { paddingBottom: Math.max(spacing.md, insets.bottom + 8) },
           ]}
         >
           {/* Botão destrutivo "Excluir" no modo edição para exercícios customizados */}
           {isEditMode && isCustom && (
-            <Pressable
+            <Button
+              title="Excluir"
+              variant="danger"
+              icon={<Trash2 size={18} color={colors.onError} strokeWidth={2} />}
               onPress={handleConfirmDelete}
               disabled={isSaving}
-              style={({ pressed }) => [
-                styles.deleteBtn,
-                pressed && styles.deleteBtnPressed,
-                isSaving && styles.btnDisabled,
-              ]}
-              accessible={true}
-              accessibilityRole="button"
-              accessibilityLabel="Excluir exercício"
-            >
-              <Trash2 size={18} color={colors.error} strokeWidth={1.75} />
-              <Text style={styles.deleteBtnText}>Excluir</Text>
-            </Pressable>
+              style={styles.deleteBtn}
+            />
           )}
 
           {/* Botão primário coral */}
-          <Pressable
-            onPress={handleSave}
+          <Button
+            title={isEditMode ? 'Salvar alterações' : 'Salvar exercício'}
+            variant="primary"
+            icon={!isSaving ? <Check size={20} color={colors.onPrimary} strokeWidth={2.2} /> : undefined}
+            loading={isSaving}
             disabled={isSaving}
-            style={({ pressed }) => [
-              styles.saveBtn,
-              pressed && styles.saveBtnPressed,
-              isSaving && styles.btnDisabled,
-            ]}
-            accessible={true}
-            accessibilityRole="button"
-            accessibilityLabel={isEditMode ? 'Salvar alterações' : 'Salvar exercício'}
-          >
-            {isSaving ? (
-              <ActivityIndicator size="small" color={colors.onPrimary} />
-            ) : (
-              <>
-                <Check size={20} color={colors.onPrimary} strokeWidth={2.2} />
-                <Text style={styles.saveBtnText}>
-                  {isEditMode ? 'Salvar alterações' : 'Salvar exercício'}
-                </Text>
-              </>
-            )}
-          </Pressable>
+            onPress={handleSave}
+            style={styles.saveBtn}
+          />
         </View>
       </KeyboardAvoidingView>
 
@@ -672,6 +656,18 @@ export const NewExerciseScreen: React.FC = () => {
           navigation.goBack();
         }}
         onCancel={() => setShowDiscardModal(false)}
+      />
+
+      {/* Modal de Exclusão de Exercício Customizado */}
+      <ConfirmModal
+        visible={showDeleteModal}
+        title="Excluir exercício?"
+        description="Tem certeza que deseja excluir este exercício? Esta ação não pode ser desfeita."
+        confirmLabel="Excluir"
+        cancelLabel="Cancelar"
+        isDanger={true}
+        onConfirm={executeDelete}
+        onCancel={() => setShowDeleteModal(false)}
       />
     </SafeAreaView>
   );
@@ -845,46 +841,22 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   deleteBtn: {
-    minHeight: 52,
-    paddingHorizontal: 20,
-    borderRadius: radii.pill,
-    backgroundColor: 'rgba(255, 107, 107, 0.1)',
-    borderWidth: 1,
-    borderColor: colors.error, // #FF6B6B
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  deleteBtnPressed: {
-    backgroundColor: 'rgba(255, 107, 107, 0.2)',
-  },
-  deleteBtnText: {
-    fontSize: 15,
-    fontFamily: fontFamilies.dmSansMedium,
-    fontWeight: '600',
-    color: colors.error, // #FF6B6B
+    minWidth: 105,
+    paddingHorizontal: 16,
   },
   saveBtn: {
     flex: 1,
-    minHeight: 52,
-    borderRadius: radii.pill,
-    backgroundColor: colors.primary, // #FF7A59
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
   },
-  saveBtnPressed: {
-    backgroundColor: colors.accentPressed,
+  chipTagMore: {
+    backgroundColor: colors.surfaceContainerHigh,
+    borderColor: colors.outlineVariant,
+    paddingHorizontal: 6,
   },
-  btnDisabled: {
-    opacity: 0.5,
-  },
-  saveBtnText: {
-    fontSize: 16,
-    fontFamily: fontFamilies.outfitBold,
-    color: colors.onPrimary, // #1A1715
+  chipTagMoreText: {
+    fontSize: 11,
+    lineHeight: 16,
+    fontFamily: fontFamilies.outfitSemiBold,
+    fontVariant: ['tabular-nums'],
+    color: colors.primary,
   },
 });

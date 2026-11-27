@@ -45,6 +45,7 @@ import {
   setActiveGroup,
   duplicateGroup,
   deleteGroup,
+  updateWorkoutGroup,
   seedDefaultPPLGroup,
   getInProgressSession,
   discardInProgressSession,
@@ -78,6 +79,7 @@ export const WorkoutsScreen: React.FC = () => {
   const [selectedGroup, setSelectedGroup] = useState<WorkoutGroupDetail | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [editGroupSheetVisible, setEditGroupSheetVisible] = useState(false);
 
   // Modais de criação rápida
   const [newGroupModalVisible, setNewGroupModalVisible] = useState(false);
@@ -180,6 +182,30 @@ export const WorkoutsScreen: React.FC = () => {
       setToastVisible(true);
     } catch (err) {
       console.warn('Erro ao excluir grupo:', err);
+    }
+  };
+
+  // Salva edição de grupo
+  const handleSaveEditGroup = (formData: {
+    name: string;
+    description?: string;
+    frequencyDays: number;
+  }) => {
+    if (!selectedGroup) return;
+    try {
+      updateWorkoutGroup(
+        selectedGroup.id,
+        formData.name,
+        formData.description,
+        formData.frequencyDays
+      );
+      triggerHaptic('success');
+      setEditGroupSheetVisible(false);
+      loadData();
+      setToastMessage('Grupo atualizado com sucesso');
+      setToastVisible(true);
+    } catch (err) {
+      console.warn('Erro ao atualizar grupo:', err);
     }
   };
 
@@ -817,9 +843,7 @@ export const WorkoutsScreen: React.FC = () => {
               onPress={() => {
                 triggerHaptic('light');
                 setMenuVisible(false);
-                if (selectedGroup) {
-                  navigation.navigate('EditGroup', { groupId: selectedGroup.id });
-                }
+                setEditGroupSheetVisible(true);
               }}
               style={({ pressed }) => [
                 styles.menuItem,
@@ -912,6 +936,27 @@ export const WorkoutsScreen: React.FC = () => {
           }
         }}
       />
+
+      {/* Sheet para Editar Grupo (3.4) */}
+      {selectedGroup && (
+        <EditGroupSheet
+          visible={editGroupSheetVisible}
+          mode="edit"
+          initialData={{
+            id: selectedGroup.id,
+            name: selectedGroup.name,
+            description: selectedGroup.description,
+            frequencyDays: selectedGroup.frequencyDays,
+          }}
+          existingGroupNames={getExistingGroupNames(selectedGroup.id)}
+          onClose={() => setEditGroupSheetVisible(false)}
+          onSave={handleSaveEditGroup}
+          onDelete={() => {
+            setEditGroupSheetVisible(false);
+            setDeleteModalVisible(true);
+          }}
+        />
+      )}
 
       {/* Modal para adicionar treino a um grupo */}
       <BottomSheet

@@ -16,7 +16,6 @@ export type RootStackParamList = {
   NewExercise: { initialName?: string; fromScreen?: 'Biblioteca' | 'AddExercises'; exerciseId?: string } | undefined;
   ExerciseDetail: { exerciseId: string };
   GroupDetail: { groupId: string } | undefined;
-  EditGroup: { groupId?: string } | undefined;
   EditWorkout: {
     workoutId: string;
     addedExercises?: {
