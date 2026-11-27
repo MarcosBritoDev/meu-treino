@@ -8,140 +8,189 @@ import {
   KeyboardAvoidingView,
   Platform,
   BackHandler,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
-  Shield,
-  Flame,
-  Footprints,
-  Target,
-  BicepsFlexed,
-  Grid3x3,
   Check,
+  ChevronRight,
   Dumbbell,
-  SlidersHorizontal,
+  Boxes,
+  Cable,
+  User,
+  Sliders,
+  CircleDot,
+  ShieldCheck,
+  HeartPulse,
+  Ellipsis,
+  Trash2,
 } from 'lucide-react-native';
 import { RootStackParamList } from '../navigation/types';
-import { colors, radii, spacing, typography } from '../theme';
+import { colors, radii, spacing, fontFamilies } from '../theme';
 import {
   ScreenHeader,
   Text,
   TextField,
-  Button,
   ConfirmModal,
   triggerHaptic,
+  MuscleIcon,
+  EquipmentPickerSheet,
+  MusclePickerSheet,
 } from '../ui';
 import { useSettingsStore } from '../store/useSettingsStore';
-import { createCustomExercise, getExercisesWithPR } from '../db/library';
 import {
-  ExerciseItemData,
-  isExerciseNameDuplicate,
-} from '../domain/search';
-import { formatarPeso } from '../domain/weight';
+  createCustomExercise,
+  updateCustomExercise,
+  deleteCustomExercise,
+  getExerciseById,
+  getExercisesWithPR,
+} from '../db/library';
+import { ExerciseItemData } from '../domain/search';
+import {
+  Equipment,
+  Muscle,
+  DefaultTargetType,
+  normalizeEquipmentName,
+  normalizeMuscleName,
+  parseSecondaryMuscles,
+} from '../domain/exerciseCatalog';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-const MUSCLE_GRID = [
-  { name: 'Peito', icon: Shield },
-  { name: 'Costas', icon: Flame },
-  { name: 'Pernas', icon: Footprints },
-  { name: 'Ombros', icon: Target },
-  { name: 'Braços', icon: BicepsFlexed },
-  { name: 'Abdômen', icon: Grid3x3 },
-] as const;
-
-const EQUIPMENTS = [
-  'Barra',
-  'Halteres',
-  'Cabo',
-  'Máquina',
-  'Peso corporal',
-] as const;
+/**
+ * Retorna o ícone representativo correspondente a cada equipamento
+ */
+const getEquipmentIcon = (equipmentName: string) => {
+  const norm = normalizeEquipmentName(equipmentName);
+  switch (norm) {
+    case 'Barra':
+      return Dumbbell;
+    case 'Halteres':
+      return Dumbbell;
+    case 'Máquina':
+      return Boxes;
+    case 'Cabo / Polia':
+      return Cable;
+    case 'Peso corporal':
+      return User;
+    case 'Smith':
+      return Sliders;
+    case 'Kettlebell':
+      return CircleDot;
+    case 'Barra de segurança':
+      return ShieldCheck;
+    case 'Cardio':
+      return HeartPulse;
+    case 'Outro':
+    default:
+      return Ellipsis;
+  }
+};
 
 export const NewExerciseScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RouteProp<RootStackParamList, 'NewExercise'>>();
-  const initialName = route.params?.initialName ?? '';
+  const insets = useSafeAreaInsets();
+
+  const exerciseId = route.params?.exerciseId;
+  const initialNameParam = route.params?.initialName ?? '';
   const fromScreen = route.params?.fromScreen;
+  const isEditMode = Boolean(exerciseId);
 
-  const { unit, defaultIncrement: storeIncrement, defaultRestS: storeRest } = useSettingsStore();
+  const { defaultIncrement: storeIncrement, defaultRestS: storeRest } = useSettingsStore();
 
-  const [name, setName] = useState(initialName);
-  const [selectedMuscle, setSelectedMuscle] = useState<string>('Peito');
-  const [selectedEquipment, setSelectedEquipment] = useState<string>('Barra');
-  const [selectedKind, setSelectedKind] = useState<'composto' | 'isolamento'>('composto');
-  const [selectedIncrement, setSelectedIncrement] = useState<number>(storeIncrement);
-  const [selectedRest, setSelectedRest] = useState<number>(storeRest);
+  // Dados originais para comparação e edição
+  const [initialExercise, setInitialExercise] = useState<ExerciseItemData | null>(null);
+
+  // Estados do formulário
+  const [name, setName] = useState(initialNameParam);
+  const [targetType, setTargetType] = useState<DefaultTargetType>('reps');
+  const [equipment, setEquipment] = useState<Equipment>('Barra');
+  const [primaryMuscle, setPrimaryMuscle] = useState<Muscle>('Peito');
+  const [secondaryMuscles, setSecondaryMuscles] = useState<string[]>([]);
   const [notes, setNotes] = useState<string>('');
+  const [isCustom, setIsCustom] = useState(true);
 
-  const [existingExercises, setExistingExercises] = useState<ExerciseItemData[]>([]);
-  const [showDiscardModal, setShowDiscardModal] = useState(false);
+  // Estados visuais e validação
+  const [nameError, setNameError] = useState<string | undefined>(undefined);
+  const [isNotesFocused, setIsNotesFocused] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Carrega exercícios existentes para validação de duplicidade
+  // Controle de visibilidade dos modais sob demanda
+  const [equipmentPickerVisible, setEquipmentPickerVisible] = useState(false);
+  const [musclePickerVisible, setMusclePickerVisible] = useState(false);
+  const [secondaryPickerVisible, setSecondaryPickerVisible] = useState(false);
+  const [showDiscardModal, setShowDiscardModal] = useState(false);
+
+  const [existingExercises, setExistingExercises] = useState<ExerciseItemData[]>([]);
+
+  // Carrega lista para checagem de duplicidade e dados do exercício se for modo edição
   useEffect(() => {
     try {
       const data = getExercisesWithPR();
       setExistingExercises(data);
     } catch (e) {
-      console.warn('Erro ao carregar exercícios para validação:', e);
+      console.warn('Erro ao carregar exercícios:', e);
     }
-  }, []);
 
-  // Opções de incremento baseadas na unidade do app
-  const incrementOptions = useMemo(() => {
-    return unit === 'kg' ? [1, 2, 2.5, 5] : [2.5, 5, 10];
-  }, [unit]);
+    if (exerciseId) {
+      const ex = getExerciseById(exerciseId);
+      if (ex) {
+        setInitialExercise(ex);
+        setName(ex.name);
+        setTargetType((ex.defaultTargetType as DefaultTargetType) || 'reps');
+        setEquipment(normalizeEquipmentName(ex.equipment));
+        setPrimaryMuscle(normalizeMuscleName(ex.muscleGroup));
+        setSecondaryMuscles(parseSecondaryMuscles(ex.secondaryMuscles));
+        setNotes(ex.notes || '');
+        setIsCustom(Boolean(ex.isCustom));
+      }
+    }
+  }, [exerciseId]);
 
-  // Opções de descanso padrão
-  const restOptions = [60, 90, 120];
+  // Ícone do equipamento selecionado
+  const EquipmentIconComponent = useMemo(() => getEquipmentIcon(equipment), [equipment]);
 
-  // Verificação de nome duplicado no mesmo grupo
-  const isDuplicate = useMemo(() => {
-    return isExerciseNameDuplicate(name, selectedMuscle, existingExercises);
-  }, [name, selectedMuscle, existingExercises]);
-
-  // Validação para habilitar o botão de criação
-  const canSubmit = useMemo(() => {
-    return (
-      name.trim().length > 0 &&
-      Boolean(selectedMuscle) &&
-      !isDuplicate &&
-      !isSaving
-    );
-  }, [name, selectedMuscle, isDuplicate, isSaving]);
+  // Músculo representativo para o ícone dos secundários (primeiro ou 'Outro')
+  const secondaryIconMuscle = useMemo(() => {
+    return secondaryMuscles.length > 0 ? secondaryMuscles[0] : 'Outro';
+  }, [secondaryMuscles]);
 
   // Verifica se o usuário alterou dados do formulário
   const hasChanges = useMemo(() => {
-    const nameChanged = name.trim() !== initialName.trim();
+    if (isEditMode && initialExercise) {
+      const nameChanged = name.trim() !== initialExercise.name.trim();
+      const targetChanged = targetType !== (initialExercise.defaultTargetType || 'reps');
+      const eqChanged = normalizeEquipmentName(equipment) !== normalizeEquipmentName(initialExercise.equipment);
+      const primChanged = normalizeMuscleName(primaryMuscle) !== normalizeMuscleName(initialExercise.muscleGroup);
+      const initialSec = parseSecondaryMuscles(initialExercise.secondaryMuscles);
+      const secChanged =
+        JSON.stringify(secondaryMuscles.map((m) => normalizeMuscleName(m)).sort()) !==
+        JSON.stringify(initialSec.map((m) => normalizeMuscleName(m)).sort());
+      const notesChanged = notes.trim() !== (initialExercise.notes || '').trim();
+      return nameChanged || targetChanged || eqChanged || primChanged || secChanged || notesChanged;
+    }
+
+    const nameChanged = name.trim() !== initialNameParam.trim();
+    const targetChanged = targetType !== 'reps';
+    const eqChanged = equipment !== 'Barra';
+    const primChanged = primaryMuscle !== 'Peito';
+    const secChanged = secondaryMuscles.length > 0;
     const notesChanged = notes.trim().length > 0;
-    const muscleChanged = selectedMuscle !== 'Peito';
-    const equipChanged = selectedEquipment !== 'Barra';
-    const kindChanged = selectedKind !== 'composto';
-    const incChanged = selectedIncrement !== storeIncrement;
-    const restChanged = selectedRest !== storeRest;
-    return (
-      nameChanged ||
-      notesChanged ||
-      muscleChanged ||
-      equipChanged ||
-      kindChanged ||
-      incChanged ||
-      restChanged
-    );
+    return nameChanged || targetChanged || eqChanged || primChanged || secChanged || notesChanged;
   }, [
+    isEditMode,
+    initialExercise,
     name,
-    initialName,
+    initialNameParam,
+    targetType,
+    equipment,
+    primaryMuscle,
+    secondaryMuscles,
     notes,
-    selectedMuscle,
-    selectedEquipment,
-    selectedKind,
-    selectedIncrement,
-    storeIncrement,
-    selectedRest,
-    storeRest,
   ]);
 
   const handleBack = useCallback(() => {
@@ -154,7 +203,7 @@ export const NewExerciseScreen: React.FC = () => {
     }
   }, [hasChanges, navigation]);
 
-  // Captura botão voltar físico no Android
+  // Intercepta botão voltar físico no Android
   useEffect(() => {
     const backAction = () => {
       if (hasChanges) {
@@ -165,422 +214,455 @@ export const NewExerciseScreen: React.FC = () => {
       return false;
     };
 
-    const backHandler = BackHandler.addEventListener(
-      'hardwareBackPress',
-      backAction
-    );
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
     return () => backHandler.remove();
   }, [hasChanges]);
 
-  // Cria o exercício no SQLite
-  const handleCreateExercise = useCallback(() => {
-    if (!canSubmit) return;
+  // Salvar exercício (criação ou edição)
+  const handleSave = useCallback(() => {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setNameError('Informe o nome do exercício');
+      triggerHaptic('warning');
+      return;
+    }
+
+    // Verifica duplicidade dentro do mesmo grupo muscular
+    const isDuplicate = existingExercises.some((ex) => {
+      if (isEditMode && ex.id === exerciseId) return false;
+      return (
+        ex.name.trim().toLowerCase() === trimmedName.toLowerCase() &&
+        normalizeMuscleName(ex.muscleGroup) === normalizeMuscleName(primaryMuscle)
+      );
+    });
+
+    if (isDuplicate) {
+      setNameError('Já existe um exercício com esse nome');
+      triggerHaptic('warning');
+      return;
+    }
 
     setIsSaving(true);
     triggerHaptic('success');
 
     try {
-      const created = createCustomExercise({
-        name: name.trim(),
-        muscleGroup: selectedMuscle,
-        equipment: selectedEquipment,
-        kind: selectedKind,
-        defaultIncrement: selectedIncrement,
-        defaultRestS: selectedRest,
-        notes: notes.trim() || undefined,
-      });
-
-      // Retorna para a tela de origem
-      if (fromScreen === 'AddExercises') {
-        navigation.navigate({
-          name: 'MainTabs' as any,
-          params: { selectedExerciseId: created.id },
-          merge: true,
+      if (isEditMode && exerciseId) {
+        updateCustomExercise(exerciseId, {
+          name: trimmedName,
+          muscleGroup: primaryMuscle,
+          equipment,
+          kind: initialExercise?.kind || 'composto',
+          defaultIncrement: initialExercise?.defaultIncrement ?? storeIncrement,
+          defaultRestS: initialExercise?.defaultRestS ?? storeRest,
+          notes: notes.trim() || null,
+          secondaryMuscles,
+          defaultTargetType: targetType,
         });
-      } else {
+
         navigation.goBack();
+      } else {
+        const created = createCustomExercise({
+          name: trimmedName,
+          muscleGroup: primaryMuscle,
+          equipment,
+          kind: 'composto',
+          defaultIncrement: storeIncrement,
+          defaultRestS: storeRest,
+          notes: notes.trim() || undefined,
+          secondaryMuscles,
+          defaultTargetType: targetType,
+        });
+
+        if (fromScreen === 'AddExercises') {
+          navigation.navigate({
+            name: 'MainTabs' as any,
+            params: { selectedExerciseId: created.id },
+            merge: true,
+          });
+        } else {
+          navigation.goBack();
+        }
       }
     } catch (error) {
-      console.warn('Erro ao salvar exercício customizado:', error);
+      console.warn('Erro ao salvar exercício:', error);
       setIsSaving(false);
     }
   }, [
-    canSubmit,
     name,
-    selectedMuscle,
-    selectedEquipment,
-    selectedIncrement,
-    selectedRest,
+    existingExercises,
+    isEditMode,
+    exerciseId,
+    primaryMuscle,
+    equipment,
+    initialExercise,
+    storeIncrement,
+    storeRest,
     notes,
+    secondaryMuscles,
+    targetType,
     fromScreen,
     navigation,
   ]);
 
+  // Excluir exercício customizado (protegido por Alert nativo)
+  const handleConfirmDelete = useCallback(() => {
+    if (!exerciseId) return;
+
+    triggerHaptic('medium');
+    Alert.alert(
+      'Excluir exercício',
+      'Tem certeza que deseja excluir este exercício? Esta ação não pode ser desfeita.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: () => {
+            setIsSaving(true);
+            const success = deleteCustomExercise(exerciseId);
+            if (success) {
+              triggerHaptic('success');
+              if (fromScreen === 'Biblioteca') {
+                navigation.navigate('MainTabs', { screen: 'Biblioteca' } as any);
+              } else {
+                navigation.goBack();
+              }
+            } else {
+              setIsSaving(false);
+            }
+          },
+        },
+      ]
+    );
+  }, [exerciseId, fromScreen, navigation]);
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScreenHeader title="Novo exercício" onBack={handleBack} />
+      {/* Cabeçalho com botão voltar 48x48dp e título semântico */}
+      <ScreenHeader
+        title={isEditMode ? 'Editar exercício' : 'Novo exercício'}
+        onBack={handleBack}
+      />
 
       <KeyboardAvoidingView
         style={styles.flexOne}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: isEditMode && isCustom ? 140 : 100 },
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Contexto do Subtítulo */}
-          <View style={styles.subtitleHeader}>
-            <View style={styles.subtitleTextCol}>
-              <Text variant="headline" style={styles.screenMainTitle}>
-                Novo exercício
-              </Text>
-              <Text variant="bodySmall" color="secondary" style={styles.screenSubtitle}>
-                Cadastre um movimento personalizado para seus treinos
-              </Text>
-            </View>
-            <View style={styles.badgeCircle}>
-              <Dumbbell size={20} color={colors.primary} strokeWidth={1.75} />
-            </View>
-          </View>
-
-          {/* 1. Nome do Exercício */}
-          <View style={styles.section}>
+          {/* 1. Nome do exercício */}
+          <View style={styles.fieldBlock}>
             <TextField
               label="Nome do exercício *"
               placeholder="Ex.: Remada cavalinho"
               value={name}
-              onChangeText={setName}
+              onChangeText={(text) => {
+                setName(text);
+                if (nameError) setNameError(undefined);
+              }}
               maxLength={60}
               showCounter
-              error={isDuplicate ? 'Já existe um exercício com esse nome' : undefined}
+              error={nameError}
             />
           </View>
 
-          {/* 2. Grupo Muscular Principal */}
-          <View style={styles.section}>
-            <View style={styles.sectionLabelRow}>
-              <View>
-                <Text variant="labelSmall" style={styles.fieldLabel}>
-                  Grupo muscular principal <Text style={styles.asterisk}>*</Text>
-                </Text>
-                <Text variant="bodySmall" color="secondary">
-                  Selecione o músculo primário ativado
-                </Text>
-              </View>
-              {selectedMuscle ? (
-                <Text variant="labelSmall" style={styles.selectedCount}>
-                  1 selecionado
-                </Text>
-              ) : null}
-            </View>
-
-            {/* Grade 3x2 */}
-            <View style={styles.muscleGrid}>
-              {MUSCLE_GRID.map((item) => {
-                const isSelected = selectedMuscle === item.name;
-                const IconComponent = item.icon;
-
-                return (
-                  <Pressable
-                    key={item.name}
-                    onPress={() => {
-                      triggerHaptic('light');
-                      setSelectedMuscle(item.name);
-                    }}
-                    accessible={true}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: isSelected }}
-                    accessibilityLabel={`Grupo muscular ${item.name}`}
-                    style={[
-                      styles.muscleCard,
-                      isSelected
-                        ? styles.muscleCardSelected
-                        : styles.muscleCardUnselected,
-                    ]}
-                  >
-                    <IconComponent
-                      size={28}
-                      color={isSelected ? colors.onPrimary : colors.onSurfaceVariant}
-                      strokeWidth={1.75}
-                      style={styles.muscleIcon}
-                    />
-                    <Text
-                      variant="labelSmall"
-                      style={[
-                        styles.muscleCardText,
-                        isSelected
-                          ? styles.muscleCardTextSelected
-                          : styles.muscleCardTextUnselected,
-                      ]}
-                    >
-                      {item.name}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          {/* 3. Equipamento Utilizado */}
-          <View style={styles.section}>
-            <Text variant="labelSmall" style={styles.fieldLabel}>
-              Equipamento utilizado
+          {/* 2. Tipo de meta padrão (Repetições | Tempo com minHeight 48dp por opção) */}
+          <View style={styles.fieldBlock}>
+            <Text variant="labelSmall" style={styles.label}>
+              Tipo de meta padrão
             </Text>
-            <View style={styles.equipmentRow}>
-              {EQUIPMENTS.map((eq) => {
-                const isSelected = selectedEquipment === eq;
+            <View style={styles.segmentedContainer}>
+              <Pressable
+                onPress={() => {
+                  if (targetType !== 'reps') {
+                    triggerHaptic('selection');
+                    setTargetType('reps');
+                  }
+                }}
+                accessible={true}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: targetType === 'reps' }}
+                accessibilityLabel="Repetições"
+                style={[
+                  styles.segmentOption,
+                  targetType === 'reps' && styles.segmentOptionSelected,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.segmentText,
+                    targetType === 'reps' ? styles.segmentTextSelected : styles.segmentTextUnselected,
+                  ]}
+                >
+                  Repetições
+                </Text>
+              </Pressable>
 
-                return (
-                  <Pressable
-                    key={eq}
-                    onPress={() => {
-                      triggerHaptic('light');
-                      setSelectedEquipment(eq);
-                    }}
-                    accessible={true}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: isSelected }}
-                    accessibilityLabel={`Equipamento ${eq}`}
-                    style={[
-                      styles.eqChip,
-                      isSelected ? styles.eqChipSelected : styles.eqChipUnselected,
-                    ]}
-                  >
-                    {isSelected && (
-                      <Check
-                        size={16}
-                        color={colors.onPrimary}
-                        strokeWidth={2.2}
-                        style={styles.eqCheckIcon}
-                      />
-                    )}
-                    <Text
-                      variant="labelSmall"
-                      style={[
-                        styles.eqChipText,
-                        isSelected
-                          ? styles.eqChipTextSelected
-                          : styles.eqChipTextUnselected,
-                      ]}
-                    >
-                      {eq}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+              <Pressable
+                onPress={() => {
+                  if (targetType !== 'time') {
+                    triggerHaptic('selection');
+                    setTargetType('time');
+                  }
+                }}
+                accessible={true}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: targetType === 'time' }}
+                accessibilityLabel="Tempo"
+                style={[
+                  styles.segmentOption,
+                  targetType === 'time' && styles.segmentOptionSelected,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.segmentText,
+                    targetType === 'time' ? styles.segmentTextSelected : styles.segmentTextUnselected,
+                  ]}
+                >
+                  Tempo
+                </Text>
+              </Pressable>
             </View>
           </View>
 
-          {/* 3.1 Tipo de Movimento */}
-          <View style={styles.section}>
-            <Text variant="labelSmall" style={styles.fieldLabel}>
-              Tipo de movimento
+          {/* 3. Seção Classificação (3 linhas clicáveis limpas, minHeight: 60, fundo #23201D) */}
+          <View style={styles.fieldBlock}>
+            <Text variant="labelSmall" style={styles.label}>
+              Classificação
             </Text>
-            <View style={styles.equipmentRow}>
-              {(['composto', 'isolamento'] as const).map((k) => {
-                const isSelected = selectedKind === k;
-                const label = k === 'composto' ? 'Composto' : 'Isolamento';
+            <View style={styles.classificationContainer}>
+              {/* Linha 1: Equipamento */}
+              <Pressable
+                onPress={() => {
+                  triggerHaptic('light');
+                  setEquipmentPickerVisible(true);
+                }}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel={`Equipamento: ${equipment}. Toque para alterar`}
+                style={styles.classificationRow}
+              >
+                <View style={styles.rowIconContainer}>
+                  <EquipmentIconComponent size={20} color={colors.primary} strokeWidth={1.75} />
+                </View>
+                <View style={styles.rowContent}>
+                  <Text style={styles.rowLabel}>Equipamento</Text>
+                  <Text style={styles.rowValue} numberOfLines={1}>
+                    {equipment}
+                  </Text>
+                </View>
+                <ChevronRight size={20} color={colors.onSurfaceVariant} strokeWidth={1.75} />
+              </Pressable>
 
-                return (
-                  <Pressable
-                    key={k}
-                    onPress={() => {
-                      triggerHaptic('light');
-                      setSelectedKind(k);
-                    }}
-                    accessible={true}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: isSelected }}
-                    accessibilityLabel={`Tipo ${label}`}
-                    style={[
-                      styles.eqChip,
-                      isSelected ? styles.eqChipSelected : styles.eqChipUnselected,
-                    ]}
-                  >
-                    {isSelected && (
-                      <Check
-                        size={16}
-                        color={colors.onPrimary}
-                        strokeWidth={2.2}
-                        style={styles.eqCheckIcon}
-                      />
-                    )}
-                    <Text
-                      variant="labelSmall"
-                      style={[
-                        styles.eqChipText,
-                        isSelected
-                          ? styles.eqChipTextSelected
-                          : styles.eqChipTextUnselected,
-                      ]}
-                    >
-                      {label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+              <View style={styles.divider} />
+
+              {/* Linha 2: Músculo principal */}
+              <Pressable
+                onPress={() => {
+                  triggerHaptic('light');
+                  setMusclePickerVisible(true);
+                }}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel={`Músculo principal: ${primaryMuscle}. Toque para alterar`}
+                style={styles.classificationRow}
+              >
+                <View style={styles.rowIconContainer}>
+                  <MuscleIcon muscle={primaryMuscle} size={28} />
+                </View>
+                <View style={styles.rowContent}>
+                  <Text style={styles.rowLabel}>Músculo principal</Text>
+                  <Text style={styles.rowValue} numberOfLines={1}>
+                    {primaryMuscle}
+                  </Text>
+                </View>
+                <ChevronRight size={20} color={colors.onSurfaceVariant} strokeWidth={1.75} />
+              </Pressable>
+
+              <View style={styles.divider} />
+
+              {/* Linha 3: Músculos secundários (opcional) */}
+              <Pressable
+                onPress={() => {
+                  triggerHaptic('light');
+                  setSecondaryPickerVisible(true);
+                }}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  secondaryMuscles.length > 0
+                    ? `Músculos secundários: ${secondaryMuscles.join(', ')}. Toque para alterar`
+                    : 'Músculos secundários: nenhum selecionado. Toque para selecionar'
+                }
+                style={styles.classificationRow}
+              >
+                <View style={styles.rowIconContainer}>
+                  <MuscleIcon
+                    muscle={secondaryIconMuscle}
+                    muted={secondaryMuscles.length === 0}
+                    size={28}
+                  />
+                </View>
+                <View style={styles.rowContent}>
+                  <Text style={styles.rowLabel}>Músculos secundários (opcional)</Text>
+                  {secondaryMuscles.length > 0 ? (
+                    <View style={styles.chipsWrap}>
+                      {secondaryMuscles.map((muscle) => (
+                        <View key={muscle} style={styles.chipTag}>
+                          <Text style={styles.chipTagText}>{muscle}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text style={styles.emptySecondaryText}>Nenhum selecionado</Text>
+                  )}
+                </View>
+                <ChevronRight size={20} color={colors.onSurfaceVariant} strokeWidth={1.75} />
+              </Pressable>
             </View>
           </View>
 
-          {/* 4. Cartão: Parâmetros Padrão */}
-          <View style={styles.paramsCard}>
-            <View style={styles.paramsCardHeader}>
-              <View style={styles.tuneIconBox}>
-                <SlidersHorizontal
-                  size={16}
-                  color={colors.primary}
-                  strokeWidth={2}
-                />
-              </View>
-              <Text variant="headline" style={styles.paramsCardTitle}>
-                Parâmetros padrão
-              </Text>
-            </View>
-
-            {/* Incremento mínimo */}
-            <View style={styles.paramSubSection}>
-              <View style={styles.paramLabelRow}>
-                <Text variant="bodySmall" color="secondary">
-                  Incremento mínimo de peso
-                </Text>
-                <Text variant="labelSmall" tabular style={styles.paramHighlightValue}>
-                  {`+${formatarPeso(selectedIncrement, unit)}`}
-                </Text>
-              </View>
-              <View style={styles.paramChipsGrid}>
-                {incrementOptions.map((inc) => {
-                  const isSelected = selectedIncrement === inc;
-                  const label = `+${formatarPeso(inc, unit)}`;
-
-                  return (
-                    <Pressable
-                      key={inc}
-                      onPress={() => {
-                        triggerHaptic('light');
-                        setSelectedIncrement(inc);
-                      }}
-                      style={[
-                        styles.paramChip,
-                        isSelected
-                          ? styles.paramChipSelected
-                          : styles.paramChipUnselected,
-                      ]}
-                    >
-                      <Text
-                        variant="labelSmall"
-                        tabular
-                        style={[
-                          styles.paramChipText,
-                          isSelected
-                            ? styles.paramChipTextSelected
-                            : styles.paramChipTextUnselected,
-                        ]}
-                      >
-                        {label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Descanso padrão */}
-            <View style={styles.paramSubSection}>
-              <View style={styles.paramLabelRow}>
-                <Text variant="bodySmall" color="secondary">
-                  Descanso padrão entre séries
-                </Text>
-                <Text variant="labelSmall" tabular style={styles.paramHighlightValue}>
-                  {`${selectedRest} s`}
-                </Text>
-              </View>
-              <View style={styles.paramChipsGrid}>
-                {restOptions.map((sec) => {
-                  const isSelected = selectedRest === sec;
-                  const label = `${sec} s`;
-
-                  return (
-                    <Pressable
-                      key={sec}
-                      onPress={() => {
-                        triggerHaptic('light');
-                        setSelectedRest(sec);
-                      }}
-                      style={[
-                        styles.paramChip,
-                        isSelected
-                          ? styles.paramChipSelected
-                          : styles.paramChipUnselected,
-                      ]}
-                    >
-                      <Text
-                        variant="labelSmall"
-                        tabular
-                        style={[
-                          styles.paramChipText,
-                          isSelected
-                            ? styles.paramChipTextSelected
-                            : styles.paramChipTextUnselected,
-                        ]}
-                      >
-                        {label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-          </View>
-
-          {/* 5. Notas e Instruções (Textarea opcional) */}
-          <View style={styles.section}>
-            <View style={styles.notesLabelRow}>
-              <Text variant="labelSmall" style={styles.fieldLabel}>
-                Notas e instruções
+          {/* 4. Notas de execução (opcional) */}
+          <View style={styles.fieldBlock}>
+            <View style={styles.labelRow}>
+              <Text variant="labelSmall" style={styles.label}>
+                Notas de execução
               </Text>
               <Text variant="labelSmall" color="secondary">
                 Opcional
               </Text>
             </View>
-            <View style={styles.textareaWrapper}>
+            <View
+              style={[
+                styles.textareaContainer,
+                isNotesFocused && styles.textareaFocused,
+              ]}
+            >
               <TextInput
                 style={styles.textareaInput}
                 placeholder="Dicas posturais, ajuste do banco, pegada…"
-                placeholderTextColor={colors.textMuted}
+                placeholderTextColor={colors.textMuted} // #7D746B
                 value={notes}
                 onChangeText={setNotes}
+                onFocus={() => setIsNotesFocused(true)}
+                onBlur={() => setIsNotesFocused(false)}
                 multiline
                 numberOfLines={3}
                 maxLength={500}
                 textAlignVertical="top"
                 maxFontSizeMultiplier={1.3}
               />
-              <Text variant="labelSmall" color="muted" tabular style={styles.textareaCounter}>
+              <Text variant="labelSmall" color="muted" tabular style={styles.counterText}>
                 {`${notes.length}/500`}
               </Text>
             </View>
           </View>
         </ScrollView>
 
-        {/* 6. Rodapé Fixo (Floating CTA) */}
-        <View style={styles.fixedFooter}>
-          <Button
-            title="Criar exercício"
-            variant="primary"
-            icon={<Check size={20} color={colors.onPrimary} strokeWidth={2.2} />}
-            onPress={handleCreateExercise}
-            disabled={!canSubmit}
-            loading={isSaving}
-            style={styles.submitButton}
-          />
+        {/* Rodapé fixo seguro com insets.bottom */}
+        <View
+          style={[
+            styles.fixedFooter,
+            { paddingBottom: Math.max(spacing.md, insets.bottom + 12) },
+          ]}
+        >
+          {/* Botão destrutivo "Excluir" no modo edição para exercícios customizados */}
+          {isEditMode && isCustom && (
+            <Pressable
+              onPress={handleConfirmDelete}
+              disabled={isSaving}
+              style={({ pressed }) => [
+                styles.deleteBtn,
+                pressed && styles.deleteBtnPressed,
+                isSaving && styles.btnDisabled,
+              ]}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel="Excluir exercício"
+            >
+              <Trash2 size={18} color={colors.error} strokeWidth={1.75} />
+              <Text style={styles.deleteBtnText}>Excluir</Text>
+            </Pressable>
+          )}
+
+          {/* Botão primário coral */}
+          <Pressable
+            onPress={handleSave}
+            disabled={isSaving}
+            style={({ pressed }) => [
+              styles.saveBtn,
+              pressed && styles.saveBtnPressed,
+              isSaving && styles.btnDisabled,
+            ]}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel={isEditMode ? 'Salvar alterações' : 'Salvar exercício'}
+          >
+            {isSaving ? (
+              <ActivityIndicator size="small" color={colors.onPrimary} />
+            ) : (
+              <>
+                <Check size={20} color={colors.onPrimary} strokeWidth={2.2} />
+                <Text style={styles.saveBtnText}>
+                  {isEditMode ? 'Salvar alterações' : 'Salvar exercício'}
+                </Text>
+              </>
+            )}
+          </Pressable>
         </View>
       </KeyboardAvoidingView>
 
-      {/* Modal de Confirmação para Descarte */}
+      {/* Sheet: Seleção de Equipamento */}
+      <EquipmentPickerSheet
+        visible={equipmentPickerVisible}
+        mode="select"
+        selectedEquipment={equipment}
+        onSelect={(eq) => {
+          if (eq !== 'Todos') {
+            setEquipment(eq);
+          }
+        }}
+        onClose={() => setEquipmentPickerVisible(false)}
+      />
+
+      {/* Sheet: Seleção do Músculo Principal */}
+      <MusclePickerSheet
+        visible={musclePickerVisible}
+        mode="single"
+        selectedValue={primaryMuscle}
+        onApply={(muscle: Muscle) => {
+          setPrimaryMuscle(muscle);
+          // Ao trocar o principal, remove-o automaticamente dos secundários se estava presente
+          setSecondaryMuscles((prev) =>
+            prev.filter((m) => normalizeMuscleName(m) !== normalizeMuscleName(muscle))
+          );
+        }}
+        onClose={() => setMusclePickerVisible(false)}
+      />
+
+      {/* Sheet: Seleção de Músculos Secundários */}
+      <MusclePickerSheet
+        visible={secondaryPickerVisible}
+        mode="multi"
+        selectedValue={secondaryMuscles}
+        lockedMuscle={primaryMuscle}
+        onApply={(muscles: string[]) => {
+          setSecondaryMuscles(muscles);
+        }}
+        onClose={() => setSecondaryPickerVisible(false)}
+      />
+
+      {/* Modal de Descarte de Alterações */}
       <ConfirmModal
         visible={showDiscardModal}
-        title="Descartar exercício?"
+        title={isEditMode ? 'Descartar alterações?' : 'Descartar exercício?'}
         description="As alterações não salvas serão perdidas."
         confirmLabel="Descartar"
         cancelLabel="Continuar editando"
@@ -604,239 +686,205 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: spacing.margin,
+    paddingHorizontal: spacing.margin, // 20px
     paddingTop: spacing.xs,
-    paddingBottom: 110, // Garante que o CTA fixo não cubra o último campo
     gap: spacing.lg,
   },
-  subtitleHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingBottom: spacing.xs,
-  },
-  subtitleTextCol: {
-    flex: 1,
-    paddingRight: spacing.sm,
-  },
-  screenMainTitle: {
-    fontSize: 20,
-    lineHeight: 26,
-    color: colors.onSurface,
-  },
-  screenSubtitle: {
-    fontSize: 13,
-    lineHeight: 18,
-    marginTop: 2,
-  },
-  badgeCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: radii.pill,
-    backgroundColor: colors.primaryContainer, // #3A251F
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  section: {
+  fieldBlock: {
     gap: spacing.xs,
   },
-  sectionLabelRow: {
+  labelRow: {
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: spacing.xs,
   },
-  fieldLabel: {
+  label: {
     fontSize: 13,
     lineHeight: 18,
-    fontWeight: '600',
+    fontFamily: fontFamilies.dmSansMedium,
     color: colors.onSurface,
   },
-  asterisk: {
-    color: colors.primary,
-    fontWeight: '700',
-  },
-  selectedCount: {
-    color: colors.primary,
-    fontWeight: '600',
-    fontSize: 12,
-  },
-  muscleGrid: {
+  segmentedContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs + 2,
-  },
-  muscleCard: {
-    width: '31.3%',
-    height: 90,
-    borderRadius: radii.input, // 16px
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.xs,
-  },
-  muscleCardSelected: {
-    backgroundColor: colors.primary, // #FF7A59
-    borderWidth: 1,
-    borderColor: colors.primary,
-  },
-  muscleCardUnselected: {
     backgroundColor: colors.surfaceContainer, // #23201D
-    borderWidth: 1,
-    borderColor: colors.outlineVariant, // #3A3531
-  },
-  muscleIcon: {
-    marginBottom: 6,
-  },
-  muscleCardText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  muscleCardTextSelected: {
-    color: colors.onPrimary, // #1A1715
-  },
-  muscleCardTextUnselected: {
-    color: colors.onSurface, // #F5EFE8
-  },
-  equipmentRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs + 1,
-    marginTop: 4,
-  },
-  eqChip: {
-    height: 38,
-    paddingHorizontal: 14,
     borderRadius: radii.pill,
-    flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: colors.outlineVariant, // #3A3531
+    padding: 3,
+    gap: 4,
+  },
+  segmentOption: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
   },
-  eqChipSelected: {
+  segmentOptionSelected: {
     backgroundColor: colors.primary, // #FF7A59
   },
-  eqChipUnselected: {
-    backgroundColor: colors.surfaceContainer, // #23201D
-    borderWidth: 1,
-    borderColor: colors.outlineVariant, // #3A3531
+  segmentText: {
+    fontSize: 14,
+    fontFamily: fontFamilies.dmSansMedium,
   },
-  eqCheckIcon: {
-    marginRight: 6,
-  },
-  eqChipText: {
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  eqChipTextSelected: {
-    color: colors.onPrimary,
+  segmentTextSelected: {
+    color: colors.onPrimary, // #1A1715
     fontWeight: '600',
   },
-  eqChipTextUnselected: {
-    color: colors.onSurface,
-    fontWeight: '500',
+  segmentTextUnselected: {
+    color: colors.onSurfaceVariant, // #B7ADA3
   },
-  paramsCard: {
+  classificationContainer: {
     backgroundColor: colors.surfaceContainer, // #23201D
+    borderRadius: radii.input, // 16px
     borderWidth: 1,
     borderColor: colors.outlineVariant, // #3A3531
-    borderRadius: radii.input, // 16px
-    padding: spacing.md,
-    gap: spacing.md,
+    overflow: 'hidden',
   },
-  paramsCardHeader: {
+  classificationRow: {
+    minHeight: 60,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    gap: 12,
   },
-  tuneIconBox: {
-    width: 28,
-    height: 28,
+  rowIconContainer: {
+    width: 36,
+    height: 36,
     borderRadius: radii.sm,
-    backgroundColor: colors.surfaceContainerHigh,
+    backgroundColor: colors.surfaceContainerHighest, // #38332F
     alignItems: 'center',
     justifyContent: 'center',
   },
-  paramsCardTitle: {
+  rowContent: {
+    flex: 1,
+    justifyContent: 'center',
+    gap: 2,
+  },
+  rowLabel: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontFamily: fontFamilies.dmSansMedium,
+    color: colors.onSurfaceVariant, // #B7ADA3
+  },
+  rowValue: {
     fontSize: 15,
     lineHeight: 20,
-    color: colors.onSurface,
+    fontFamily: fontFamilies.dmSansMedium,
+    color: colors.onSurface, // #F5EFE8
   },
-  paramSubSection: {
-    gap: spacing.xs,
-  },
-  paramLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  paramHighlightValue: {
-    color: colors.primary,
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  paramChipsGrid: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-  },
-  paramChip: {
-    flex: 1,
-    paddingVertical: spacing.xs + 2,
-    borderRadius: radii.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  paramChipSelected: {
-    backgroundColor: colors.primary, // #FF7A59
-  },
-  paramChipUnselected: {
-    backgroundColor: colors.surfaceContainerHigh, // #2D2925
-  },
-  paramChipText: {
-    fontSize: 13,
+  emptySecondaryText: {
+    fontSize: 14,
     lineHeight: 18,
-    fontWeight: '600',
+    fontFamily: fontFamilies.dmSansRegular,
+    color: colors.textMuted, // #7D746B
   },
-  paramChipTextSelected: {
-    color: colors.onPrimary,
-  },
-  paramChipTextUnselected: {
-    color: colors.onSurface,
-  },
-  notesLabelRow: {
+  chipsWrap: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 2,
   },
-  textareaWrapper: {
+  chipTag: {
     backgroundColor: colors.surfaceContainerHighest, // #38332F
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radii.pill,
     borderWidth: 1,
     borderColor: colors.outlineVariant, // #3A3531
+  },
+  chipTagText: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontFamily: fontFamilies.dmSansMedium,
+    color: colors.onSurface,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.outlineVariant, // #3A3531
+    marginLeft: 56,
+  },
+  textareaContainer: {
+    backgroundColor: colors.surfaceContainerHighest, // #38332F
     borderRadius: radii.input, // 16px
-    padding: spacing.sm + 2,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant, // #3A3531
+    padding: 14,
     minHeight: 100,
-    justifyContent: 'space-between',
+  },
+  textareaFocused: {
+    borderColor: colors.primary, // #FF7A59
   },
   textareaInput: {
-    fontFamily: typography.bodyMedium.fontFamily,
     fontSize: 15,
     lineHeight: 22,
+    fontFamily: fontFamilies.dmSansRegular,
     color: colors.onSurface,
-    padding: 0,
     minHeight: 64,
+    padding: 0,
   },
-  textareaCounter: {
+  counterText: {
     alignSelf: 'flex-end',
-    fontSize: 12,
     marginTop: 4,
   },
   fixedFooter: {
-    backgroundColor: 'rgba(26, 23, 21, 0.95)',
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: colors.background, // #1A1715
     borderTopWidth: 1,
-    borderTopColor: colors.outlineVariant,
-    paddingHorizontal: spacing.margin,
-    paddingTop: spacing.xs + 2,
-    paddingBottom: Platform.OS === 'ios' ? spacing.md : spacing.sm,
+    borderTopColor: colors.outlineVariant, // #3A3531
+    paddingHorizontal: spacing.margin, // 20px
+    paddingTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
-  submitButton: {
-    width: '100%',
+  deleteBtn: {
+    minHeight: 52,
+    paddingHorizontal: 20,
+    borderRadius: radii.pill,
+    backgroundColor: 'rgba(255, 107, 107, 0.1)',
+    borderWidth: 1,
+    borderColor: colors.error, // #FF6B6B
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  deleteBtnPressed: {
+    backgroundColor: 'rgba(255, 107, 107, 0.2)',
+  },
+  deleteBtnText: {
+    fontSize: 15,
+    fontFamily: fontFamilies.dmSansMedium,
+    fontWeight: '600',
+    color: colors.error, // #FF6B6B
+  },
+  saveBtn: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: radii.pill,
+    backgroundColor: colors.primary, // #FF7A59
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+  },
+  saveBtnPressed: {
+    backgroundColor: colors.accentPressed,
+  },
+  btnDisabled: {
+    opacity: 0.5,
+  },
+  saveBtnText: {
+    fontSize: 16,
+    fontFamily: fontFamilies.outfitBold,
+    color: colors.onPrimary, // #1A1715
   },
 });
