@@ -13,6 +13,8 @@ export interface ExerciseItemData {
   archived: boolean;
   bestWeight?: number | null;
   bestReps?: number | null;
+  secondaryMuscles?: string[] | string;
+  defaultTargetType?: 'reps' | 'time' | string;
 }
 
 export const ORDERED_MUSCLE_GROUPS = [

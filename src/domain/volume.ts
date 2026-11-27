@@ -1,4 +1,5 @@
 import { SetData } from './types';
+import { isDumbbellEquipment } from './exerciseCatalog';
 
 /**
  * Calcula o volume total de uma lista de séries.
@@ -19,7 +20,7 @@ export function calcularVolume(
     return 0;
   }
 
-  const isDumbbell = equipment?.trim().toLowerCase() === 'halteres';
+  const isDumbbell = isDumbbellEquipment(equipment);
   const multiplier = isDumbbell ? 2 : 1;
 
   let totalVolume = 0;

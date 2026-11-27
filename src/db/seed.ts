@@ -1,9 +1,10 @@
 import { InsertExercise } from './schema';
 
 /**
- * Seed inicial com ~45 exercícios essenciais em português do Brasil,
+ * Seed inicial com exercícios essenciais em português do Brasil,
  * cobrindo Peito, Costas, Pernas, Ombros, Braços e Abdômen,
- * com todos os equipamentos (Barra, Halteres, Cabo, Máquina, Peso corporal).
+ * com todos os equipamentos (Barra, Halteres, Cabo, Máquina, Peso corporal),
+ * enriquecido com secondary_muscles realistas e default_target_type.
  */
 export const seedExercises: InsertExercise[] = [
   // --- PEITO ---
@@ -18,6 +19,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Exercício base para desenvolvimento do peitoral maior.',
+    secondaryMuscles: JSON.stringify(['Ombro anterior', 'Tríceps']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_peito_02',
@@ -30,6 +33,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Foco na porção clavicular (superior) do peitoral.',
+    secondaryMuscles: JSON.stringify(['Ombro anterior', 'Tríceps']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_peito_03',
@@ -42,6 +47,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Permite maior amplitude de movimento e equilíbrio entre os lados.',
+    secondaryMuscles: JSON.stringify(['Ombro anterior', 'Tríceps']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_peito_04',
@@ -54,6 +61,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Banco regulado entre 30° e 45°.',
+    secondaryMuscles: JSON.stringify(['Ombro anterior', 'Tríceps']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_peito_05',
@@ -66,6 +75,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Manter cotovelos levemente flexionados durante todo o trajeto.',
+    secondaryMuscles: JSON.stringify(['Ombro anterior']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_peito_06',
@@ -78,6 +89,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Tensão constante em todo o movimento.',
+    secondaryMuscles: JSON.stringify(['Ombro anterior']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_peito_07',
@@ -90,6 +103,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Movimento guiado seguro até a falha.',
+    secondaryMuscles: JSON.stringify(['Ombro anterior', 'Tríceps']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_peito_08',
@@ -102,6 +117,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Ótimo isolamento para o miolo do peito.',
+    secondaryMuscles: JSON.stringify(['Ombro anterior']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_peito_09',
@@ -114,6 +131,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Manter core firme e escápulas ativas.',
+    secondaryMuscles: JSON.stringify(['Ombro anterior', 'Tríceps', 'Abdômen']),
+    defaultTargetType: 'reps',
   },
 
   // --- COSTAS ---
@@ -128,6 +147,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Pegada além da largura dos ombros.',
+    secondaryMuscles: JSON.stringify(['Bíceps', 'Costas superiores', 'Antebraço']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_costas_02',
@@ -140,6 +161,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Puxar a barra em direção à parte superior do peito.',
+    secondaryMuscles: JSON.stringify(['Bíceps', 'Costas superiores']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_costas_03',
@@ -152,6 +175,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Coluna alinhada e tronco inclinado a ~45°.',
+    secondaryMuscles: JSON.stringify(['Dorsais', 'Bíceps', 'Lombar', 'Pescoço / Trapézio']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_costas_04',
@@ -164,6 +189,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Apoio em banco estável, puxar o cotovelo rente ao quadril.',
+    secondaryMuscles: JSON.stringify(['Costas superiores', 'Bíceps', 'Antebraço']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_costas_05',
@@ -176,6 +203,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Utilizar triângulo e manter as costas eretas.',
+    secondaryMuscles: JSON.stringify(['Dorsais', 'Bíceps', 'Lombar']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_costas_06',
@@ -188,6 +217,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Apoio peitoral para retirar sobrecarga da lombar.',
+    secondaryMuscles: JSON.stringify(['Dorsais', 'Bíceps']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_costas_07',
@@ -200,6 +231,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Excelente contração do grande dorsal.',
+    secondaryMuscles: JSON.stringify(['Peito', 'Tríceps']),
+    defaultTargetType: 'reps',
   },
 
   // --- PERNAS ---
@@ -214,6 +247,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Rei dos exercícios de membros inferiores.',
+    secondaryMuscles: JSON.stringify(['Glúteos', 'Lombar', 'Adutores']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_pernas_02',
@@ -226,6 +261,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Cadeia posterior completa: glúteos, isquiotibiais e eretores da espinha.',
+    secondaryMuscles: JSON.stringify(['Glúteos', 'Lombar', 'Costas superiores', 'Antebraço']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_pernas_03',
@@ -238,6 +275,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Apoiar bem a lombar no encosto e não travar os joelhos no topo.',
+    secondaryMuscles: JSON.stringify(['Glúteos', 'Adutores']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_pernas_04',
@@ -250,6 +289,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Trabalho unilateral de quadríceps e glúteos.',
+    secondaryMuscles: JSON.stringify(['Glúteos', 'Posterior de coxa']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_pernas_05',
@@ -262,6 +303,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Passadas firmes com ativação de estabilizadores.',
+    secondaryMuscles: JSON.stringify(['Glúteos', 'Posterior de coxa', 'Panturrilha']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_pernas_06',
@@ -274,6 +317,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Isolamento de quadríceps com pico de contração no topo.',
+    secondaryMuscles: JSON.stringify([]),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_pernas_07',
@@ -286,6 +331,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Isolamento dos isquiotibiais.',
+    secondaryMuscles: JSON.stringify(['Panturrilha']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_pernas_08',
@@ -298,6 +345,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Foco no glúteo médio e estabilidade pélvica.',
+    secondaryMuscles: JSON.stringify(['Glúteos']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_pernas_09',
@@ -310,6 +359,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Amplitude total com pausa na flexão plantar.',
+    secondaryMuscles: JSON.stringify([]),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_pernas_10',
@@ -322,6 +373,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Ênfase no músculo sóleo.',
+    secondaryMuscles: JSON.stringify([]),
+    defaultTargetType: 'reps',
   },
 
   // --- OMBROS ---
@@ -336,6 +389,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Desenvolvimento em pé exigindo força de ombros e estabilidade do core.',
+    secondaryMuscles: JSON.stringify(['Ombro anterior', 'Tríceps']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_ombros_02',
@@ -348,6 +403,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Excelente para deltoide anterior e lateral com liberdade articular.',
+    secondaryMuscles: JSON.stringify(['Ombro anterior', 'Tríceps']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_ombros_03',
@@ -360,6 +417,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Construção da largura do deltoide lateral.',
+    secondaryMuscles: JSON.stringify(['Pescoço / Trapézio']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_ombros_04',
@@ -372,6 +431,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Curva de resistência uniforme desde o início do movimento.',
+    secondaryMuscles: JSON.stringify(['Pescoço / Trapézio']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_ombros_05',
@@ -384,6 +445,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Foco no deltoide anterior.',
+    secondaryMuscles: JSON.stringify(['Peito']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_ombros_06',
@@ -396,6 +459,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Deltoide posterior e romboides.',
+    secondaryMuscles: JSON.stringify(['Costas superiores']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_ombros_07',
@@ -408,6 +473,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Elevação pura dos ombros em direção às orelhas para trapézio superior.',
+    secondaryMuscles: JSON.stringify(['Pescoço / Trapézio', 'Costas superiores']),
+    defaultTargetType: 'reps',
   },
 
   // --- BRAÇOS ---
@@ -422,6 +489,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Clássico para bíceps braquial.',
+    secondaryMuscles: JSON.stringify(['Antebraço']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_bracos_02',
@@ -434,6 +503,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Com supinação do punho na subida.',
+    secondaryMuscles: JSON.stringify(['Antebraço']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_bracos_03',
@@ -446,6 +517,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Pegada neutra ativando braquial e braquiorradial.',
+    secondaryMuscles: JSON.stringify(['Antebraço']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_bracos_04',
@@ -458,6 +531,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Braços apoiados impedindo qualquer roubo corporal.',
+    secondaryMuscles: JSON.stringify([]),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_bracos_05',
@@ -470,6 +545,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Trabalha cabeça longa e medial do tríceps.',
+    secondaryMuscles: JSON.stringify(['Antebraço']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_bracos_06',
@@ -482,6 +559,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Abrir a corda no final para contração máxima da cabeça lateral.',
+    secondaryMuscles: JSON.stringify([]),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_bracos_07',
@@ -494,6 +573,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Excelente alongamento sob carga da cabeça longa.',
+    secondaryMuscles: JSON.stringify([]),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_bracos_08',
@@ -506,6 +587,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Tronco vertical para ênfase no tríceps.',
+    secondaryMuscles: JSON.stringify(['Peito', 'Ombro anterior']),
+    defaultTargetType: 'reps',
   },
 
   // --- ABDÔMEN ---
@@ -520,6 +603,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Enrolar a coluna aproximando as costelas da pelve.',
+    secondaryMuscles: JSON.stringify([]),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_abdomen_02',
@@ -532,6 +617,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Ativação vigorosa do reto abdominal e flexores de quadril.',
+    secondaryMuscles: JSON.stringify(['Antebraço']),
+    defaultTargetType: 'reps',
   },
   {
     id: 'ex_abdomen_03',
@@ -544,6 +631,8 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Estabilização de toda a cintura escapular e abdominal.',
+    secondaryMuscles: JSON.stringify(['Lombar', 'Ombro anterior']),
+    defaultTargetType: 'time',
   },
   {
     id: 'ex_abdomen_04',
@@ -556,5 +645,7 @@ export const seedExercises: InsertExercise[] = [
     isCustom: false,
     archived: false,
     notes: 'Permite sobrecarga progressiva no treino de abdômen.',
+    secondaryMuscles: JSON.stringify([]),
+    defaultTargetType: 'reps',
   },
 ];

@@ -1,5 +1,11 @@
 import { getExpoDb } from './client';
 import { ExerciseItemData } from '../domain/search';
+import {
+  parseSecondaryMuscles,
+  serializeSecondaryMuscles,
+  sanitizeSecondaryMuscles,
+  DefaultTargetType,
+} from '../domain/exerciseCatalog';
 
 /**
  * Consulta todos os exercícios ativos no banco SQLite, associando
@@ -20,6 +26,8 @@ export function getExercisesWithPR(): ExerciseItemData[] {
         e.notes,
         e.is_custom AS isCustom,
         e.archived,
+        e.secondary_muscles AS secondaryMuscles,
+        e.default_target_type AS defaultTargetType,
         (
           SELECT s.weight 
           FROM sets s 
@@ -51,6 +59,8 @@ export function getExercisesWithPR(): ExerciseItemData[] {
       archived: Boolean(r.archived),
       bestWeight: r.bestWeight != null ? Number(r.bestWeight) : null,
       bestReps: r.bestReps != null ? Number(r.bestReps) : null,
+      secondaryMuscles: parseSecondaryMuscles(r.secondaryMuscles),
+      defaultTargetType: ((r.defaultTargetType as DefaultTargetType) || 'reps'),
     }));
   } catch (error) {
     console.warn('Erro ao carregar exercícios com PR:', error);
@@ -68,6 +78,8 @@ export interface ExerciseSelectionItem {
   defaultRestS: number;
   lastWeight: number | null;
   lastReps: number | null;
+  secondaryMuscles?: string[];
+  defaultTargetType?: DefaultTargetType;
 }
 
 /**
@@ -86,6 +98,8 @@ export function getExercisesForAddSelection(): ExerciseSelectionItem[] {
         e.kind,
         e.default_increment AS defaultIncrement,
         e.default_rest_s AS defaultRestS,
+        e.secondary_muscles AS secondaryMuscles,
+        e.default_target_type AS defaultTargetType,
         (
           SELECT s.weight 
           FROM sets s 
@@ -119,13 +133,14 @@ export function getExercisesForAddSelection(): ExerciseSelectionItem[] {
       defaultRestS: Number(r.defaultRestS) || 90,
       lastWeight: r.lastWeight != null ? Number(r.lastWeight) : null,
       lastReps: r.lastReps != null ? Number(r.lastReps) : null,
+      secondaryMuscles: parseSecondaryMuscles(r.secondaryMuscles),
+      defaultTargetType: ((r.defaultTargetType as DefaultTargetType) || 'reps'),
     }));
   } catch (error) {
     console.warn('Erro ao carregar exercícios para seleção:', error);
     return [];
   }
 }
-
 
 export interface CreateExerciseInput {
   name: string;
@@ -135,6 +150,8 @@ export interface CreateExerciseInput {
   defaultIncrement: number;
   defaultRestS: number;
   notes?: string;
+  secondaryMuscles?: string[];
+  defaultTargetType?: DefaultTargetType;
 }
 
 /**
@@ -145,11 +162,14 @@ export function createCustomExercise(input: CreateExerciseInput): ExerciseItemDa
   const id = `ex_custom_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const kind = input.kind || 'composto';
   const notes = input.notes?.trim() || null;
+  const cleanSecondary = sanitizeSecondaryMuscles(input.muscleGroup, input.secondaryMuscles || []);
+  const defaultTargetType: DefaultTargetType = input.defaultTargetType === 'time' ? 'time' : 'reps';
+  const serializedSecondary = serializeSecondaryMuscles(cleanSecondary);
 
   rawDb.runSync(
     `INSERT INTO exercises (
-      id, name, muscle_group, equipment, kind, default_increment, default_rest_s, notes, is_custom, archived
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 0)`,
+      id, name, muscle_group, equipment, kind, default_increment, default_rest_s, notes, is_custom, archived, secondary_muscles, default_target_type
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`,
     [
       id,
       input.name.trim(),
@@ -159,6 +179,8 @@ export function createCustomExercise(input: CreateExerciseInput): ExerciseItemDa
       input.defaultIncrement,
       input.defaultRestS,
       notes,
+      serializedSecondary,
+      defaultTargetType,
     ]
   );
 
@@ -175,7 +197,143 @@ export function createCustomExercise(input: CreateExerciseInput): ExerciseItemDa
     archived: false,
     bestWeight: null,
     bestReps: null,
+    secondaryMuscles: cleanSecondary,
+    defaultTargetType,
   };
+}
+
+export interface UpdateExerciseInput {
+  name?: string;
+  muscleGroup?: string;
+  equipment?: string;
+  kind?: 'composto' | 'isolamento';
+  defaultIncrement?: number;
+  defaultRestS?: number;
+  notes?: string | null;
+  secondaryMuscles?: string[];
+  defaultTargetType?: DefaultTargetType;
+}
+
+/**
+ * Atualiza um exercício existente no banco de dados SQLite.
+ */
+export function updateCustomExercise(
+  id: string,
+  input: UpdateExerciseInput
+): ExerciseItemData | null {
+  const existing = getExerciseById(id);
+  if (!existing) return null;
+
+  const rawDb = getExpoDb();
+  const name = input.name !== undefined ? input.name.trim() : existing.name;
+  const muscleGroup = input.muscleGroup !== undefined ? input.muscleGroup : existing.muscleGroup;
+  const equipment = input.equipment !== undefined ? input.equipment : existing.equipment;
+  const kind = input.kind !== undefined ? input.kind : existing.kind;
+  const defaultIncrement =
+    input.defaultIncrement !== undefined ? input.defaultIncrement : existing.defaultIncrement;
+  const defaultRestS =
+    input.defaultRestS !== undefined ? input.defaultRestS : existing.defaultRestS;
+  const notes = input.notes !== undefined ? input.notes?.trim() || null : existing.notes ?? null;
+  const rawSecondaries = parseSecondaryMuscles(
+    input.secondaryMuscles !== undefined ? input.secondaryMuscles : existing.secondaryMuscles
+  );
+  const cleanSecondary = sanitizeSecondaryMuscles(muscleGroup, rawSecondaries);
+  const defaultTargetType: DefaultTargetType =
+    input.defaultTargetType !== undefined
+      ? input.defaultTargetType === 'time'
+        ? 'time'
+        : 'reps'
+      : existing.defaultTargetType === 'time'
+      ? 'time'
+      : 'reps';
+
+  rawDb.runSync(
+    `UPDATE exercises
+     SET name = ?, muscle_group = ?, equipment = ?, kind = ?, default_increment = ?,
+         default_rest_s = ?, notes = ?, secondary_muscles = ?, default_target_type = ?
+     WHERE id = ?`,
+    [
+      name,
+      muscleGroup,
+      equipment,
+      kind,
+      defaultIncrement,
+      defaultRestS,
+      notes,
+      serializeSecondaryMuscles(cleanSecondary),
+      defaultTargetType,
+      id,
+    ]
+  );
+
+  return {
+    ...existing,
+    name,
+    muscleGroup,
+    equipment,
+    kind,
+    defaultIncrement,
+    defaultRestS,
+    notes,
+    secondaryMuscles: cleanSecondary,
+    defaultTargetType,
+  };
+}
+
+/**
+ * Exclui um exercício personalizado do banco de dados (se for customizado).
+ */
+export function deleteCustomExercise(id: string): boolean {
+  try {
+    const rawDb = getExpoDb();
+    const ex = getExerciseById(id);
+    if (!ex || !ex.isCustom) return false;
+
+    rawDb.runSync('DELETE FROM exercises WHERE id = ? AND is_custom = 1', [id]);
+    return true;
+  } catch (err) {
+    console.warn('Erro ao excluir exercício customizado:', err);
+    return false;
+  }
+}
+
+/**
+ * Lista todos os exercícios cadastrados no banco de dados.
+ */
+export function listExercises(options?: { includeArchived?: boolean }): ExerciseItemData[] {
+  try {
+    const rawDb = getExpoDb();
+    const whereClause = options?.includeArchived ? '' : 'WHERE archived = 0';
+    const rows = rawDb.getAllSync<ExerciseItemData>(
+      `SELECT 
+        id,
+        name,
+        muscle_group AS muscleGroup,
+        equipment,
+        kind,
+        default_increment AS defaultIncrement,
+        default_rest_s AS defaultRestS,
+        notes,
+        is_custom AS isCustom,
+        archived,
+        secondary_muscles AS secondaryMuscles,
+        default_target_type AS defaultTargetType
+      FROM exercises
+      ${whereClause}
+      ORDER BY name ASC`
+    );
+
+    return rows.map((r) => ({
+      ...r,
+      isCustom: Boolean(r.isCustom),
+      archived: Boolean(r.archived),
+      secondaryMuscles: parseSecondaryMuscles(r.secondaryMuscles),
+      defaultTargetType: ((r.defaultTargetType as DefaultTargetType) || 'reps'),
+    }));
+  } catch (err) {
+    console.warn('Erro ao listar exercícios:', err);
+    return [];
+  }
 }
 
 /**
@@ -195,7 +353,9 @@ export function getExerciseById(id: string): ExerciseItemData | null {
         default_rest_s AS defaultRestS,
         notes,
         is_custom AS isCustom,
-        archived
+        archived,
+        secondary_muscles AS secondaryMuscles,
+        default_target_type AS defaultTargetType
       FROM exercises
       WHERE id = ? LIMIT 1`,
       [id]
@@ -207,6 +367,8 @@ export function getExerciseById(id: string): ExerciseItemData | null {
       ...r,
       isCustom: Boolean(r.isCustom),
       archived: Boolean(r.archived),
+      secondaryMuscles: parseSecondaryMuscles(r.secondaryMuscles),
+      defaultTargetType: ((r.defaultTargetType as DefaultTargetType) || 'reps'),
     };
   } catch (error) {
     console.warn('Erro ao buscar exercício por ID:', error);
@@ -414,18 +576,23 @@ export function getActiveWorkouts(): WorkoutOption[] {
 }
 
 /**
- * Adiciona um exercício a um treino com metas padrão
+ * Adiciona um exercício a um treino com metas padrão.
+ * Se default_target_type === 'time', as séries nascem com reps_mode = 'time' (45s).
  */
 export function addExerciseToWorkout(workoutId: string, exerciseId: string): void {
   const rawDb = getExpoDb();
   const id = `we_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
-  // Obtém o descanso padrão do exercício
-  const exRow = rawDb.getAllSync<{ defaultRestS: number }>(
-    'SELECT default_rest_s AS defaultRestS FROM exercises WHERE id = ? LIMIT 1',
+  // Obtém o descanso padrão e default_target_type do exercício
+  const exRow = rawDb.getAllSync<{ defaultRestS: number; defaultTargetType: string }>(
+    'SELECT default_rest_s AS defaultRestS, default_target_type AS defaultTargetType FROM exercises WHERE id = ? LIMIT 1',
     [exerciseId]
   );
   const defaultRestS = exRow[0]?.defaultRestS ?? 90;
+  const isTime = exRow[0]?.defaultTargetType === 'time';
+  const repsMode = isTime ? 'time' : 'reps_range';
+  const repMin = isTime ? 45 : 8;
+  const repMax = isTime ? 45 : 12;
 
   // Próxima posição no treino
   const maxPosRow = rawDb.getAllSync<{ maxPos: number | null }>(
@@ -437,18 +604,62 @@ export function addExerciseToWorkout(workoutId: string, exerciseId: string): voi
   rawDb.runSync(
     `INSERT INTO workout_exercises (
       id, workout_id, exercise_id, position, target_sets, rep_min, rep_max, rest_s, note
-    ) VALUES (?, ?, ?, ?, 3, 8, 12, ?, NULL)`,
-    [id, workoutId, exerciseId, nextPos, defaultRestS]
+    ) VALUES (?, ?, ?, ?, 3, ?, ?, ?, NULL)`,
+    [id, workoutId, exerciseId, nextPos, repMin, repMax, defaultRestS]
   );
 
   for (let sIdx = 0; sIdx < 3; sIdx++) {
     rawDb.runSync(
       `INSERT INTO workout_exercise_sets (
         id, workout_exercise_id, position, type, reps_mode, min_reps, max_reps, effort_mode, rest_s
-      ) VALUES (?, ?, ?, 'normal', 'reps_range', 8, 12, 'none', NULL)`,
-      [`wes_${id}_${sIdx}`, id, sIdx]
+      ) VALUES (?, ?, ?, 'normal', ?, ?, ?, 'none', NULL)`,
+      [`wes_${id}_${sIdx}`, id, sIdx, repsMode, repMin, repMax]
     );
   }
+}
+
+/**
+ * Adiciona um exercício a uma sessão ativa com metas padrão.
+ * Se default_target_type === 'time', as séries nascem com reps_mode = 'time' (45s).
+ */
+export function addExerciseToSession(sessionId: string, exerciseId: string): string {
+  const rawDb = getExpoDb();
+  const seId = `se_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+
+  const exRow = rawDb.getAllSync<{ defaultRestS: number; defaultTargetType: string }>(
+    'SELECT default_rest_s AS defaultRestS, default_target_type AS defaultTargetType FROM exercises WHERE id = ? LIMIT 1',
+    [exerciseId]
+  );
+  const defaultRestS = exRow[0]?.defaultRestS ?? 90;
+  const isTime = exRow[0]?.defaultTargetType === 'time';
+  const repsMode = isTime ? 'time' : 'reps_range';
+  const repMin = isTime ? 45 : 8;
+  const repMax = isTime ? 45 : 12;
+  const initialReps = isTime ? 45 : 10;
+  const initialWeight = isTime ? 0 : 20.0;
+
+  const maxPosRow = rawDb.getAllSync<{ maxPos: number | null }>(
+    `SELECT MAX(position) as maxPos FROM session_exercises WHERE session_id = ?`,
+    [sessionId]
+  );
+  const nextPos = (maxPosRow[0]?.maxPos ?? -1) + 1;
+
+  rawDb.runSync(
+    `INSERT INTO session_exercises (id, session_id, exercise_id, position, target_sets, rep_min, rep_max, rest_s, is_session_only)
+     VALUES (?, ?, ?, ?, 3, ?, ?, ?, 1)`,
+    [seId, sessionId, exerciseId, nextPos, repMin, repMax, defaultRestS]
+  );
+
+  for (let s = 1; s <= 3; s++) {
+    const setId = `set_${Date.now()}_${s}_${Math.random().toString(36).substring(2, 6)}`;
+    rawDb.runSync(
+      `INSERT INTO sets (id, session_exercise_id, "index", weight, reps, is_warmup, is_pr_weight, is_pr_volume, type, reps_mode, min_reps, max_reps, effort_mode, is_session_only)
+       VALUES (?, ?, ?, ?, ?, 0, 0, 0, 'normal', ?, ?, ?, 'none', 1)`,
+      [setId, seId, s, initialWeight, initialReps, repsMode, repMin, repMax]
+    );
+  }
+
+  return seId;
 }
 
 /**

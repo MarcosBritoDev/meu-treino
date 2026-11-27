@@ -1538,32 +1538,40 @@ export function getWorkoutExerciseSets(workoutExerciseId: string): PlannedSet[] 
       targetSets: number;
       repMin: number;
       repMax: number;
+      defaultTargetType: string | null;
     }>(
-      `SELECT target_sets AS targetSets, rep_min AS repMin, rep_max AS repMax
-       FROM workout_exercises WHERE id = ? LIMIT 1`,
+      `SELECT we.target_sets AS targetSets, we.rep_min AS repMin, we.rep_max AS repMax,
+              e.default_target_type AS defaultTargetType
+       FROM workout_exercises we
+       LEFT JOIN exercises e ON e.id = we.exercise_id
+       WHERE we.id = ? LIMIT 1`,
       [workoutExerciseId]
     );
 
     if (weRows.length > 0) {
       const we = weRows[0];
       const count = we.targetSets > 0 ? we.targetSets : 3;
+      const isTime = we.defaultTargetType === 'time';
+      const repsMode: RepsMode = isTime ? 'time' : 'reps_range';
+      const minReps = isTime ? (we.repMin || 45) : we.repMin;
+      const maxReps = isTime ? (we.repMax || 45) : we.repMax;
       const generated: PlannedSet[] = [];
       for (let pos = 0; pos < count; pos++) {
         const setId = `wes_${workoutExerciseId}_${pos}`;
         rawDb.runSync(
           `INSERT INTO workout_exercise_sets (
              id, workout_exercise_id, position, type, reps_mode, min_reps, max_reps, effort_mode, rest_s, drop_percent
-           ) VALUES (?, ?, ?, 'normal', 'reps_range', ?, ?, 'none', NULL, NULL)`,
-          [setId, workoutExerciseId, pos, we.repMin, we.repMax]
+           ) VALUES (?, ?, ?, 'normal', ?, ?, ?, 'none', NULL, NULL)`,
+          [setId, workoutExerciseId, pos, repsMode, minReps, maxReps]
         );
         generated.push({
           id: setId,
           workoutExerciseId,
           position: pos,
           type: 'normal',
-          repsMode: 'reps_range',
-          minReps: we.repMin,
-          maxReps: we.repMax,
+          repsMode,
+          minReps,
+          maxReps,
           effortMode: 'none',
           effortValue: null,
           effortValueMax: null,

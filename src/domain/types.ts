@@ -1,6 +1,15 @@
-export type Equipment = 'Barra' | 'Halteres' | 'Cabo' | 'Máquina' | 'Peso corporal';
+export * from './exerciseCatalog';
 
-export type MuscleGroup = 'Peito' | 'Costas' | 'Pernas' | 'Ombros' | 'Braços' | 'Abdômen';
+import type { Muscle } from './exerciseCatalog';
+
+export type MuscleGroup =
+  | Muscle
+  | 'Peito'
+  | 'Costas'
+  | 'Pernas'
+  | 'Ombros'
+  | 'Braços'
+  | 'Abdômen';
 
 export type ExerciseKind = 'composto' | 'isolamento';
 

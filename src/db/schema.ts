@@ -36,6 +36,8 @@ export const exercises = sqliteTable('exercises', {
   notes: text('notes'),
   isCustom: integer('is_custom', { mode: 'boolean' }).notNull().default(false),
   archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
+  secondaryMuscles: text('secondary_muscles').notNull().default('[]'),
+  defaultTargetType: text('default_target_type').notNull().default('reps'),
 });
 
 /**

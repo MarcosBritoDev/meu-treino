@@ -93,8 +93,8 @@ export async function initializeDatabase(): Promise<void> {
     for (const ex of seedExercises) {
       rawDb.runSync(
         `INSERT INTO exercises (
-          id, name, muscle_group, equipment, kind, default_increment, default_rest_s, notes, is_custom, archived
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          id, name, muscle_group, equipment, kind, default_increment, default_rest_s, notes, is_custom, archived, secondary_muscles, default_target_type
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           ex.id,
           ex.name,
@@ -106,6 +106,8 @@ export async function initializeDatabase(): Promise<void> {
           ex.notes ?? null,
           ex.isCustom ? 1 : 0,
           ex.archived ? 1 : 0,
+          ex.secondaryMuscles ?? '[]',
+          ex.defaultTargetType ?? 'reps',
         ]
       );
     }

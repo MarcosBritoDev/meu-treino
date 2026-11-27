@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { seedExercises } from '../seed';
 import { migrations } from '../migrations';
-import { settings } from '../schema';
+import { settings, exercises } from '../schema';
+import { parseSecondaryMuscles } from '../../domain/exerciseCatalog';
 
 describe('Seed e Migrações — Volt Precision', () => {
   it('deve possuir ao menos 40 exercícios cadastrados no seed', () => {
@@ -39,6 +40,20 @@ describe('Seed e Migrações — Volt Precision', () => {
     }
   });
 
+  it('todos os exercícios do seed devem possuir secondary_muscles e default_target_type válidos', () => {
+    for (const ex of seedExercises) {
+      expect(['reps', 'time']).toContain(ex.defaultTargetType);
+      const secondaries = parseSecondaryMuscles(ex.secondaryMuscles);
+      expect(Array.isArray(secondaries)).toBe(true);
+      // Nenhum secundário deve ser igual ao músculo principal
+      expect(secondaries).not.toContain(ex.muscleGroup);
+    }
+
+    // Prancha isométrica deve ter target time
+    const plank = seedExercises.find((e) => e.id === 'ex_abdomen_03');
+    expect(plank?.defaultTargetType).toBe('time');
+  });
+
   it('deve conter a migração inicial com todas as 8 tabelas do schema e tabela de controle', () => {
     expect(migrations.length).toBeGreaterThanOrEqual(1);
     const m1 = migrations[0];
@@ -62,8 +77,21 @@ describe('Seed e Migrações — Volt Precision', () => {
     expect(m2?.sql.join(' ')).toContain('ALTER TABLE settings ADD COLUMN default_rest_s');
   });
 
-  it('o schema Drizzle de settings deve mapear default_rest_s', () => {
+  it('deve conter migração 7 versionada adicionando secondary_muscles e default_target_type a exercises', () => {
+    expect(migrations.length).toBeGreaterThanOrEqual(7);
+    const m7 = migrations.find((m) => m.version === 7);
+    expect(m7).toBeDefined();
+    const sql = m7?.sql.join(' ');
+    expect(sql).toContain('ALTER TABLE exercises ADD COLUMN secondary_muscles');
+    expect(sql).toContain('ALTER TABLE exercises ADD COLUMN default_target_type');
+  });
+
+  it('o schema Drizzle de settings e exercises deve mapear as novas colunas', () => {
     expect(settings.defaultRestS).toBeDefined();
     expect(settings.defaultRestS.name).toBe('default_rest_s');
+    expect(exercises.secondaryMuscles).toBeDefined();
+    expect(exercises.secondaryMuscles.name).toBe('secondary_muscles');
+    expect(exercises.defaultTargetType).toBeDefined();
+    expect(exercises.defaultTargetType.name).toBe('default_target_type');
   });
 });

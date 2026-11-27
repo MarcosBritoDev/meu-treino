@@ -37,7 +37,9 @@ export const migrations: Migration[] = [
         default_rest_s INTEGER NOT NULL DEFAULT 90,
         notes TEXT,
         is_custom INTEGER NOT NULL DEFAULT 0,
-        archived INTEGER NOT NULL DEFAULT 0
+        archived INTEGER NOT NULL DEFAULT 0,
+        secondary_muscles TEXT NOT NULL DEFAULT '[]',
+        default_target_type TEXT NOT NULL DEFAULT 'reps'
       );`,
 
       // 3. groups
@@ -202,6 +204,15 @@ export const migrations: Migration[] = [
       `ALTER TABLE sets ADD COLUMN drop_percent REAL NULL;`,
       `UPDATE workout_exercise_sets SET drop_percent = 20 WHERE type = 'drop' AND drop_percent IS NULL;`,
       `UPDATE sets SET drop_percent = 20 WHERE type = 'drop' AND drop_percent IS NULL;`,
+    ],
+  },
+  {
+    version: 7,
+    name: '0005_expanded_exercise_catalog',
+    sql: [
+      `ALTER TABLE exercises ADD COLUMN secondary_muscles TEXT NOT NULL DEFAULT '[]';`,
+      `ALTER TABLE exercises ADD COLUMN default_target_type TEXT NOT NULL DEFAULT 'reps';`,
+      `UPDATE exercises SET default_target_type = 'time' WHERE id IN ('ex_abdomen_03', 'ex_cardio_01');`,
     ],
   },
 ];
