@@ -37,9 +37,7 @@ export const migrations: Migration[] = [
         default_rest_s INTEGER NOT NULL DEFAULT 90,
         notes TEXT,
         is_custom INTEGER NOT NULL DEFAULT 0,
-        archived INTEGER NOT NULL DEFAULT 0,
-        secondary_muscles TEXT NOT NULL DEFAULT '[]',
-        default_target_type TEXT NOT NULL DEFAULT 'reps'
+        archived INTEGER NOT NULL DEFAULT 0
       );`,
 
       // 3. groups

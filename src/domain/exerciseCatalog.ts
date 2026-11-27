@@ -250,7 +250,15 @@ export function parseSecondaryMuscles(raw: unknown): string[] {
           (item): item is string => typeof item === 'string' && item.trim().length > 0
         );
       }
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        return [];
+      }
     } catch {
+      // Se era para ser JSON (começa com '{' ou '['), é JSON corrompido: retorna []
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        return [];
+      }
+
       // Se não for JSON, tenta vírgulas
       if (trimmed.includes(',')) {
         return trimmed
