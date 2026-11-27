@@ -386,7 +386,7 @@ export function SetTable(p: SetTableProps) {
         importantForAccessibility="no-hide-descendants"
       >
         <Text style={[s.headText, s.activeColSerie]}>Série</Text>
-        <Text style={[s.headText, s.activeColMeta]} numberOfLines={1}>
+        <Text style={[s.headText, s.activeColMeta, { textAlign: 'left' }]} numberOfLines={1}>
           Meta e anterior
         </Text>
         <Text style={[s.headText, s.activeColWeight]}>{p.unit}</Text>
@@ -505,7 +505,7 @@ const SetRow = memo(function SetRow({
               setType === 'warmup' && s.badgeTextWarmup,
               setType === 'failure' && s.badgeTextFailure,
               setType === 'drop' && s.badgeTextDrop,
-              (setType === 'normal' || (!setType && !set.isWarmup)) && s.badgeNormal,
+              (setType === 'normal' || (!setType && !set.isWarmup)) && s.badgeTextNormal,
             ]}
           >
             {label}
@@ -678,6 +678,7 @@ const s = StyleSheet.create({
     fontSize: 12,
     fontFamily: F.numberBold,
     fontWeight: '700',
+    color: '#F5EFE8',
   },
   badgeWarmup: {
     backgroundColor: 'rgba(255, 122, 89, 0.15)',
@@ -799,10 +800,10 @@ const s = StyleSheet.create({
   activeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 4,
+    paddingVertical: 3,
     paddingHorizontal: 4,
     borderRadius: 10,
-    minHeight: 50,
+    minHeight: 52,
   },
   activeRowDone: {
     backgroundColor: 'rgba(255, 122, 89, 0.05)',
@@ -814,7 +815,7 @@ const s = StyleSheet.create({
     borderRadius: 10,
   },
   activeColSerie: {
-    width: 32,
+    width: 28,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -826,14 +827,14 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   activeColWeight: {
-    width: 60,
-    paddingHorizontal: 2,
+    width: 56,
+    paddingHorizontal: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   activeColReps: {
-    width: 52,
-    paddingHorizontal: 2,
+    width: 48,
+    paddingHorizontal: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -875,7 +876,7 @@ const s = StyleSheet.create({
   },
   activeBoxInput: {
     width: '100%',
-    height: 42,
+    height: 46,
     backgroundColor: '#2D2925',
     borderWidth: 1,
     borderColor: 'transparent',
@@ -887,7 +888,7 @@ const s = StyleSheet.create({
     color: '#F5EFE8',
     fontVariant: ['tabular-nums'],
     paddingVertical: 0,
-    paddingHorizontal: 2,
+    paddingHorizontal: 1,
   },
   activeBoxInputFocused: {
     borderColor: '#FF7A59',
@@ -903,7 +904,7 @@ const s = StyleSheet.create({
   },
   checkPressable: {
     width: 44,
-    height: 44,
+    height: 46,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -924,6 +925,7 @@ const s = StyleSheet.create({
     fontFamily: F.bodyMedium,
     fontSize: 11,
     color: '#B7ADA3',
+    textAlign: 'center',
   },
   prDot: {
     position: 'absolute',

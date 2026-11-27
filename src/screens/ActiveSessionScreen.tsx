@@ -7,7 +7,7 @@ import {
   TextInput,
   Modal,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -118,6 +118,7 @@ interface ActiveExerciseItem {
 export const ActiveSessionScreen: React.FC = () => {
   // Mantém a tela acesa durante todo o treino em andamento
   useKeepAwake();
+  const insets = useSafeAreaInsets();
 
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RouteParams>();
@@ -1397,54 +1398,34 @@ export const ActiveSessionScreen: React.FC = () => {
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       {/* 1. BARRA SUPERIOR (ESTILO STITCH) */}
       <View style={styles.topBar}>
-        {/* Esquerda: Botões Rest e Calc */}
-        <View style={styles.topBarLeftButtons}>
-          <Pressable
-            onPress={() => {
-              triggerHaptic('light');
-              startRestTimer(defaultRestS || 90);
-            }}
-            style={styles.topToolButton}
-            accessibilityRole="button"
-            accessibilityLabel="Descanso"
-          >
-            <Timer size={19} color="#D1D1D6" strokeWidth={2} />
-            <Text style={styles.topToolLabel}>Descanso</Text>
-          </Pressable>
+        {/* Esquerda: Botão de Descanso manual com touch target >= 48dp */}
+        <Pressable
+          onPress={() => {
+            triggerHaptic('light');
+            startRestTimer(defaultRestS || 90);
+          }}
+          style={styles.topToolButton}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel="Iniciar descanso manual"
+        >
+          <Timer size={18} color="#B7ADA3" strokeWidth={2} />
+          <Text style={styles.topToolLabel}>Descanso</Text>
+        </Pressable>
 
-          <Pressable
-            onPress={() => {
-              triggerHaptic('light');
-              const ex =
-                exercises.find((e) => e.id === expandedExerciseId && expandedMap[e.id] !== false) ||
-                exercises.find((e) => expandedMap[e.id] !== false) ||
-                exercises[0];
-              const currentSet = ex?.sets.find((s) => s.completedAt === null) || ex?.sets[0];
-              setPlateExerciseName(ex?.name || 'Exercício com barra');
-              setPlateInitialWeight(currentSet ? currentSet.weight : 60);
-              setPlateSheetVisible(true);
-            }}
-            style={styles.topToolButton}
-            accessibilityRole="button"
-            accessibilityLabel="Calculadora de anilhas"
-          >
-            <Calculator size={19} color="#D1D1D6" strokeWidth={2} />
-            <Text style={styles.topToolLabel}>Anilhas</Text>
-          </Pressable>
-        </View>
-
-        {/* Direita: Pílula de Tempo + Botão Finalizar Coral */}
+        {/* Direita: Pílula de Tempo + Botão Finalizar Coral com separação segura (16dp) */}
         <View style={styles.topBarRightControls}>
           <Pressable
             onPress={handleTogglePause}
             style={styles.liveTimerPill}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             accessibilityRole="button"
             accessibilityLabel={isPaused ? 'Retomar treino' : 'Pausar treino'}
           >
             {isPaused ? (
-              <Play size={12} color="#FF7A59" fill="#FF7A59" />
+              <Play size={13} color="#FF7A59" fill="#FF7A59" />
             ) : (
-              <Pause size={12} color="#FFFFFF" strokeWidth={2.4} />
+              <Pause size={13} color="#F5EFE8" strokeWidth={2.4} />
             )}
             <Text style={styles.liveTimerText}>{formattedTimer}</Text>
           </Pressable>
@@ -1452,6 +1433,7 @@ export const ActiveSessionScreen: React.FC = () => {
           <Pressable
             onPress={() => setFinishModalVisible(true)}
             style={styles.finishCoralButton}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             accessibilityRole="button"
             accessibilityLabel="Finalizar treino"
           >
@@ -1463,7 +1445,11 @@ export const ActiveSessionScreen: React.FC = () => {
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: restActive ? 140 : 40 },
+          {
+            paddingBottom: restActive
+              ? 140 + insets.bottom
+              : 48 + insets.bottom,
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -1496,13 +1482,19 @@ export const ActiveSessionScreen: React.FC = () => {
               setSessionNoteModalVisible(true);
             }}
             style={styles.addNotesRow}
-            hitSlop={8}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             accessibilityRole="button"
             accessibilityLabel="Anotações gerais do treino"
           >
-            <Edit3 size={13.5} color="#8E8E93" strokeWidth={2} />
-            <Text style={styles.addNotesText} numberOfLines={2}>
-              {sessionNote ? sessionNote : 'Adicionar notas aqui…'}
+            <Edit3 size={14} color={sessionNote ? '#B7ADA3' : '#7D746B'} strokeWidth={2} />
+            <Text
+              style={[
+                styles.addNotesText,
+                !sessionNote && styles.addNotesPlaceholder,
+              ]}
+              numberOfLines={2}
+            >
+              {sessionNote ? sessionNote : 'Adicionar notas aqui...'}
             </Text>
           </Pressable>
         </View>
@@ -1662,6 +1654,7 @@ export const ActiveSessionScreen: React.FC = () => {
             setRestActive(false);
             setRestRemaining(0);
           }}
+          bottomOffset={Math.max(insets.bottom, 12) + 8}
         />
       )}
 
@@ -1946,41 +1939,49 @@ const styles = StyleSheet.create({
     gap: 18,
   },
   topToolButton: {
+    minHeight: 48,
+    minWidth: 48,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
+    gap: 6,
+    paddingHorizontal: 8,
   },
   topToolLabel: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: '#D1D1D6',
+    fontSize: 12,
+    fontFamily: fontFamilies.outfitSemiBold,
+    fontWeight: '600',
+    color: '#B7ADA3',
   },
   topBarRightControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 16,
   },
   liveTimerPill: {
+    height: 44,
+    minWidth: 90,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
     backgroundColor: '#2D2925',
     paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
+    borderRadius: 22,
   },
   liveTimerText: {
     fontSize: 13,
     fontFamily: fontFamilies.outfitSemiBold,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: '#F5EFE8',
     fontVariant: ['tabular-nums'],
   },
   finishCoralButton: {
+    height: 44,
+    minWidth: 84,
     backgroundColor: '#FF7A59',
     paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 20,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2028,13 +2029,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingVertical: 6,
+    paddingVertical: 8,
     marginTop: 2,
   },
   addNotesText: {
     fontSize: 13,
-    fontStyle: 'italic',
-    color: '#8E8E93',
+    color: '#B7ADA3',
+  },
+  addNotesPlaceholder: {
+    color: '#7D746B',
   },
   stitchDivider: {
     height: 1,
