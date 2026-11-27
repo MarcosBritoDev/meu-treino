@@ -12,6 +12,7 @@ import { triggerHaptic } from './haptics';
 
 export interface ScreenHeaderProps {
   title: string;
+  subtitle?: React.ReactNode;
   onBack?: () => void;
   onOpenSettings?: () => void;
   rightAction?: React.ReactNode;
@@ -20,6 +21,7 @@ export interface ScreenHeaderProps {
 
 export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
   title,
+  subtitle,
   onBack,
   onOpenSettings,
   rightAction,
@@ -43,13 +45,27 @@ export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
           </Pressable>
         ) : null}
 
-        <Text
-          variant="displayMedium"
-          numberOfLines={1}
-          style={[styles.title, !onBack ? styles.titleNoBack : undefined]}
-        >
-          {title}
-        </Text>
+        <View style={styles.titleColumn}>
+          <Text
+            variant="displayMedium"
+            numberOfLines={1}
+            style={[styles.title, !onBack ? styles.titleNoBack : undefined]}
+          >
+            {title}
+          </Text>
+          {typeof subtitle === 'string' ? (
+            <Text
+              variant="bodySmall"
+              color="secondary"
+              numberOfLines={1}
+              style={[styles.subtitle, !onBack ? styles.titleNoBack : undefined]}
+            >
+              {subtitle}
+            </Text>
+          ) : subtitle ? (
+            subtitle
+          ) : null}
+        </View>
       </View>
 
       <View style={styles.right}>
@@ -94,12 +110,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  title: {
+  titleColumn: {
     flex: 1,
+    justifyContent: 'center',
+  },
+  title: {
     marginLeft: spacing.xs,
   },
   titleNoBack: {
     marginLeft: 0,
+  },
+  subtitle: {
+    marginLeft: spacing.xs,
+    marginTop: 2,
   },
   iconButton: {
     width: spacing.touchTargetMin, // 48px

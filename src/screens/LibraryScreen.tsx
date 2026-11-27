@@ -13,20 +13,9 @@ import {
   Search,
   X,
   Plus,
-  Settings,
   ChevronRight,
   ChevronDown,
-  Dumbbell,
-  Weight,
-  Cable,
-  Cpu,
-  User,
-  Boxes,
-  Sliders,
-  CircleDot,
-  ShieldCheck,
-  HeartPulse,
-  Ellipsis,
+  Trophy,
 } from 'lucide-react-native';
 import { RootStackParamList } from '../navigation/types';
 import { colors, radii, spacing, typography } from '../theme';
@@ -34,6 +23,8 @@ import {
   Text,
   triggerHaptic,
   Button,
+  ScreenHeader,
+  MuscleIcon,
   EmptySearchIllustration,
   MusclePickerSheet,
   EquipmentPickerSheet,
@@ -46,14 +37,12 @@ import {
   formatGroupHeader,
   formatExercisePR,
   getEmptyStateTitle,
-  getEmptyStateDescription,
   normalizeSearchText,
 } from '../domain/search';
 import {
   filterExercisesByMuscle,
   parseSecondaryMuscles,
   normalizeEquipmentName,
-  Equipment,
 } from '../domain/exerciseCatalog';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -191,6 +180,11 @@ export const LibraryScreen: React.FC = () => {
     }));
   }, [exercises, isMuscleActive, selectedMuscle, isEquipActive, selectedEquipment, debouncedQuery]);
 
+  // Contagem total de exercícios filtrados
+  const totalFilteredCount = useMemo(() => {
+    return groupedSections.reduce((acc, sec) => acc + sec.data.length, 0);
+  }, [groupedSections]);
+
   // Achata as seções para alimentar o FlashList com máxima performance virtualizada
   const flatListItems = useMemo<ListItem[]>(() => {
     const list: ListItem[] = [];
@@ -219,18 +213,12 @@ export const LibraryScreen: React.FC = () => {
     setDebouncedQuery('');
   }, []);
 
+  // Reseta apenas os filtros modais (músculo e equipamento), preservando a busca por texto
   const handleResetFilters = useCallback(() => {
     triggerHaptic('light');
-    setSearchText('');
-    setDebouncedQuery('');
     setSelectedMuscle(null);
     setSelectedEquipment(null);
   }, []);
-
-  const handleOpenSettings = useCallback(() => {
-    triggerHaptic('light');
-    navigation.navigate('Ajustes');
-  }, [navigation]);
 
   const handleOpenNewExercise = useCallback((initialName?: string) => {
     triggerHaptic('light');
@@ -247,41 +235,6 @@ export const LibraryScreen: React.FC = () => {
     [navigation]
   );
 
-  const renderEquipmentIcon = (equipment: string) => {
-    const norm = normalizeEquipmentName(equipment);
-    switch (norm) {
-      case 'Barra':
-        return <Weight size={20} color={colors.primary} strokeWidth={1.75} />;
-      case 'Halteres':
-        return <Dumbbell size={20} color={colors.primary} strokeWidth={1.75} />;
-      case 'Máquina':
-        return <Boxes size={20} color={colors.primary} strokeWidth={1.75} />;
-      case 'Cabo / Polia':
-        return <Cable size={20} color={colors.primary} strokeWidth={1.75} />;
-      case 'Peso corporal':
-        return <User size={20} color={colors.primary} strokeWidth={1.75} />;
-      case 'Smith':
-        return <Sliders size={20} color={colors.primary} strokeWidth={1.75} />;
-      case 'Kettlebell':
-        return <CircleDot size={20} color={colors.primary} strokeWidth={1.75} />;
-      case 'Barra de segurança':
-        return <ShieldCheck size={20} color={colors.primary} strokeWidth={1.75} />;
-      case 'Cardio':
-        return <HeartPulse size={20} color={colors.primary} strokeWidth={1.75} />;
-      case 'Outro':
-      default:
-        return <Ellipsis size={20} color={colors.primary} strokeWidth={1.75} />;
-    }
-  };
-
-  const getSubtitle = (ex: ExerciseItemData) => {
-    const secondary = parseSecondaryMuscles(ex.secondaryMuscles);
-    if (secondary.length > 0) {
-      return `${ex.muscleGroup} · ${secondary.join(', ')} · ${ex.equipment}`;
-    }
-    return `${ex.muscleGroup} · ${ex.equipment}`;
-  };
-
   const renderItem = ({ item }: { item: ListItem }) => {
     if (item.type === 'header') {
       return (
@@ -296,6 +249,7 @@ export const LibraryScreen: React.FC = () => {
     const ex = item.exercise;
     const isSecondary = item.isSecondary;
     const prText = formatExercisePR(ex.bestWeight, ex.bestReps, unit);
+    const secondaryList = parseSecondaryMuscles(ex.secondaryMuscles);
 
     return (
       <Pressable
@@ -310,50 +264,66 @@ export const LibraryScreen: React.FC = () => {
           pressed && styles.cardPressed,
         ]}
       >
-        <View style={styles.cardLeft}>
-          <View style={styles.iconBox}>
-            {renderEquipmentIcon(ex.equipment)}
-          </View>
-          <View style={styles.cardDetails}>
-            <View style={styles.nameRow}>
-              <Text
-                variant="bodyLarge"
-                numberOfLines={1}
-                style={styles.exerciseName}
-              >
-                {ex.name}
-              </Text>
-              {isSecondary && (
-                <View style={styles.secondaryBadge}>
-                  <Text style={styles.secondaryBadgeText}>
-                    secundário
+        {/* Identificador anatômico vetorial com container tonal discreto */}
+        <View style={styles.iconBox}>
+          <MuscleIcon muscle={ex.muscleGroup} size={28} />
+        </View>
+
+        <View style={styles.cardContent}>
+          {/* Linha 1: Nome do exercício + PR histórico em âmbar */}
+          <View style={styles.cardHeaderRow}>
+            <Text
+              variant="bodyLarge"
+              numberOfLines={1}
+              style={styles.exerciseName}
+            >
+              {ex.name}
+            </Text>
+
+            <View style={styles.cardHeaderRight}>
+              {prText ? (
+                <View
+                  style={styles.prBadge}
+                  accessible={true}
+                  accessibilityRole="text"
+                  accessibilityLabel={`Melhor marca: ${prText}`}
+                >
+                  <Trophy size={13} color={colors.pr} strokeWidth={2} />
+                  <Text variant="labelSmall" tabular style={styles.prValue}>
+                    {prText}
                   </Text>
                 </View>
-              )}
+              ) : null}
+              <ChevronRight size={18} color={colors.textMuted} strokeWidth={1.75} />
             </View>
+          </View>
+
+          {/* Linha 2: Equipamento em tag neutra garantida (sem truncamento) + Músculos */}
+          <View style={styles.cardMetaRow}>
+            <View style={styles.equipmentPill}>
+              <Text style={styles.equipmentPillText}>
+                {ex.equipment}
+              </Text>
+            </View>
+
             <Text
               variant="bodySmall"
               color="secondary"
               numberOfLines={1}
-              style={styles.exerciseSubtitle}
+              style={styles.muscleMetaText}
             >
-              {getSubtitle(ex)}
+              {ex.muscleGroup}
+              {secondaryList.length > 0 ? ` · ${secondaryList.join(', ')}` : ''}
             </Text>
-          </View>
-        </View>
 
-        <View style={styles.cardRight}>
-          {prText ? (
-            <View style={styles.prContainer}>
-              <Text variant="labelSmall" color="muted" style={styles.prLabel}>
-                Melhor
-              </Text>
-              <Text variant="bodyMedium" tabular style={styles.prValue}>
-                {prText}
-              </Text>
-            </View>
-          ) : null}
-          <ChevronRight size={18} color={colors.textMuted} strokeWidth={1.75} />
+            {isSecondary && (
+              <View style={styles.secondaryBadge}>
+                <Text style={styles.secondaryBadgeText}>
+                  secundário
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
       </Pressable>
     );
@@ -361,50 +331,37 @@ export const LibraryScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* 1. CABEÇALHO */}
-      <View style={styles.header}>
-        <View style={styles.headerTitleColumn}>
-          <Text variant="displayMedium" style={styles.headerTitle}>
-            Biblioteca
+      {/* 1. CABEÇALHO PADRONIZADO (ScreenHeader) COM CONTADOR DINÂMICO E BOTÃO NOVO */}
+      <ScreenHeader
+        title="Biblioteca"
+        subtitle={
+          <Text variant="bodySmall" color="secondary" tabular style={styles.headerSubtitle}>
+            {hasActiveFilters
+              ? `${totalFilteredCount} ${totalFilteredCount === 1 ? 'encontrado' : 'encontrados'}`
+              : `${exercises.length} ${exercises.length === 1 ? 'exercício' : 'exercícios'}`}
           </Text>
-          <Text variant="bodyMedium" color="secondary" style={styles.headerSubtitle}>
-            Catálogo de movimentos
-          </Text>
-        </View>
-
-        <View style={styles.headerActions}>
-          <Pressable
-            onPress={handleOpenSettings}
-            accessible={true}
-            accessibilityRole="button"
-            accessibilityLabel="Ajustes"
-            style={({ pressed }) => [
-              styles.gearButton,
-              pressed && styles.gearButtonPressed,
-            ]}
-          >
-            <Settings size={22} color={colors.onSurfaceVariant} strokeWidth={1.75} />
-          </Pressable>
-
+        }
+        rightAction={
           <Pressable
             onPress={() => handleOpenNewExercise()}
             accessible={true}
             accessibilityRole="button"
             accessibilityLabel="Cadastrar novo exercício"
+            hitSlop={{ top: 4, bottom: 4, left: 6, right: 6 }}
             style={({ pressed }) => [
               styles.newButton,
               pressed && styles.newButtonPressed,
             ]}
           >
-            <Plus size={16} color={colors.primary} strokeWidth={2.2} />
+            <Plus size={16} color={colors.onPrimary} strokeWidth={2.4} />
             <Text variant="bodyMedium" style={styles.newButtonText}>
               Novo
             </Text>
           </Pressable>
-        </View>
-      </View>
+        }
+      />
 
-      {/* 2. CAMPO DE BUSCA */}
+      {/* 2. CAMPO DE BUSCA COM TOUCH TARGET >= 48dp */}
       <View style={styles.searchContainer}>
         <View style={styles.searchBar}>
           <View style={styles.searchIconWrapper}>
@@ -431,6 +388,7 @@ export const LibraryScreen: React.FC = () => {
               accessible={true}
               accessibilityRole="button"
               accessibilityLabel="Limpar busca"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               style={styles.clearButton}
             >
               <X size={16} color={colors.onSurfaceVariant} strokeWidth={2} />
@@ -439,7 +397,7 @@ export const LibraryScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* 3. BOTÕES DE FILTRO LADO A LADO */}
+      {/* 3. BOTÕES DE FILTRO SIMÉTRICOS COM LIMPEZA INDIVIDUAL RÁPIDA (minHeight: 48) */}
       <View style={styles.filterBar}>
         <Pressable
           onPress={() => {
@@ -463,11 +421,29 @@ export const LibraryScreen: React.FC = () => {
           >
             {isMuscleActive ? `Músculo: ${selectedMuscle}` : 'Músculo: Todos'}
           </Text>
-          <ChevronDown
-            size={16}
-            color={isMuscleActive ? colors.primary : colors.onSurfaceVariant}
-            strokeWidth={2}
-          />
+
+          {isMuscleActive ? (
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation();
+                triggerHaptic('light');
+                setSelectedMuscle(null);
+              }}
+              hitSlop={{ top: 12, bottom: 12, left: 10, right: 10 }}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel="Remover filtro de músculo"
+              style={styles.filterChipClear}
+            >
+              <X size={15} color={colors.primary} strokeWidth={2.4} />
+            </Pressable>
+          ) : (
+            <ChevronDown
+              size={16}
+              color={isMuscleActive ? colors.primary : colors.onSurfaceVariant}
+              strokeWidth={2}
+            />
+          )}
         </Pressable>
 
         <Pressable
@@ -490,29 +466,48 @@ export const LibraryScreen: React.FC = () => {
               isEquipActive ? styles.filterBtnTextActive : styles.filterBtnTextInactive,
             ]}
           >
-            {isEquipActive ? `${selectedEquipment}` : 'Equipamento'}
+            {isEquipActive ? `Equipamento: ${selectedEquipment}` : 'Equipamento: Todos'}
           </Text>
-          <ChevronDown
-            size={16}
-            color={isEquipActive ? colors.primary : colors.onSurfaceVariant}
-            strokeWidth={2}
-          />
+
+          {isEquipActive ? (
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation();
+                triggerHaptic('light');
+                setSelectedEquipment(null);
+              }}
+              hitSlop={{ top: 12, bottom: 12, left: 10, right: 10 }}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel="Remover filtro de equipamento"
+              style={styles.filterChipClear}
+            >
+              <X size={15} color={colors.primary} strokeWidth={2.4} />
+            </Pressable>
+          ) : (
+            <ChevronDown
+              size={16}
+              color={isEquipActive ? colors.primary : colors.onSurfaceVariant}
+              strokeWidth={2}
+            />
+          )}
         </Pressable>
 
-        {hasActiveFilters && (
+        {(isMuscleActive || isEquipActive) && (
           <Pressable
             onPress={handleResetFilters}
             style={styles.clearFilterBtn}
             accessible={true}
             accessibilityRole="button"
-            accessibilityLabel="Limpar filtros e busca"
+            accessibilityLabel="Limpar filtros de músculo e equipamento"
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
           >
             <Text style={styles.clearFilterText}>Limpar</Text>
           </Pressable>
         )}
       </View>
 
-      {/* 4. CONTEÚDO PRINCIPAL (LISTA, ESQUELETO OU BUSCA VAZIA) */}
+      {/* 4. CONTEÚDO PRINCIPAL (LISTA FLASHLIST, ESQUELETO OU BUSCA VAZIA) */}
       <View style={styles.listContainer}>
         {isLoading ? (
           <View style={styles.skeletonContainer}>
@@ -532,11 +527,30 @@ export const LibraryScreen: React.FC = () => {
             const isLibraryEmpty = exercises.length === 0;
             const currentTerm = (debouncedQuery || searchText).trim();
             const emptyTitle = getEmptyStateTitle(isLibraryEmpty);
-            const emptyDescription = getEmptyStateDescription(
-              isLibraryEmpty,
-              currentTerm,
-              selectedMuscle || 'Todos'
-            );
+
+            // Descrição contextual precisa mencionando tanto músculo quanto equipamento quando ativos
+            let emptyDescription = 'Cadastre seu primeiro exercício para começar a montar seus treinos.';
+            if (!isLibraryEmpty) {
+              if (currentTerm.length > 0) {
+                if (isMuscleActive && isEquipActive) {
+                  emptyDescription = `Não encontramos "${currentTerm}" para ${selectedMuscle} com ${selectedEquipment}.`;
+                } else if (isMuscleActive) {
+                  emptyDescription = `Não encontramos "${currentTerm}" para o grupo ${selectedMuscle}.`;
+                } else if (isEquipActive) {
+                  emptyDescription = `Não encontramos "${currentTerm}" com equipamento ${selectedEquipment}.`;
+                } else {
+                  emptyDescription = `Não encontramos "${currentTerm}" na sua biblioteca.`;
+                }
+              } else if (isMuscleActive && isEquipActive) {
+                emptyDescription = `Não encontramos exercícios de ${selectedMuscle} com equipamento ${selectedEquipment}.`;
+              } else if (isMuscleActive) {
+                emptyDescription = `Não encontramos exercícios para o grupo ${selectedMuscle}.`;
+              } else if (isEquipActive) {
+                emptyDescription = `Não encontramos exercícios com equipamento ${selectedEquipment}.`;
+              } else {
+                emptyDescription = 'Não encontramos resultados para os filtros selecionados na sua biblioteca.';
+              }
+            }
 
             return (
               <View style={styles.emptyContainer}>
@@ -561,9 +575,12 @@ export const LibraryScreen: React.FC = () => {
                   />
                   {!isLibraryEmpty && (
                     <Button
-                      title="Limpar busca"
+                      title="Limpar busca e filtros"
                       variant="text"
-                      onPress={handleResetFilters}
+                      onPress={() => {
+                        handleClearSearch();
+                        handleResetFilters();
+                      }}
                       style={styles.emptySecondaryButton}
                     />
                   )}
@@ -577,6 +594,7 @@ export const LibraryScreen: React.FC = () => {
             renderItem={renderItem}
             getItemType={(item) => item.type}
             keyExtractor={(item) => item.id}
+            keyboardDismissMode="on-drag"
             contentContainerStyle={[
               styles.flashListContent,
               { paddingBottom: insets.bottom + spacing.tabBarHeight + spacing.xl },
@@ -615,41 +633,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background, // #1A1715
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.margin,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xs,
-  },
-  headerTitleColumn: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 28,
-    lineHeight: 34,
-    color: colors.onSurface,
-  },
   headerSubtitle: {
     fontSize: 14,
     lineHeight: 18,
     marginTop: 2,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  gearButton: {
-    width: spacing.touchTargetMin, // 48px
-    height: spacing.touchTargetMin,
-    borderRadius: radii.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  gearButtonPressed: {
-    opacity: 0.6,
+    fontFamily: typography.bodyMedium.fontFamily,
   },
   newButton: {
     flexDirection: 'row',
@@ -658,19 +646,17 @@ const styles = StyleSheet.create({
     minHeight: spacing.touchTargetMin, // 48px
     paddingHorizontal: 16,
     borderRadius: radii.pill,
-    backgroundColor: colors.primaryContainer, // #3A251F
-    borderWidth: 1,
-    borderColor: 'rgba(255, 122, 89, 0.4)',
+    backgroundColor: colors.primary, // #FF7A59 coral vivo
     justifyContent: 'center',
   },
   newButtonPressed: {
-    backgroundColor: 'rgba(255, 122, 89, 0.25)',
+    backgroundColor: colors.accentPressed, // #E8654A
   },
   newButtonText: {
     fontFamily: typography.headline.fontFamily,
     fontWeight: '600',
     fontSize: 14,
-    color: colors.primary,
+    color: colors.onPrimary, // #1A1715
   },
   searchContainer: {
     paddingHorizontal: spacing.margin,
@@ -750,6 +736,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.primary, // #FF7A59
   },
+  filterChipClear: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   clearFilterBtn: {
     minHeight: spacing.touchTargetMin, // 48px
     paddingHorizontal: 14,
@@ -785,28 +777,20 @@ const styles = StyleSheet.create({
     color: colors.onSurfaceVariant, // #B7ADA3
   },
   card: {
-    minHeight: 68,
+    minHeight: 72,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     backgroundColor: colors.surfaceContainer, // #23201D
     borderWidth: 1,
     borderColor: colors.outlineVariant, // #3A3531
-    borderRadius: radii.card,
+    borderRadius: radii.card, // 24px
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 12,
     marginBottom: spacing.xs + 2,
   },
   cardPressed: {
     transform: [{ scale: 0.99 }],
     backgroundColor: colors.surfaceContainerHigh,
-  },
-  cardLeft: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    minWidth: 0,
-    paddingRight: spacing.xs,
   },
   iconBox: {
     width: 44,
@@ -816,65 +800,95 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cardDetails: {
+  cardContent: {
     flex: 1,
     marginLeft: 12,
     justifyContent: 'center',
+    minWidth: 0,
   },
-  nameRow: {
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minWidth: 0,
+  },
+  exerciseName: {
+    flex: 1,
+    fontSize: 15,
+    lineHeight: 20,
+    fontFamily: typography.headline.fontFamily,
+    fontWeight: '600',
+    color: colors.onSurface,
+    marginRight: 8,
+  },
+  cardHeaderRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flexShrink: 0,
   },
-  exerciseName: {
-    fontSize: 15,
-    lineHeight: 20,
-    fontFamily: typography.bodyLarge.fontFamily,
+  prBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255, 196, 107, 0.12)', // Fundo sutil âmbar
+    borderWidth: 1,
+    borderColor: 'rgba(255, 196, 107, 0.35)',
+    borderRadius: radii.pill,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  prValue: {
+    fontSize: 12,
+    lineHeight: 15,
+    fontFamily: typography.headline.fontFamily,
+    fontWeight: '700',
+    color: colors.pr, // #FFC46B âmbar sagrado
+  },
+  cardMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    minWidth: 0,
+  },
+  equipmentPill: {
+    backgroundColor: colors.surfaceContainerHighest, // #38332F
+    borderRadius: radii.sm, // 8px
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    marginRight: 6,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant, // #3A3531
+    flexShrink: 0,
+  },
+  equipmentPillText: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontFamily: typography.labelSmall.fontFamily,
     fontWeight: '500',
-    color: colors.onSurface,
+    color: colors.onSurfaceVariant, // #B7ADA3
+  },
+  muscleMetaText: {
+    fontSize: 12,
+    lineHeight: 16,
     flexShrink: 1,
+    marginRight: 6,
   },
   secondaryBadge: {
     paddingHorizontal: 6,
-    paddingVertical: 1,
+    paddingVertical: 1.5,
     borderRadius: radii.pill,
     backgroundColor: colors.surfaceContainerHigh,
     borderWidth: 1,
     borderColor: colors.outlineVariant,
+    flexShrink: 0,
   },
   secondaryBadgeText: {
-    fontSize: 10,
+    fontSize: 11, // At least 11sp (evita 10sp)
+    lineHeight: 14,
     fontFamily: typography.labelSmall.fontFamily,
     fontWeight: '500',
     color: colors.onSurfaceVariant,
-  },
-  exerciseSubtitle: {
-    fontSize: 13,
-    lineHeight: 17,
-    marginTop: 2,
-  },
-  cardRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexShrink: 0,
-    paddingLeft: 4,
-  },
-  prContainer: {
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-  },
-  prLabel: {
-    fontSize: 11,
-    lineHeight: 12,
-    marginBottom: 2,
-  },
-  prValue: {
-    fontSize: 14,
-    lineHeight: 16,
-    fontFamily: typography.headline.fontFamily,
-    fontWeight: '600',
-    color: colors.onSurface,
   },
   emptyContainer: {
     flex: 1,
@@ -917,7 +931,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
   },
   skeletonCard: {
-    minHeight: 68,
+    minHeight: 72,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surfaceContainer,
@@ -925,7 +939,7 @@ const styles = StyleSheet.create({
     borderColor: colors.outlineVariant,
     borderRadius: radii.card,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 12,
   },
   skeletonIcon: {
     width: 44,

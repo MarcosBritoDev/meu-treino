@@ -71,6 +71,12 @@ export const typography: Record<string, TextStyle> = {
     lineHeight: 16,
   },
 
+  label: {
+    fontFamily: fontFamilies.dmSansMedium,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
   // Variante tabular para números menores (ex: reps em linha, cargas em tabelas)
   numberMedium: {
     fontFamily: fontFamilies.outfitSemiBold,
