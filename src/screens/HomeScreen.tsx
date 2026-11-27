@@ -5,7 +5,7 @@ import {
   StyleSheet,
   Pressable,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
@@ -41,6 +41,7 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export const HomeScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
+  const insets = useSafeAreaInsets();
 
   const [data, setData] = useState<HomeScreenData | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -84,6 +85,17 @@ export const HomeScreen: React.FC = () => {
     }
     return `${mins}m ${String(secs).padStart(2, '0')}s`;
   }, [elapsedSeconds]);
+
+  // Linha compacta de exercícios para prévia discreta no card herói (máx. 1 linha)
+  const exercisesSummaryLine = useMemo(() => {
+    const exercises = data?.recommendedWorkout?.exercises;
+    if (!exercises || exercises.length === 0) return null;
+    const names = exercises.map((e) => e.name);
+    if (names.length <= 2) {
+      return names.join(' e ');
+    }
+    return `${names.slice(0, 2).join(', ')} e +${names.length - 2}`;
+  }, [data?.recommendedWorkout?.exercises]);
 
   // Iniciar treino recomendado
   const handleStartRecommendedWorkout = () => {
@@ -169,7 +181,10 @@ export const HomeScreen: React.FC = () => {
       </View>
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(48, insets.bottom + 28) },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {/* DATA E SAUDAÇÃO REAL */}
@@ -191,11 +206,11 @@ export const HomeScreen: React.FC = () => {
             <Card variant="surface" style={styles.emptyCard}>
               <View style={styles.emptyGlow} pointerEvents="none" />
 
-              {/* ILUSTRAÇÃO COM SELO "PAUSA" */}
+              {/* ILUSTRAÇÃO COM SELO "PAUSA" (Tonal plano sem sombra / sem cor âmbar PR) */}
               <View style={styles.emptyIllustrationWrapper}>
                 <EmptyHomeIllustration size={130} />
                 <View style={styles.pauseBadge}>
-                  <Moon size={13} color="#F6BC64" strokeWidth={2.4} fill="#F6BC64" />
+                  <Moon size={13} color={colors.onSurfaceVariant} strokeWidth={2} fill={colors.onSurfaceVariant} />
                   <Text variant="labelSmall" style={styles.pauseBadgeText}>
                     Pausa
                   </Text>
@@ -268,7 +283,7 @@ export const HomeScreen: React.FC = () => {
                     triggerHaptic('light');
                     navigation.navigate('MainTabs', { screen: 'Treinos' });
                   }}
-                  hitSlop={8}
+                  style={styles.headerLinkButton}
                   accessibilityRole="button"
                   accessibilityLabel="Ver modelos de treino"
                 >
@@ -301,7 +316,7 @@ export const HomeScreen: React.FC = () => {
                   <View style={styles.popularCardDecoration} pointerEvents="none" />
                 </Pressable>
 
-                {/* MODELO 2: PERNAS E CORE */}
+                {/* MODELO 2: PERNAS E CORE (Ícone em Coral vivo, preservando âmbar apenas para PR) */}
                 <Pressable
                   onPress={() => handleSelectPopularTemplate('pernas_core')}
                   style={({ pressed }) => [
@@ -315,7 +330,7 @@ export const HomeScreen: React.FC = () => {
                     <Text variant="bodyLarge" style={styles.popularCardTitle}>
                       Pernas e core
                     </Text>
-                    <Zap size={20} color="#F6BC64" strokeWidth={2} />
+                    <Zap size={20} color={colors.primary} strokeWidth={2} />
                   </View>
                   <Text variant="labelSmall" style={styles.popularCardSubtitle}>
                     Quadríceps e panturrilha
@@ -345,9 +360,16 @@ export const HomeScreen: React.FC = () => {
                   <Text variant="headline" style={styles.heroTitle} numberOfLines={2}>
                     {data.activeSession.name}
                   </Text>
-                  <Text variant="bodyMedium" style={styles.heroSubtitle}>
-                    Tempo decorrido: {formattedElapsed}
-                  </Text>
+
+                  <View style={styles.activeTimerRow}>
+                    <Clock size={16} color={colors.primary} strokeWidth={2} />
+                    <Text variant="bodyMedium" style={styles.activeTimerLabel}>
+                      Tempo decorrido:
+                    </Text>
+                    <Text variant="headline" style={styles.activeTimerValue} tabular>
+                      {formattedElapsed}
+                    </Text>
+                  </View>
 
                   <Button
                     title="Continuar treino"
@@ -370,19 +392,40 @@ export const HomeScreen: React.FC = () => {
                 </View>
               </Card>
             ) : data?.recommendedWorkout ? (
-              /* CARTÃO: RECOMENDADO PARA HOJE */
+              /* CARTÃO: RECOMENDADO PARA HOJE (Compacto <= 340dp, Zero Cardception) */
               <Card variant="surface" style={styles.heroCard}>
                 <View style={styles.heroGlow} pointerEvents="none" />
                 <View style={styles.heroContent}>
-                  {/* Chip Recomendado com pulso coral */}
-                  <View style={styles.recommendedChip}>
-                    <View style={styles.pulsingDot} />
-                    <Text variant="labelSmall" style={styles.recommendedChipText}>
-                      Recomendado para hoje
+                  {/* Linha Superior: Chip Recomendado + Indicador de Ciclo Tabular */}
+                  <View style={styles.heroTopRow}>
+                    <View style={styles.recommendedChip}>
+                      <View style={styles.pulsingDot} />
+                      <Text variant="labelSmall" style={styles.recommendedChipText}>
+                        Recomendado para hoje
+                      </Text>
+                    </View>
+
+                    <Text variant="labelSmall" style={styles.cycleText} tabular>
+                      {data.recommendedWorkout.cycleIndex} de {data.recommendedWorkout.cycleTotal} no ciclo
                     </Text>
                   </View>
 
-                  {/* Título & Subtítulo */}
+                  {/* Barra Slim de Segmentos de Ciclo */}
+                  <View style={styles.cycleBarRow}>
+                    {Array.from({ length: data.recommendedWorkout.cycleTotal }).map((_, idx) => (
+                      <View
+                        key={idx}
+                        style={[
+                          styles.cycleBarSegment,
+                          idx < data.recommendedWorkout!.cycleIndex
+                            ? styles.cycleBarSegmentActive
+                            : styles.cycleBarSegmentInactive,
+                        ]}
+                      />
+                    ))}
+                  </View>
+
+                  {/* Título & Músculos Alvo (Sem badge redundante) */}
                   <Pressable
                     onPress={() => {
                       triggerHaptic('light');
@@ -394,43 +437,18 @@ export const HomeScreen: React.FC = () => {
                     accessibilityRole="button"
                     accessibilityLabel={`Abrir prévia de ${data.recommendedWorkout.name}`}
                   >
-                    <Text variant="headline" style={styles.heroTitle} numberOfLines={2}>
+                    <Text variant="headline" style={styles.heroTitle} numberOfLines={1}>
                       {data.recommendedWorkout.name}
                     </Text>
-                    <Text variant="bodyMedium" style={styles.heroSubtitle}>
+                    <Text variant="bodySmall" style={styles.heroSubtitle}>
                       {data.recommendedWorkout.targetMuscles} · Grupo {data.recommendedWorkout.groupName}
-                    </Text>
-                    <Text variant="labelSmall" style={styles.heroSummaryBadge}>
-                      {data.recommendedWorkout.summaryText || `${data.recommendedWorkout.totalSets} ${data.recommendedWorkout.totalSets === 1 ? 'série' : 'séries'} · ~${data.recommendedWorkout.estimatedDurationMin} min`}
                     </Text>
                   </Pressable>
 
-                  {/* Indicador de Ciclo e Segmentos de Progresso */}
-                  <View style={styles.cycleBlock}>
-                    <View style={styles.cycleLabelRow}>
-                      <Text variant="bodySmall" style={styles.cycleText}>
-                        {data.recommendedWorkout.cycleIndex} de {data.recommendedWorkout.cycleTotal} no ciclo
-                      </Text>
-                    </View>
-                    <View style={styles.cycleBarRow}>
-                      {Array.from({ length: data.recommendedWorkout.cycleTotal }).map((_, idx) => (
-                        <View
-                          key={idx}
-                          style={[
-                            styles.cycleBarSegment,
-                            idx < data.recommendedWorkout!.cycleIndex
-                              ? styles.cycleBarSegmentActive
-                              : styles.cycleBarSegmentInactive,
-                          ]}
-                        />
-                      ))}
-                    </View>
-                  </View>
-
-                  {/* Trio de Métricas em Outfit */}
-                  <View style={styles.metricsBox}>
+                  {/* Trio de Métricas em Outfit Tabular SEM CARDCEPTION (sem borda/fundo aninhado) */}
+                  <View style={styles.metricsRow}>
                     <View style={styles.metricColumn}>
-                      <Text variant="headline" style={styles.metricBigNumber}>
+                      <Text variant="headline" style={styles.metricBigNumber} tabular>
                         {data.recommendedWorkout.exerciseCount}
                       </Text>
                       <Text variant="labelSmall" style={styles.metricSmallLabel}>
@@ -441,7 +459,7 @@ export const HomeScreen: React.FC = () => {
                     <View style={styles.metricDivider} />
 
                     <View style={styles.metricColumn}>
-                      <Text variant="headline" style={styles.metricBigNumber}>
+                      <Text variant="headline" style={styles.metricBigNumber} tabular>
                         {data.recommendedWorkout.totalSets}
                       </Text>
                       <Text variant="labelSmall" style={styles.metricSmallLabel}>
@@ -452,20 +470,22 @@ export const HomeScreen: React.FC = () => {
                     <View style={styles.metricDivider} />
 
                     <View style={styles.metricColumn}>
-                      <Text variant="headline" style={styles.metricBigNumber}>
-                        {data.recommendedWorkout.estimatedDurationMin}{' '}
-                        <Text variant="bodySmall" style={styles.metricUnitText}>
+                      <View style={styles.metricUnitRow}>
+                        <Text variant="headline" style={styles.metricBigNumber} tabular>
+                          {data.recommendedWorkout.estimatedDurationMin}
+                        </Text>
+                        <Text variant="labelSmall" style={styles.metricUnitText}>
                           min
                         </Text>
-                      </Text>
+                      </View>
                       <Text variant="labelSmall" style={styles.metricSmallLabel}>
                         duração
                       </Text>
                     </View>
                   </View>
 
-                  {/* Lista resumida de exercícios: Nome — A + N séries */}
-                  {data.recommendedWorkout.exercises && data.recommendedWorkout.exercises.length > 0 && (
+                  {/* Prévia de Exercícios em No Máximo 1 Linha Discreta */}
+                  {exercisesSummaryLine && (
                     <Pressable
                       onPress={() => {
                         triggerHaptic('light');
@@ -473,24 +493,19 @@ export const HomeScreen: React.FC = () => {
                           workoutId: data.recommendedWorkout!.id,
                         });
                       }}
-                      style={styles.heroExerciseList}
+                      style={styles.heroExerciseLine}
                       accessibilityRole="button"
-                      accessibilityLabel={`Ver exercícios de ${data.recommendedWorkout.name}`}
+                      accessibilityLabel={`Exercícios: ${exercisesSummaryLine}. Toque para abrir prévia.`}
                     >
-                      {data.recommendedWorkout.exercises.slice(0, 3).map((ex, idx) => (
-                        <Text key={idx} variant="bodySmall" color="secondary" style={styles.heroExerciseItem} numberOfLines={1}>
-                          {ex.itemText}
-                        </Text>
-                      ))}
-                      {data.recommendedWorkout.exercises.length > 3 && (
-                        <Text variant="labelSmall" color="secondary" style={styles.heroExtraExercises}>
-                          {`+${data.recommendedWorkout.exercises.length - 3} ${data.recommendedWorkout.exercises.length - 3 === 1 ? 'exercício' : 'exercícios'}`}
-                        </Text>
-                      )}
+                      <Dumbbell size={14} color={colors.onSurfaceVariant} strokeWidth={1.75} />
+                      <Text variant="bodySmall" color="secondary" numberOfLines={1} style={styles.heroExerciseLineText}>
+                        {exercisesSummaryLine}
+                      </Text>
+                      <ChevronRight size={14} color={colors.onSurfaceVariant} strokeWidth={1.75} />
                     </Pressable>
                   )}
 
-                  {/* Botão Primário 56px Iniciar treino */}
+                  {/* Botão Primário 56px Iniciar treino (Garantidamente visível acima da dobra) */}
                   <Button
                     title="Iniciar treino"
                     variant="primary"
@@ -499,7 +514,7 @@ export const HomeScreen: React.FC = () => {
                     style={styles.heroPrimaryButton}
                   />
 
-                  {/* Link Secundário: Ver ou alterar exercícios */}
+                  {/* Link Secundário: Ver ou alterar exercícios com touch target >= 48dp */}
                   <Pressable
                     onPress={() => {
                       triggerHaptic('light');
@@ -519,14 +534,14 @@ export const HomeScreen: React.FC = () => {
               </Card>
             ) : null}
 
-            {/* SEÇÃO "SUA SEMANA" */}
+            {/* SEÇÃO "SUA SEMANA" (Sem aperto em 360px: círculos 34dp e respiro generoso) */}
             <View style={styles.sectionBlock}>
               <View style={styles.sectionHeaderRow}>
                 <Text variant="headline" style={styles.sectionTitle}>
                   Sua semana
                 </Text>
                 <View style={styles.weekBadge}>
-                  <Text variant="labelSmall" style={styles.weekBadgeText}>
+                  <Text variant="labelSmall" style={styles.weekBadgeText} tabular>
                     {data?.weekStatus
                       ? `${data.weekStatus.completedCount} de ${data.weekStatus.frequencyGoal} treinos`
                       : '0 de 5 treinos'}
@@ -551,10 +566,11 @@ export const HomeScreen: React.FC = () => {
                         ]}
                       >
                         {isCompleted ? (
-                          <Check size={20} color={colors.onPrimary} strokeWidth={3} />
+                          <Check size={18} color={colors.onPrimary} strokeWidth={3} />
                         ) : (
                           <Text
                             variant="labelSmall"
+                            tabular
                             style={[
                               styles.dayNumberText,
                               isToday && styles.dayNumberTextToday,
@@ -593,7 +609,7 @@ export const HomeScreen: React.FC = () => {
                         sessionId: data.lastCompletedSession!.id,
                       });
                     }}
-                    hitSlop={8}
+                    style={styles.headerLinkButton}
                     accessibilityRole="button"
                     accessibilityLabel="Ver detalhes do último treino"
                   >
@@ -637,19 +653,19 @@ export const HomeScreen: React.FC = () => {
                       <View style={styles.lastSessionMetricsRow}>
                         <View style={styles.lastSessionMetricItem}>
                           <Weight size={13} color={colors.onSurfaceVariant} strokeWidth={2} />
-                          <Text variant="labelSmall" style={styles.lastSessionMetricText}>
+                          <Text variant="labelSmall" style={styles.lastSessionMetricText} tabular>
                             {data.lastCompletedSession.totalVolumeText}
                           </Text>
                         </View>
                         <View style={styles.lastSessionMetricItem}>
                           <Clock size={13} color={colors.onSurfaceVariant} strokeWidth={2} />
-                          <Text variant="labelSmall" style={styles.lastSessionMetricText}>
+                          <Text variant="labelSmall" style={styles.lastSessionMetricText} tabular>
                             {data.lastCompletedSession.durationMin} min
                           </Text>
                         </View>
                         <View style={styles.lastSessionMetricItem}>
                           <Repeat size={13} color={colors.onSurfaceVariant} strokeWidth={2} />
-                          <Text variant="labelSmall" style={styles.lastSessionMetricText}>
+                          <Text variant="labelSmall" style={styles.lastSessionMetricText} tabular>
                             {data.lastCompletedSession.totalSets} séries
                           </Text>
                         </View>
@@ -709,20 +725,28 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   settingsButton: {
-    width: 36,
-    height: 36,
+    minWidth: 48,
+    minHeight: 48,
+    width: 48,
+    height: 48,
     borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerLinkButton: {
+    minHeight: 48,
+    minWidth: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingTop: 14,
-    paddingBottom: 40,
-    gap: 18,
+    paddingTop: 12,
+    gap: 16,
   },
   greetingContainer: {
-    gap: 4,
+    gap: 2,
   },
   dateText: {
     fontSize: 13,
@@ -730,7 +754,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   greetingTitle: {
-    fontSize: 28,
+    fontSize: 26,
     fontFamily: fontFamilies.outfitBold,
     fontWeight: '700',
     color: colors.onSurface,
@@ -738,10 +762,10 @@ const styles = StyleSheet.create({
   },
   heroCard: {
     backgroundColor: colors.surfaceContainer,
-    borderRadius: 24,
+    borderRadius: radii.card,
     borderWidth: 1,
-    borderColor: '#3A3531',
-    padding: 22,
+    borderColor: colors.outlineVariant,
+    padding: 18,
     overflow: 'hidden',
     position: 'relative',
   },
@@ -749,27 +773,31 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -60,
     right: -60,
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: 'rgba(255, 122, 89, 0.12)',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: 'rgba(255, 122, 89, 0.10)',
   },
   heroContent: {
-    gap: 16,
+    gap: 12,
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   recommendedChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    alignSelf: 'flex-start',
     backgroundColor: 'rgba(255, 122, 89, 0.14)',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: radii.pill,
   },
   recommendedChipText: {
     color: colors.primary,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
   },
   activeSessionChip: {
@@ -787,89 +815,73 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
-  pulsingDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: colors.primary,
+  activeTimerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
   },
-  heroTitlesBlock: {
-    gap: 4,
-  },
-  heroTitle: {
-    fontSize: 32,
-    fontFamily: fontFamilies.outfitBold,
-    fontWeight: '700',
-    color: colors.onSurface,
-    letterSpacing: -0.5,
-  },
-  heroSubtitle: {
+  activeTimerLabel: {
     fontSize: 14,
     color: colors.onSurfaceVariant,
   },
-  heroSummaryBadge: {
-    fontSize: 12,
-    fontWeight: '600',
+  activeTimerValue: {
+    fontSize: 18,
+    fontFamily: fontFamilies.outfitBold,
+    fontWeight: '700',
     color: colors.primary,
-    marginTop: 2,
+    fontVariant: ['tabular-nums'],
   },
-  heroExerciseList: {
-    gap: 4,
-    marginTop: 6,
-    marginBottom: 4,
+  pulsingDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.primary,
   },
-  heroExerciseItem: {
+  heroTitlesBlock: {
+    gap: 2,
+  },
+  heroTitle: {
+    fontSize: 24,
+    fontFamily: fontFamilies.outfitBold,
+    fontWeight: '700',
+    color: colors.onSurface,
+    letterSpacing: -0.4,
+  },
+  heroSubtitle: {
     fontSize: 13,
     color: colors.onSurfaceVariant,
-    lineHeight: 18,
-  },
-  heroExtraExercises: {
-    fontSize: 12,
-    color: colors.primary,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  cycleBlock: {
-    gap: 8,
-  },
-  cycleLabelRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
   },
   cycleText: {
-    fontSize: 13,
+    fontSize: 12,
     color: colors.onSurfaceVariant,
-    fontWeight: '500',
+    fontFamily: fontFamilies.outfitSemiBold,
+    fontVariant: ['tabular-nums'],
   },
   cycleBarRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    height: 6,
+    gap: 4,
+    height: 4,
     width: '100%',
   },
   cycleBarSegment: {
     flex: 1,
     height: '100%',
-    borderRadius: 3,
+    borderRadius: 2,
   },
   cycleBarSegmentActive: {
     backgroundColor: colors.primary,
   },
   cycleBarSegmentInactive: {
-    backgroundColor: '#2D2925',
+    backgroundColor: colors.surfaceContainerHigh,
   },
-  metricsBox: {
+  /* Métricas em linha pura (Zero Cardception) */
+  metricsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-    borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    paddingVertical: 4,
   },
   metricColumn: {
     flex: 1,
@@ -881,9 +893,15 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.outfitBold,
     fontWeight: '700',
     color: colors.onSurface,
+    fontVariant: ['tabular-nums'],
+  },
+  metricUnitRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 2,
   },
   metricUnitText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '500',
     color: colors.onSurfaceVariant,
   },
@@ -894,18 +912,32 @@ const styles = StyleSheet.create({
   },
   metricDivider: {
     width: 1,
-    height: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    height: 20,
+    backgroundColor: colors.outlineVariant,
+  },
+  /* Prévia discreta de exercícios em 1 linha */
+  heroExerciseLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 4,
+  },
+  heroExerciseLineText: {
+    flex: 1,
+    fontSize: 12,
+    color: colors.onSurfaceVariant,
   },
   heroPrimaryButton: {
     height: 56,
-    borderRadius: 28,
-    marginTop: 4,
+    borderRadius: radii.pill,
+    marginTop: 2,
   },
   heroSecondaryLink: {
     alignSelf: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    minHeight: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 16,
   },
   heroSecondaryLinkText: {
     fontSize: 14,
@@ -916,10 +948,10 @@ const styles = StyleSheet.create({
   /* ESTADO 4.2: EMPTY STATE */
   emptyCard: {
     backgroundColor: colors.surfaceContainerLow,
-    borderRadius: 24,
+    borderRadius: radii.card,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
-    paddingVertical: 32,
+    borderColor: colors.outlineVariant,
+    paddingVertical: 28,
     paddingHorizontal: 20,
     alignItems: 'center',
     textAlign: 'center',
@@ -949,17 +981,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: '#352F28',
+    backgroundColor: colors.surfaceContainerHigh,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.35,
-    shadowRadius: 4,
-    elevation: 4,
+    borderColor: colors.outlineVariant,
   },
   pauseBadgeText: {
     fontSize: 12,
@@ -979,13 +1006,13 @@ const styles = StyleSheet.create({
     color: colors.onSurfaceVariant,
     textAlign: 'center',
     maxWidth: 280,
-    marginBottom: 24,
+    marginBottom: 20,
     lineHeight: 20,
   },
   emptyActions: {
     width: '100%',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
   emptyPrimaryButton: {
     width: '100%',
@@ -997,11 +1024,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingVertical: 10,
+    minHeight: 48,
     paddingHorizontal: 16,
+    justifyContent: 'center',
   },
   emptyFreeText: {
-    fontSize: 15,
+    fontSize: 14,
     color: colors.onSurfaceVariant,
     fontWeight: '500',
   },
@@ -1015,7 +1043,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.04)',
+    borderColor: colors.outlineVariant,
   },
   dicaVoltIconCircle: {
     width: 36,
@@ -1059,8 +1087,7 @@ const styles = StyleSheet.create({
 
   /* IDEIAS POPULARES PARA INICIAR */
   popularSection: {
-    gap: 10,
-    marginTop: 2,
+    gap: 8,
   },
   popularHeaderRow: {
     flexDirection: 'row',
@@ -1090,7 +1117,7 @@ const styles = StyleSheet.create({
     padding: 14,
     justifyContent: 'space-between',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: colors.outlineVariant,
     overflow: 'hidden',
     position: 'relative',
   },
@@ -1158,20 +1185,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: colors.surfaceContainerLow,
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: radii.card,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.04)',
+    borderColor: colors.outlineVariant,
   },
   dayColumn: {
     alignItems: 'center',
     gap: 6,
   },
   dayCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1184,21 +1211,21 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   dayCircleDefault: {
-    backgroundColor: '#26211C',
+    backgroundColor: colors.surfaceContainerHigh,
   },
   dayNumberText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: fontFamilies.outfitSemiBold,
     color: colors.onSurfaceVariant,
+    fontVariant: ['tabular-nums'],
   },
   dayNumberTextToday: {
     color: colors.primary,
     fontFamily: fontFamilies.outfitBold,
-    fontWeight: '700',
   },
   dayLabelText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontFamily: fontFamilies.dmSansMedium,
     color: colors.onSurfaceVariant,
   },
   dayLabelTextToday: {
@@ -1212,13 +1239,13 @@ const styles = StyleSheet.create({
   },
   lastSessionCard: {
     backgroundColor: colors.surfaceContainerLow,
-    borderRadius: 18,
+    borderRadius: radii.card,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.04)',
+    borderColor: colors.outlineVariant,
   },
   lastSessionLeft: {
     flexDirection: 'row',
@@ -1231,7 +1258,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 14,
-    backgroundColor: '#2D2925',
+    backgroundColor: colors.surfaceContainerHigh,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
