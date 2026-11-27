@@ -7,6 +7,8 @@ import {
   ScrollView,
   StyleSheet,
   useWindowDimensions,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -144,157 +146,165 @@ export const EquipmentPickerSheet: React.FC<EquipmentPickerSheetProps> = ({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
-        {/* Fundo escuro 65% que fecha ao toque */}
-        <Pressable
-          style={styles.backdrop}
-          onPress={onClose}
-          accessibilityRole="button"
-          accessibilityLabel="Fechar painel"
-        />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.keyboardContainer}
+      >
+        <View style={styles.overlay}>
+          {/* Fundo escuro 65% que fecha ao toque */}
+          <Pressable
+            style={styles.backdrop}
+            onPress={onClose}
+            accessibilityRole="button"
+            accessibilityLabel="Fechar painel"
+          />
 
-        <View
-          style={[
-            styles.sheetContainer,
-            {
-              maxHeight: height * 0.88,
-              paddingBottom: Math.max(spacing.xl, insets.bottom + 16),
-            },
-          ]}
-        >
-          {/* Alça central de arrasto */}
-          <View style={styles.handleArea}>
-            <View style={styles.handle} />
-          </View>
-
-          {/* Cabeçalho */}
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>
-              {mode === 'filter' ? 'Filtrar por equipamento' : 'Equipamento'}
-            </Text>
-            <Pressable
-              onPress={onClose}
-              style={styles.closeBtn}
-              accessibilityRole="button"
-              accessibilityLabel="Fechar"
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <X size={20} color={colors.onSurfaceVariant} strokeWidth={1.75} />
-            </Pressable>
-          </View>
-
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.scrollContent}
-            bounces={false}
+          <View
+            style={[
+              styles.sheetContainer,
+              {
+                maxHeight: height * 0.85,
+                paddingBottom: Math.max(spacing.xl, insets.bottom + 16),
+              },
+            ]}
           >
-            {/* No modo 'filter', botão "Todos os equipamentos" no topo */}
-            {mode === 'filter' && (
-              <Pressable
-                onPress={() => handleSelect('Todos')}
-                style={[
-                  styles.filterAllBtn,
-                  isFilterAllSelected && styles.filterAllBtnSelected,
-                ]}
-                accessibilityRole="button"
-                accessibilityState={{ selected: isFilterAllSelected }}
-                accessibilityLabel="Todos os equipamentos"
-                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-              >
-                <View style={styles.filterAllLeft}>
-                  <Layers
-                    size={20}
-                    color={isFilterAllSelected ? colors.primary : colors.onSurfaceVariant}
-                    strokeWidth={1.75}
-                  />
-                  <Text
-                    style={[
-                      styles.filterAllText,
-                      isFilterAllSelected && styles.filterAllTextSelected,
-                    ]}
-                  >
-                    Todos os equipamentos
-                  </Text>
-                </View>
-                {isFilterAllSelected && (
-                  <View style={styles.selectedBadge}>
-                    <Check size={16} color={colors.primary} strokeWidth={2.5} />
-                  </View>
-                )}
-              </Pressable>
-            )}
-
-            {/* Grade 2 colunas com os 10 equipamentos */}
-            <View style={styles.grid}>
-              {EQUIPMENT_OPTIONS.map((item) => {
-                const isSelected = normalizedSelected === item.id;
-                const { IconComponent } = item;
-
-                return (
-                  <Pressable
-                    key={item.id}
-                    onPress={() => handleSelect(item.id)}
-                    style={({ pressed }) => [
-                      styles.card,
-                      { width: cardWidth },
-                      isSelected && styles.cardSelected,
-                      pressed && styles.cardPressed,
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: isSelected }}
-                    accessibilityLabel={`${item.title}, ${item.hint}`}
-                    hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-                  >
-                    <View style={styles.cardHeaderRow}>
-                      <View
-                        style={[
-                          styles.iconContainer,
-                          isSelected && styles.iconContainerSelected,
-                        ]}
-                      >
-                        <IconComponent
-                          size={18}
-                          color={isSelected ? colors.primary : colors.onSurfaceVariant}
-                          strokeWidth={1.75}
-                        />
-                      </View>
-                      {isSelected && (
-                        <Check size={16} color={colors.primary} strokeWidth={2.5} />
-                      )}
-                    </View>
-
-                    <View style={styles.cardTextContent}>
-                      <Text
-                        style={[
-                          styles.cardTitle,
-                          isSelected && styles.cardTitleSelected,
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {item.title}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.cardHint,
-                          isSelected && styles.cardHintSelected,
-                        ]}
-                        numberOfLines={2}
-                      >
-                        {item.hint}
-                      </Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
+            {/* Alça central de arrasto */}
+            <View style={styles.handleArea}>
+              <View style={styles.handle} />
             </View>
-          </ScrollView>
+
+            {/* Cabeçalho */}
+            <View style={styles.header}>
+              <Text style={styles.headerTitle}>
+                {mode === 'filter' ? 'Filtrar por equipamento' : 'Equipamento'}
+              </Text>
+              <Pressable
+                onPress={onClose}
+                style={styles.closeBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Fechar"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <X size={20} color={colors.onSurfaceVariant} strokeWidth={1.75} />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.scrollContent}
+              bounces={false}
+            >
+              {/* No modo 'filter', botão "Todos os equipamentos" no topo */}
+              {mode === 'filter' && (
+                <Pressable
+                  onPress={() => handleSelect('Todos')}
+                  style={[
+                    styles.filterAllBtn,
+                    isFilterAllSelected && styles.filterAllBtnSelected,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isFilterAllSelected }}
+                  accessibilityLabel="Todos os equipamentos"
+                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                >
+                  <View style={styles.filterAllLeft}>
+                    <Layers
+                      size={20}
+                      color={isFilterAllSelected ? colors.onPrimary : colors.onSurfaceVariant}
+                      strokeWidth={1.75}
+                    />
+                    <Text
+                      style={[
+                        styles.filterAllText,
+                        isFilterAllSelected && styles.filterAllTextSelected,
+                      ]}
+                    >
+                      Todos os equipamentos
+                    </Text>
+                  </View>
+                  {isFilterAllSelected && (
+                    <View style={styles.selectedBadge}>
+                      <Check size={16} color={colors.onPrimary} strokeWidth={2.5} />
+                    </View>
+                  )}
+                </Pressable>
+              )}
+
+              {/* Grade 2 colunas com os 10 equipamentos */}
+              <View style={styles.grid}>
+                {EQUIPMENT_OPTIONS.map((item) => {
+                  const isSelected = normalizedSelected === item.id;
+                  const { IconComponent } = item;
+
+                  return (
+                    <Pressable
+                      key={item.id}
+                      onPress={() => handleSelect(item.id)}
+                      style={({ pressed }) => [
+                        styles.card,
+                        { width: cardWidth },
+                        isSelected && styles.cardSelected,
+                        pressed && styles.cardPressed,
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isSelected }}
+                      accessibilityLabel={`${item.title}, ${item.hint}`}
+                      hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                    >
+                      <View style={styles.cardHeaderRow}>
+                        <View
+                          style={[
+                            styles.iconContainer,
+                            isSelected && styles.iconContainerSelected,
+                          ]}
+                        >
+                          <IconComponent
+                            size={18}
+                            color={isSelected ? colors.onPrimary : colors.onSurfaceVariant}
+                            strokeWidth={1.75}
+                          />
+                        </View>
+                        {isSelected && (
+                          <Check size={16} color={colors.onPrimary} strokeWidth={2.5} />
+                        )}
+                      </View>
+
+                      <View style={styles.cardTextContent}>
+                        <Text
+                          style={[
+                            styles.cardTitle,
+                            isSelected && styles.cardTitleSelected,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {item.title}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.cardHint,
+                            isSelected && styles.cardHintSelected,
+                          ]}
+                          numberOfLines={2}
+                        >
+                          {item.hint}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </ScrollView>
+          </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
+  keyboardContainer: {
+    flex: 1,
+  },
   overlay: {
     flex: 1,
     backgroundColor: colors.overlay, // rgba(0, 0, 0, 0.65)
@@ -360,8 +370,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   filterAllBtnSelected: {
-    backgroundColor: colors.primaryContainer, // #3A251F
-    borderColor: colors.primary, // #FF7A59
+    backgroundColor: colors.primary, // #FF7A59
+    borderColor: colors.primary,
   },
   filterAllLeft: {
     flexDirection: 'row',
@@ -374,7 +384,7 @@ const styles = StyleSheet.create({
     color: colors.onSurface,
   },
   filterAllTextSelected: {
-    color: colors.primary,
+    color: colors.onPrimary, // #1A1715
     fontFamily: fontFamilies.outfitBold,
   },
   selectedBadge: {
@@ -397,8 +407,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   cardSelected: {
-    backgroundColor: colors.primaryContainer, // #3A251F
-    borderColor: colors.primary, // #FF7A59
+    backgroundColor: colors.primary, // #FF7A59
+    borderColor: colors.primary,
   },
   cardPressed: {
     borderColor: colors.primary,
@@ -419,7 +429,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   iconContainerSelected: {
-    backgroundColor: 'rgba(255, 122, 89, 0.2)',
+    backgroundColor: 'rgba(26, 23, 21, 0.14)',
   },
   cardTextContent: {
     gap: 2,
@@ -430,7 +440,7 @@ const styles = StyleSheet.create({
     color: colors.onSurface,
   },
   cardTitleSelected: {
-    color: colors.primary,
+    color: colors.onPrimary, // #1A1715
     fontFamily: fontFamilies.outfitBold,
   },
   cardHint: {
@@ -440,6 +450,6 @@ const styles = StyleSheet.create({
     lineHeight: 15,
   },
   cardHintSelected: {
-    color: colors.onPrimaryContainer, // #FFB4A0
+    color: '#3A251F',
   },
 });

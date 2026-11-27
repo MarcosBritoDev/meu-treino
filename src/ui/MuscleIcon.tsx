@@ -62,13 +62,13 @@ export const MuscleIcon: React.FC<MuscleIconProps> = ({
 
         {/* Trapézio / Pescoço */}
         <Path
-          d="M 16 6.8 L 19.8 9 L 18 12.8 L 16 13.8 L 14 12.8 L 12.2 9 Z"
+          d="M 16 6.8 L 19.8 9 L 18.2 11.2 L 13.8 11.2 L 12.2 9 Z"
           fill={getColor(isTraps)}
         />
 
         {/* Costas superiores (romboides e escápulas) */}
         <Path
-          d="M 13.2 11.2 L 18.8 11.2 L 18 14.8 L 14 14.8 Z"
+          d="M 13.6 11.6 L 18.4 11.6 L 17.6 14.8 L 14.4 14.8 Z"
           fill={getColor(isUpperBack)}
         />
 

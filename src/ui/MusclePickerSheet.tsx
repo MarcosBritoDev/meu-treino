@@ -172,7 +172,7 @@ export const MusclePickerSheet: React.FC<MusclePickerSheetProps> = ({
             style={[
               styles.sheetContainer,
               {
-                maxHeight: height * 0.88,
+                maxHeight: height * 0.85,
                 paddingBottom:
                   mode === 'multi' ? 0 : Math.max(spacing.xl, insets.bottom + 16),
               },
@@ -248,7 +248,7 @@ export const MusclePickerSheet: React.FC<MusclePickerSheetProps> = ({
                   <View style={styles.filterAllLeft}>
                     <Layers
                       size={20}
-                      color={isFilterAllSelected ? colors.primary : colors.onSurfaceVariant}
+                      color={isFilterAllSelected ? colors.onPrimary : colors.onSurfaceVariant}
                       strokeWidth={1.75}
                     />
                     <Text
@@ -261,7 +261,7 @@ export const MusclePickerSheet: React.FC<MusclePickerSheetProps> = ({
                     </Text>
                   </View>
                   {isFilterAllSelected && (
-                    <Check size={16} color={colors.primary} strokeWidth={2.5} />
+                    <Check size={16} color={colors.onPrimary} strokeWidth={2.5} />
                   )}
                 </Pressable>
               )}
@@ -280,7 +280,7 @@ export const MusclePickerSheet: React.FC<MusclePickerSheetProps> = ({
                     </Text>
                     <View style={styles.grid}>
                       {muscles.map((muscle) => {
-                        const isLocked = Boolean(normLocked && muscle === normLocked);
+                        const isLocked = Boolean(mode === 'multi' && normLocked && muscle === normLocked);
                         const isSelected =
                           mode === 'multi'
                             ? multiSelected.has(muscle)
@@ -344,7 +344,7 @@ export const MusclePickerSheet: React.FC<MusclePickerSheetProps> = ({
                             ) : isSelected ? (
                               <Check
                                 size={16}
-                                color={colors.primary}
+                                color={colors.onPrimary}
                                 strokeWidth={2.5}
                               />
                             ) : null}
@@ -500,7 +500,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   filterAllBtnSelected: {
-    backgroundColor: colors.primaryContainer,
+    backgroundColor: colors.primary, // #FF7A59
     borderColor: colors.primary,
   },
   filterAllLeft: {
@@ -514,7 +514,7 @@ const styles = StyleSheet.create({
     color: colors.onSurface,
   },
   filterAllTextSelected: {
-    color: colors.primary,
+    color: colors.onPrimary, // #1A1715
     fontFamily: fontFamilies.outfitBold,
   },
   regionSection: {
@@ -549,8 +549,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   cardSelected: {
-    backgroundColor: colors.primaryContainer, // #3A251F
-    borderColor: colors.primary, // #FF7A59
+    backgroundColor: colors.primary, // #FF7A59
+    borderColor: colors.primary,
   },
   cardPressed: {
     borderColor: colors.primary,
@@ -575,7 +575,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cardTextSelected: {
-    color: colors.primary,
+    color: colors.onPrimary, // #1A1715
     fontFamily: fontFamilies.outfitBold,
   },
   cardTextLocked: {
