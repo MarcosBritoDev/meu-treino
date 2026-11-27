@@ -198,7 +198,7 @@ export function sanitizeSecondaryMuscles(
  * primeiro ({ primary }) e onde entra como secundário abaixo ({ secondary }).
  */
 export function filterExercisesByMuscle<
-  T extends { muscleGroup: string; secondaryMuscles?: string[] | null }
+  T extends { muscleGroup: string; secondaryMuscles?: string[] | string | null }
 >(
   exercises: T[],
   muscleFilter?: string | null
@@ -217,7 +217,7 @@ export function filterExercisesByMuscle<
     if (pNorm === filterNorm) {
       primary.push(ex);
     } else {
-      const secList = Array.isArray(ex.secondaryMuscles) ? ex.secondaryMuscles : [];
+      const secList = parseSecondaryMuscles(ex.secondaryMuscles);
       const hasSecondary = secList.some(
         (sec) => typeof sec === 'string' && sec.trim().toLowerCase() === filterNorm
       );

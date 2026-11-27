@@ -2,11 +2,10 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   StyleSheet,
   View,
-  ScrollView,
   TextInput,
   Pressable,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -16,45 +15,68 @@ import {
   Plus,
   Settings,
   ChevronRight,
+  ChevronDown,
   Dumbbell,
   Weight,
   Cable,
   Cpu,
   User,
+  Boxes,
+  Sliders,
+  CircleDot,
+  ShieldCheck,
+  HeartPulse,
+  Ellipsis,
 } from 'lucide-react-native';
 import { RootStackParamList } from '../navigation/types';
 import { colors, radii, spacing, typography } from '../theme';
-import { Text, triggerHaptic, Button, EmptySearchIllustration } from '../ui';
+import {
+  Text,
+  triggerHaptic,
+  Button,
+  EmptySearchIllustration,
+  MusclePickerSheet,
+  EquipmentPickerSheet,
+} from '../ui';
 import { useSettingsStore } from '../store/useSettingsStore';
+import { getExercisesWithPR } from '../db/library';
 import {
-  getExercisesWithPR,
-} from '../db/library';
-import {
-  FILTER_CHIPS,
-  FilterChip,
   ExerciseItemData,
   filterAndGroupExercises,
   formatGroupHeader,
   formatExercisePR,
   getEmptyStateTitle,
   getEmptyStateDescription,
+  normalizeSearchText,
 } from '../domain/search';
+import {
+  filterExercisesByMuscle,
+  parseSecondaryMuscles,
+  normalizeEquipmentName,
+  Equipment,
+} from '../domain/exerciseCatalog';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 type ListItem =
   | { type: 'header'; id: string; title: string; count: number }
-  | { type: 'item'; id: string; exercise: ExerciseItemData };
+  | { type: 'item'; id: string; exercise: ExerciseItemData; isSecondary?: boolean };
 
 export const LibraryScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
+  const insets = useSafeAreaInsets();
   const { unit } = useSettingsStore();
 
   const [exercises, setExercises] = useState<ExerciseItemData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchText, setSearchText] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [selectedGroup, setSelectedGroup] = useState<FilterChip>('Todos');
+
+  // Estados dos filtros modais
+  const [selectedMuscle, setSelectedMuscle] = useState<string | null>(null);
+  const [selectedEquipment, setSelectedEquipment] = useState<string | null>(null);
+  const [musclePickerVisible, setMusclePickerVisible] = useState(false);
+  const [equipmentPickerVisible, setEquipmentPickerVisible] = useState(false);
 
   // Atualiza a busca com debounce de 150 ms
   useEffect(() => {
@@ -76,17 +98,98 @@ export const LibraryScreen: React.FC = () => {
     }
   }, []);
 
-  // Recarrega sempre que a tela ganha foco (ex: volta de cadastro ou sessão de treino)
+  // Recarrega sempre que a tela ganha foco
   useFocusEffect(
     useCallback(() => {
       loadExercises();
     }, [loadExercises])
   );
 
-  // Filtra e agrupa conforme busca e chip selecionado
-  const groupedSections = useMemo(() => {
-    return filterAndGroupExercises(exercises, selectedGroup, debouncedQuery);
-  }, [exercises, selectedGroup, debouncedQuery]);
+  const isMuscleActive = Boolean(selectedMuscle && selectedMuscle !== 'Todos');
+  const isEquipActive = Boolean(selectedEquipment && selectedEquipment !== 'Todos');
+  const isSearchActive = debouncedQuery.trim().length > 0 || searchText.trim().length > 0;
+  const hasActiveFilters = isMuscleActive || isEquipActive || isSearchActive;
+
+  // Filtra e agrupa conforme busca, equipamento e músculo
+  const groupedSections = useMemo<
+    Array<{
+      group: string;
+      data: ExerciseItemData[];
+      isSecondarySection?: boolean;
+    }>
+  >(() => {
+    // 1. Filtro base: arquivados + equipamento + busca de texto
+    const filteredBase = exercises.filter((ex) => {
+      if (ex.archived) return false;
+
+      // Filtro de equipamento
+      if (isEquipActive && selectedEquipment) {
+        const normExEquip = normalizeEquipmentName(ex.equipment);
+        const normSelected = normalizeEquipmentName(selectedEquipment);
+        if (normExEquip !== normSelected) {
+          return false;
+        }
+      }
+
+      // Filtro por texto de busca
+      if (debouncedQuery.trim().length > 0) {
+        const q = normalizeSearchText(debouncedQuery);
+        const nameNorm = normalizeSearchText(ex.name);
+        const muscleNorm = normalizeSearchText(ex.muscleGroup);
+        const equipNorm = normalizeSearchText(ex.equipment);
+        const secList = parseSecondaryMuscles(ex.secondaryMuscles);
+        const secNorm = secList.map((s) => normalizeSearchText(s)).join(' ');
+        if (
+          !nameNorm.includes(q) &&
+          !muscleNorm.includes(q) &&
+          !equipNorm.includes(q) &&
+          !secNorm.includes(q)
+        ) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    // 2. Quando houver filtro de músculo ativo, utiliza filterExercisesByMuscle
+    if (isMuscleActive && selectedMuscle) {
+      const { primary, secondary } = filterExercisesByMuscle(filteredBase, selectedMuscle);
+      primary.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+      secondary.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+
+      const sections: Array<{
+        group: string;
+        data: ExerciseItemData[];
+        isSecondarySection?: boolean;
+      }> = [];
+
+      if (primary.length > 0) {
+        sections.push({
+          group: `Foco principal em ${selectedMuscle}`,
+          data: primary,
+          isSecondarySection: false,
+        });
+      }
+
+      if (secondary.length > 0) {
+        sections.push({
+          group: `Também trabalham ${selectedMuscle} (secundário)`,
+          data: secondary,
+          isSecondarySection: true,
+        });
+      }
+
+      return sections;
+    }
+
+    // 3. Sem filtro de músculo ativo: agrupa pelos grupos musculares ordenados
+    const standard = filterAndGroupExercises(filteredBase, 'Todos', '');
+    return standard.map((s) => ({
+      ...s,
+      isSecondarySection: false,
+    }));
+  }, [exercises, isMuscleActive, selectedMuscle, isEquipActive, selectedEquipment, debouncedQuery]);
 
   // Achata as seções para alimentar o FlashList com máxima performance virtualizada
   const flatListItems = useMemo<ListItem[]>(() => {
@@ -101,8 +204,9 @@ export const LibraryScreen: React.FC = () => {
       for (const ex of section.data) {
         list.push({
           type: 'item',
-          id: ex.id,
+          id: `${section.isSecondarySection ? 'sec-' : 'prim-'}${ex.id}`,
           exercise: ex,
+          isSecondary: Boolean(section.isSecondarySection),
         });
       }
     }
@@ -119,7 +223,8 @@ export const LibraryScreen: React.FC = () => {
     triggerHaptic('light');
     setSearchText('');
     setDebouncedQuery('');
-    setSelectedGroup('Todos');
+    setSelectedMuscle(null);
+    setSelectedEquipment(null);
   }, []);
 
   const handleOpenSettings = useCallback(() => {
@@ -143,20 +248,38 @@ export const LibraryScreen: React.FC = () => {
   );
 
   const renderEquipmentIcon = (equipment: string) => {
-    const eq = equipment.toLowerCase();
-    if (eq.includes('barra')) {
-      return <Weight size={20} color={colors.primary} strokeWidth={1.75} />;
+    const norm = normalizeEquipmentName(equipment);
+    switch (norm) {
+      case 'Barra':
+        return <Weight size={20} color={colors.primary} strokeWidth={1.75} />;
+      case 'Halteres':
+        return <Dumbbell size={20} color={colors.primary} strokeWidth={1.75} />;
+      case 'Máquina':
+        return <Boxes size={20} color={colors.primary} strokeWidth={1.75} />;
+      case 'Cabo / Polia':
+        return <Cable size={20} color={colors.primary} strokeWidth={1.75} />;
+      case 'Peso corporal':
+        return <User size={20} color={colors.primary} strokeWidth={1.75} />;
+      case 'Smith':
+        return <Sliders size={20} color={colors.primary} strokeWidth={1.75} />;
+      case 'Kettlebell':
+        return <CircleDot size={20} color={colors.primary} strokeWidth={1.75} />;
+      case 'Barra de segurança':
+        return <ShieldCheck size={20} color={colors.primary} strokeWidth={1.75} />;
+      case 'Cardio':
+        return <HeartPulse size={20} color={colors.primary} strokeWidth={1.75} />;
+      case 'Outro':
+      default:
+        return <Ellipsis size={20} color={colors.primary} strokeWidth={1.75} />;
     }
-    if (eq.includes('halter')) {
-      return <Dumbbell size={20} color={colors.primary} strokeWidth={1.75} />;
+  };
+
+  const getSubtitle = (ex: ExerciseItemData) => {
+    const secondary = parseSecondaryMuscles(ex.secondaryMuscles);
+    if (secondary.length > 0) {
+      return `${ex.muscleGroup} · ${secondary.join(', ')} · ${ex.equipment}`;
     }
-    if (eq.includes('cabo') || eq.includes('polia')) {
-      return <Cable size={20} color={colors.primary} strokeWidth={1.75} />;
-    }
-    if (eq.includes('máquina') || eq.includes('maquina')) {
-      return <Cpu size={20} color={colors.primary} strokeWidth={1.75} />;
-    }
-    return <User size={20} color={colors.primary} strokeWidth={1.75} />;
+    return `${ex.muscleGroup} · ${ex.equipment}`;
   };
 
   const renderItem = ({ item }: { item: ListItem }) => {
@@ -171,6 +294,7 @@ export const LibraryScreen: React.FC = () => {
     }
 
     const ex = item.exercise;
+    const isSecondary = item.isSecondary;
     const prText = formatExercisePR(ex.bestWeight, ex.bestReps, unit);
 
     return (
@@ -191,15 +315,29 @@ export const LibraryScreen: React.FC = () => {
             {renderEquipmentIcon(ex.equipment)}
           </View>
           <View style={styles.cardDetails}>
+            <View style={styles.nameRow}>
+              <Text
+                variant="bodyLarge"
+                numberOfLines={1}
+                style={styles.exerciseName}
+              >
+                {ex.name}
+              </Text>
+              {isSecondary && (
+                <View style={styles.secondaryBadge}>
+                  <Text style={styles.secondaryBadgeText}>
+                    secundário
+                  </Text>
+                </View>
+              )}
+            </View>
             <Text
-              variant="bodyLarge"
-              numberOfLines={2}
-              style={styles.exerciseName}
+              variant="bodySmall"
+              color="secondary"
+              numberOfLines={1}
+              style={styles.exerciseSubtitle}
             >
-              {ex.name}
-            </Text>
-            <Text variant="bodySmall" color="secondary" style={styles.exerciseSubtitle}>
-              {`${ex.muscleGroup} · ${ex.equipment}`}
+              {getSubtitle(ex)}
             </Text>
           </View>
         </View>
@@ -301,44 +439,77 @@ export const LibraryScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* 3. CHIPS HORIZONTAIS */}
-      <View style={styles.chipsSection}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipsScrollContent}
+      {/* 3. BOTÕES DE FILTRO LADO A LADO */}
+      <View style={styles.filterBar}>
+        <Pressable
+          onPress={() => {
+            triggerHaptic('light');
+            setMusclePickerVisible(true);
+          }}
+          style={[
+            styles.filterBtn,
+            isMuscleActive ? styles.filterBtnActive : styles.filterBtnInactive,
+          ]}
+          accessible={true}
+          accessibilityRole="button"
+          accessibilityLabel={`Filtrar por músculo, atualmente ${selectedMuscle || 'Todos'}`}
         >
-          {FILTER_CHIPS.map((chip) => {
-            const isSelected = selectedGroup === chip;
-            return (
-              <Pressable
-                key={chip}
-                onPress={() => {
-                  triggerHaptic('light');
-                  setSelectedGroup(chip);
-                }}
-                accessible={true}
-                accessibilityRole="button"
-                accessibilityState={{ selected: isSelected }}
-                accessibilityLabel={`Filtrar por ${chip}`}
-                style={[
-                  styles.chip,
-                  isSelected ? styles.chipSelected : styles.chipUnselected,
-                ]}
-              >
-                <Text
-                  variant="bodyMedium"
-                  style={[
-                    styles.chipText,
-                    isSelected ? styles.chipTextSelected : styles.chipTextUnselected,
-                  ]}
-                >
-                  {chip}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.filterBtnText,
+              isMuscleActive ? styles.filterBtnTextActive : styles.filterBtnTextInactive,
+            ]}
+          >
+            {isMuscleActive ? `Músculo: ${selectedMuscle}` : 'Músculo: Todos'}
+          </Text>
+          <ChevronDown
+            size={16}
+            color={isMuscleActive ? colors.primary : colors.onSurfaceVariant}
+            strokeWidth={2}
+          />
+        </Pressable>
+
+        <Pressable
+          onPress={() => {
+            triggerHaptic('light');
+            setEquipmentPickerVisible(true);
+          }}
+          style={[
+            styles.filterBtn,
+            isEquipActive ? styles.filterBtnActive : styles.filterBtnInactive,
+          ]}
+          accessible={true}
+          accessibilityRole="button"
+          accessibilityLabel={`Filtrar por equipamento, atualmente ${selectedEquipment || 'Todos'}`}
+        >
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.filterBtnText,
+              isEquipActive ? styles.filterBtnTextActive : styles.filterBtnTextInactive,
+            ]}
+          >
+            {isEquipActive ? `${selectedEquipment}` : 'Equipamento'}
+          </Text>
+          <ChevronDown
+            size={16}
+            color={isEquipActive ? colors.primary : colors.onSurfaceVariant}
+            strokeWidth={2}
+          />
+        </Pressable>
+
+        {hasActiveFilters && (
+          <Pressable
+            onPress={handleResetFilters}
+            style={styles.clearFilterBtn}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel="Limpar filtros e busca"
+          >
+            <Text style={styles.clearFilterText}>Limpar</Text>
+          </Pressable>
+        )}
       </View>
 
       {/* 4. CONTEÚDO PRINCIPAL (LISTA, ESQUELETO OU BUSCA VAZIA) */}
@@ -357,7 +528,6 @@ export const LibraryScreen: React.FC = () => {
             ))}
           </View>
         ) : flatListItems.length === 0 ? (
-          /* TELA 2.2 — BIBLIOTECA BUSCA VAZIA */
           (() => {
             const isLibraryEmpty = exercises.length === 0;
             const currentTerm = (debouncedQuery || searchText).trim();
@@ -365,7 +535,7 @@ export const LibraryScreen: React.FC = () => {
             const emptyDescription = getEmptyStateDescription(
               isLibraryEmpty,
               currentTerm,
-              selectedGroup
+              selectedMuscle || 'Todos'
             );
 
             return (
@@ -407,11 +577,35 @@ export const LibraryScreen: React.FC = () => {
             renderItem={renderItem}
             getItemType={(item) => item.type}
             keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.flashListContent}
+            contentContainerStyle={[
+              styles.flashListContent,
+              { paddingBottom: insets.bottom + spacing.tabBarHeight + spacing.xl },
+            ]}
             showsVerticalScrollIndicator={false}
           />
         )}
       </View>
+
+      {/* MODAIS DE FILTRO */}
+      <MusclePickerSheet
+        visible={musclePickerVisible}
+        mode="filter"
+        selectedValue={selectedMuscle}
+        onApply={(muscle) => {
+          setSelectedMuscle(muscle || null);
+        }}
+        onClose={() => setMusclePickerVisible(false)}
+      />
+
+      <EquipmentPickerSheet
+        visible={equipmentPickerVisible}
+        mode="filter"
+        selectedEquipment={selectedEquipment}
+        onSelect={(eq) => {
+          setSelectedEquipment(eq === 'Todos' ? null : eq);
+        }}
+        onClose={() => setEquipmentPickerVisible(false)}
+      />
     </SafeAreaView>
   );
 };
@@ -461,12 +655,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    height: 38,
-    paddingHorizontal: 14,
+    minHeight: spacing.touchTargetMin, // 48px
+    paddingHorizontal: 16,
     borderRadius: radii.pill,
     backgroundColor: colors.primaryContainer, // #3A251F
     borderWidth: 1,
     borderColor: 'rgba(255, 122, 89, 0.4)',
+    justifyContent: 'center',
   },
   newButtonPressed: {
     backgroundColor: 'rgba(255, 122, 89, 0.25)',
@@ -474,7 +669,7 @@ const styles = StyleSheet.create({
   newButtonText: {
     fontFamily: typography.headline.fontFamily,
     fontWeight: '600',
-    fontSize: 13,
+    fontSize: 14,
     color: colors.primary,
   },
   searchContainer: {
@@ -513,48 +708,69 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.surfaceContainerHigh,
   },
-  chipsSection: {
-    paddingVertical: spacing.xs,
-  },
-  chipsScrollContent: {
-    paddingHorizontal: spacing.margin,
-    gap: spacing.xs,
-  },
-  chip: {
-    height: 36,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.pill,
+  filterBar: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: spacing.margin,
+    paddingTop: 4,
+    paddingBottom: spacing.xs + 2,
+    gap: spacing.xs + 2,
   },
-  chipSelected: {
-    backgroundColor: colors.primary, // #FF7A59
+  filterBtn: {
+    flex: 1,
+    minHeight: spacing.touchTargetMin, // 48px
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    borderRadius: radii.pill,
   },
-  chipUnselected: {
-    backgroundColor: colors.surfaceContainerHigh, // #2D2925
+  filterBtnInactive: {
+    backgroundColor: colors.surfaceContainer,
     borderWidth: 1,
-    borderColor: colors.outlineVariant, // #3A3531
+    borderColor: colors.outlineVariant,
   },
-  chipText: {
+  filterBtnActive: {
+    backgroundColor: colors.primaryContainer, // #3A251F
+    borderWidth: 1,
+    borderColor: colors.primary, // #FF7A59
+  },
+  filterBtnText: {
     fontSize: 13,
-    lineHeight: 18,
+    flexShrink: 1,
+    marginRight: 4,
   },
-  chipTextSelected: {
-    fontFamily: typography.headline.fontFamily,
-    fontWeight: '600',
-    color: colors.onPrimary, // #1A1715
-  },
-  chipTextUnselected: {
+  filterBtnTextInactive: {
     fontFamily: typography.bodyMedium.fontFamily,
     fontWeight: '500',
     color: colors.onSurfaceVariant, // #B7ADA3
+  },
+  filterBtnTextActive: {
+    fontFamily: typography.headline.fontFamily,
+    fontWeight: '600',
+    color: colors.primary, // #FF7A59
+  },
+  clearFilterBtn: {
+    minHeight: spacing.touchTargetMin, // 48px
+    paddingHorizontal: 14,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceContainerHigh,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clearFilterText: {
+    fontSize: 13,
+    fontFamily: typography.bodyMedium.fontFamily,
+    fontWeight: '500',
+    color: colors.onSurfaceVariant,
   },
   listContainer: {
     flex: 1,
   },
   flashListContent: {
     paddingHorizontal: spacing.margin,
-    paddingBottom: spacing.tabBarHeight + spacing.xl,
   },
   sectionHeaderContainer: {
     paddingTop: spacing.md,
@@ -569,16 +785,16 @@ const styles = StyleSheet.create({
     color: colors.onSurfaceVariant, // #B7ADA3
   },
   card: {
-    minHeight: 76,
+    minHeight: 68,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: colors.surfaceContainer, // #23201D
     borderWidth: 1,
     borderColor: colors.outlineVariant, // #3A3531
-    borderRadius: 18,
+    borderRadius: radii.card,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 10,
     marginBottom: spacing.xs + 2,
   },
   cardPressed: {
@@ -605,12 +821,32 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     justifyContent: 'center',
   },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   exerciseName: {
     fontSize: 15,
     lineHeight: 20,
     fontFamily: typography.bodyLarge.fontFamily,
     fontWeight: '500',
     color: colors.onSurface,
+    flexShrink: 1,
+  },
+  secondaryBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceContainerHigh,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+  },
+  secondaryBadgeText: {
+    fontSize: 10,
+    fontFamily: typography.labelSmall.fontFamily,
+    fontWeight: '500',
+    color: colors.onSurfaceVariant,
   },
   exerciseSubtitle: {
     fontSize: 13,
@@ -681,15 +917,15 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
   },
   skeletonCard: {
-    minHeight: 76,
+    minHeight: 68,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surfaceContainer,
     borderWidth: 1,
     borderColor: colors.outlineVariant,
-    borderRadius: 18,
+    borderRadius: radii.card,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   skeletonIcon: {
     width: 44,
