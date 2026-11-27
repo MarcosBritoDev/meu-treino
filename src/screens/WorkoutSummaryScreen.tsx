@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View,
   ScrollView,
@@ -6,25 +6,25 @@ import {
   Pressable,
   Animated,
   AccessibilityInfo,
+  BackHandler,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
   X,
   Check,
-  Zap,
   Dumbbell,
   Timer,
   Layers,
-  Activity,
   Trophy,
   TrendingUp,
   ClipboardList,
-  Sparkles,
+  AlertCircle,
+  RotateCcw,
 } from 'lucide-react-native';
 import { RootStackParamList } from '../navigation/types';
-import { colors, radii, fontFamilies } from '../theme';
+import { colors, radii, fontFamilies, spacing } from '../theme';
 import { Text } from '../ui/Text';
 import { Card } from '../ui/Card';
 import { triggerHaptic } from '../ui/haptics';
@@ -53,9 +53,40 @@ interface ExerciseLoadSummary {
   hasPr: boolean;
 }
 
+/**
+ * Formata minutos em padrão fitness compacto (ex: "45 min", "1h", "1h 15min").
+ */
+const formatDuration = (min: number): string => {
+  if (min < 60) {
+    return `${min} min`;
+  }
+  const hours = Math.floor(min / 60);
+  const remainingMin = min % 60;
+  if (remainingMin === 0) {
+    return `${hours}h`;
+  }
+  return `${hours}h ${remainingMin}min`;
+};
+
+/**
+ * Formata minutos para o subtítulo comemorativo (ex: "45 minutos", "1 hora", "1h e 15 min").
+ */
+const formatDurationProse = (min: number): string => {
+  if (min < 60) {
+    return `${min} ${min === 1 ? 'minuto' : 'minutos'}`;
+  }
+  const hours = Math.floor(min / 60);
+  const remainingMin = min % 60;
+  if (remainingMin === 0) {
+    return `${hours} ${hours === 1 ? 'hora' : 'horas'}`;
+  }
+  return `${hours}h e ${remainingMin} min`;
+};
+
 export const WorkoutSummaryScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RouteParams>();
+  const insets = useSafeAreaInsets();
   const sessionId = route.params?.sessionId;
 
   const [sessionName, setSessionName] = useState('Treino');
@@ -68,6 +99,7 @@ export const WorkoutSummaryScreen: React.FC = () => {
   const [unit, setUnit] = useState('kg');
   const [records, setRecords] = useState<PRRecordItem[]>([]);
   const [exerciseLoads, setExerciseLoads] = useState<ExerciseLoadSummary[]>([]);
+  const [hasError, setHasError] = useState(false);
 
   // Animação de entrada curta respeitando "reduzir movimento"
   const animOpacity = useRef(new Animated.Value(0)).current;
@@ -95,8 +127,34 @@ export const WorkoutSummaryScreen: React.FC = () => {
     });
   }, [animOpacity, animTranslateY]);
 
-  useEffect(() => {
+  const handleFinish = useCallback(() => {
+    triggerHaptic('medium');
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'MainTabs' }],
+    });
+  }, [navigation]);
+
+  // Interceptação nativa do botão e gesto de voltar do Android (Predictive Back)
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        handleFinish();
+        return true;
+      };
+
+      const subscription = BackHandler.addEventListener(
+        'hardwareBackPress',
+        onBackPress
+      );
+
+      return () => subscription.remove();
+    }, [handleFinish])
+  );
+
+  const loadSessionData = useCallback(() => {
     if (!sessionId) return;
+    setHasError(false);
     try {
       const rawDb = getExpoDb();
 
@@ -364,16 +422,13 @@ export const WorkoutSummaryScreen: React.FC = () => {
       setExerciseLoads(loadSummaries);
     } catch (err) {
       console.warn('Erro ao carregar resumo do treino:', err);
+      setHasError(true);
     }
   }, [sessionId]);
 
-  const handleFinish = () => {
-    triggerHaptic('medium');
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'MainTabs' }],
-    });
-  };
+  useEffect(() => {
+    loadSessionData();
+  }, [loadSessionData]);
 
   const handleViewSessionDetails = () => {
     triggerHaptic('light');
@@ -386,14 +441,14 @@ export const WorkoutSummaryScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* CABEÇALHO */}
+      {/* CABEÇALHO LIMPO E ERGONÔMICO (>= 48dp) */}
       <View style={styles.header}>
         <Pressable
           onPress={handleFinish}
           style={styles.closeButton}
           hitSlop={8}
           accessibilityRole="button"
-          accessibilityLabel="Fechar resumo"
+          accessibilityLabel="Fechar resumo e voltar ao início"
         >
           <X size={22} color={colors.onSurface} strokeWidth={2} />
         </Pressable>
@@ -402,13 +457,15 @@ export const WorkoutSummaryScreen: React.FC = () => {
           Resumo do treino
         </Text>
 
-        <View style={styles.headerRightBox}>
-          <Zap size={18} color="#FFC46B" fill="#FFC46B" />
-        </View>
+        {/* Espaçador simétrico invisível (substitui adorno falso) */}
+        <View style={styles.headerSpacer} pointerEvents="none" />
       </View>
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(36, insets.bottom + 24) },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <Animated.View
@@ -418,255 +475,321 @@ export const WorkoutSummaryScreen: React.FC = () => {
             gap: 22,
           }}
         >
-          {/* TOPO COMEMORATIVO */}
-          <View style={styles.celebrationSection}>
-            <View style={styles.badgeOuter}>
-              <View style={styles.badgeInner}>
-                <Check size={34} color={colors.background} strokeWidth={3.2} />
-              </View>
-              <View style={styles.badgeSparkle}>
-                <Zap size={14} color="#FFC46B" fill="#FFC46B" />
-              </View>
-            </View>
-
-            <Text variant="headline" style={styles.congratsTitle}>
-              Treino concluído!
-            </Text>
-            <Text variant="bodyMedium" style={styles.congratsSubtitle}>
-              {sessionName} finalizado em {durationMin}{' '}
-              {durationMin === 1 ? 'minuto' : 'minutos'}
-            </Text>
-          </View>
-
-          {/* GRADE 2x2 DE MÉTRICAS PRINCIPAIS */}
-          <View style={styles.metricsGrid}>
-            {/* Card 1: Volume Total */}
-            <Card variant="surface" style={styles.metricCard}>
-              <View style={styles.metricCardHeader}>
-                <Text variant="labelSmall" color="secondary">
-                  Volume total
+          {/* ESTADO DE ERRO AMIGÁVEL COM BOTÃO RECARREGAR */}
+          {hasError ? (
+            <Card variant="surface" style={styles.errorCard}>
+              <AlertCircle size={38} color={colors.error} strokeWidth={2} />
+              <View style={styles.errorInfo}>
+                <Text variant="headline" style={styles.errorTitle}>
+                  Não foi possível carregar os dados
                 </Text>
-                <Dumbbell size={18} color={colors.onSurfaceVariant} strokeWidth={2} />
-              </View>
-              <View style={styles.metricCardBottom}>
-                <Text variant="headline" style={styles.metricValue}>
-                  {Math.round(totalVolume).toLocaleString('pt-BR')}{' '}
-                  <Text variant="bodySmall" color="secondary">
-                    {unit}
-                  </Text>
+                <Text variant="bodySmall" color="secondary" style={styles.errorSubtitle}>
+                  Ocorreu uma falha ao ler os registros deste treino no banco de dados local.
                 </Text>
-                {volumeVariation !== null && (
-                  <View style={styles.variationPill}>
-                    <TrendingUp size={12} color="#4ADE80" strokeWidth={2.4} />
-                    <Text variant="labelSmall" style={styles.variationPillText}>
-                      {volumeVariation >= 0
-                        ? `+${volumeVariation}% vs sem. ant.`
-                        : `${volumeVariation}% vs sem. ant.`}
-                    </Text>
+              </View>
+              <Pressable
+                onPress={() => {
+                  triggerHaptic('light');
+                  loadSessionData();
+                }}
+                style={({ pressed }) => [
+                  styles.retryButton,
+                  pressed && styles.buttonPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Tentar novamente"
+              >
+                <RotateCcw size={16} color={colors.onSurface} strokeWidth={2} />
+                <Text variant="bodyMedium" style={styles.retryButtonText}>
+                  Tentar novamente
+                </Text>
+              </Pressable>
+            </Card>
+          ) : (
+            <>
+              {/* TOPO COMEMORATIVO (SEM ADORNO DE ÂMBAR QUE DILUA O PR) */}
+              <View style={styles.celebrationSection}>
+                <View style={styles.badgeOuter}>
+                  <View style={styles.badgeInner}>
+                    <Check size={32} color={colors.onPrimary} strokeWidth={3} />
                   </View>
-                )}
-              </View>
-            </Card>
-
-            {/* Card 2: Séries */}
-            <Card variant="surface" style={styles.metricCard}>
-              <View style={styles.metricCardHeader}>
-                <Text variant="labelSmall" color="secondary">
-                  Séries
-                </Text>
-                <Layers size={18} color={colors.onSurfaceVariant} strokeWidth={2} />
-              </View>
-              <View style={styles.metricCardBottom}>
-                <Text variant="headline" style={styles.metricValue}>
-                  {completedSets}
-                </Text>
-                <Text variant="labelSmall" style={styles.metricSubtitleText}>
-                  {plannedPercent}% planejadas
-                </Text>
-              </View>
-            </Card>
-
-            {/* Card 3: Tempo */}
-            <Card variant="surface" style={styles.metricCard}>
-              <View style={styles.metricCardHeader}>
-                <Text variant="labelSmall" color="secondary">
-                  Tempo
-                </Text>
-                <Timer size={18} color={colors.onSurfaceVariant} strokeWidth={2} />
-              </View>
-              <View style={styles.metricCardBottom}>
-                <Text variant="headline" style={styles.metricValue}>
-                  {durationMin}{' '}
-                  <Text variant="bodySmall" color="secondary">
-                    min
-                  </Text>
-                </Text>
-                <Text
-                  variant="labelSmall"
-                  style={styles.metricSubtitleText}
-                  numberOfLines={1}
-                >
-                  Descanso médio {avgRestS} s
-                </Text>
-              </View>
-            </Card>
-
-            {/* Card 4: Exercícios */}
-            <Card variant="surface" style={styles.metricCard}>
-              <View style={styles.metricCardHeader}>
-                <Text variant="labelSmall" color="secondary">
-                  Exercícios
-                </Text>
-                <Dumbbell
-                  size={18}
-                  color={colors.onSurfaceVariant}
-                  strokeWidth={2}
-                />
-              </View>
-              <View style={styles.metricCardBottom}>
-                <Text variant="headline" style={styles.metricValue}>
-                  {exerciseLoads.length}
-                </Text>
-                <Text variant="labelSmall" style={styles.metricSubtitleText}>
-                  {exerciseLoads.length === 1 ? '1 concluído' : `${exerciseLoads.length} concluídos`}
-                </Text>
-              </View>
-            </Card>
-          </View>
-
-          {/* SEÇÃO RECORDES DA SESSÃO (Só aparece quando houver PR) */}
-          {records.length > 0 && (
-            <View style={styles.sectionContainer}>
-              <View style={styles.sectionHeader}>
-                <Text variant="headline" style={styles.sectionTitle}>
-                  Recordes da sessão
-                </Text>
-                <View style={styles.recordsBadge}>
-                  <Trophy size={14} color="#FFC46B" strokeWidth={2.4} />
-                  <Text variant="labelSmall" style={styles.recordsBadgeText}>
-                    {records.length} {records.length === 1 ? 'novo PR' : 'novos PRs'}
-                  </Text>
                 </View>
+
+                <Text variant="headline" style={styles.congratsTitle}>
+                  Treino concluído!
+                </Text>
+                <Text variant="bodyMedium" style={styles.congratsSubtitle}>
+                  {sessionName} finalizado em {formatDurationProse(durationMin)}
+                </Text>
               </View>
 
-              <View style={styles.recordsList}>
-                {records.map((rec) => (
-                  <Card key={rec.id} variant="surface" style={styles.recordCard}>
-                    <View style={styles.recordLeft}>
-                      <View style={styles.trophyIconBox}>
-                        <Trophy size={20} color="#FFC46B" strokeWidth={2.2} />
-                      </View>
-                      <View style={styles.recordInfoCol}>
-                        <Text
-                          variant="bodyMedium"
-                          style={styles.recordExerciseName}
-                          numberOfLines={1}
-                        >
-                          {rec.exerciseName}
-                        </Text>
-                        <Text variant="headline" style={styles.recordWeightText}>
-                          {rec.weight} {unit}{' '}
-                          <Text variant="bodySmall" color="secondary">
-                            × {rec.reps}
-                          </Text>
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.prDeltaPill}>
-                      <Text variant="labelSmall" style={styles.prDeltaPillText}>
-                        {rec.diffKg !== null && rec.diffKg > 0
-                          ? `+${rec.diffKg} kg recorde`
-                          : rec.isPrWeight
-                            ? 'Carga recorde'
-                            : 'Volume recorde'}
+              {/* GRADE 2x2 DE MÉTRICAS PRINCIPAIS (CONTRATO CANÔNICO DE CARD E LEITURA COESA) */}
+              <View style={styles.metricsGrid}>
+                {/* Card 1: Volume Total */}
+                <Card
+                  variant="surface"
+                  style={styles.metricCard}
+                  accessibilityLabel={`Volume total: ${Math.round(totalVolume).toLocaleString('pt-BR')} ${unit}${
+                    volumeVariation !== null
+                      ? `, ${volumeVariation >= 0 ? `mais ${volumeVariation}%` : `${volumeVariation}%`} em relação ao treino anterior`
+                      : ''
+                  }`}
+                >
+                  <View style={styles.metricCardHeader}>
+                    <Text variant="labelSmall" color="secondary">
+                      Volume total
+                    </Text>
+                    <Dumbbell size={18} color={colors.onSurfaceVariant} strokeWidth={2} />
+                  </View>
+                  <View style={styles.metricCardBottom}>
+                    <Text variant="headline" tabular style={styles.metricValue}>
+                      {Math.round(totalVolume).toLocaleString('pt-BR')}{' '}
+                      <Text variant="bodySmall" color="secondary">
+                        {unit}
                       </Text>
-                    </View>
-                  </Card>
-                ))}
-              </View>
-            </View>
-          )}
-
-          {/* SEÇÃO RESUMO DAS CARGAS */}
-          {exerciseLoads.length > 0 && (
-            <View style={styles.sectionContainer}>
-              <View style={styles.sectionHeader}>
-                <Text variant="headline" style={styles.sectionTitle}>
-                  Resumo das cargas
-                </Text>
-                <Text variant="labelSmall" color="secondary">
-                  {exerciseLoads.length}{' '}
-                  {exerciseLoads.length === 1 ? 'exercício' : 'exercícios'}
-                </Text>
-              </View>
-
-              <View style={styles.exerciseLoadsList}>
-                {exerciseLoads.map((item, index) => (
-                  <View key={item.id} style={styles.loadItemCard}>
-                    <View style={styles.loadItemLeft}>
+                    </Text>
+                    {volumeVariation !== null && (
                       <View
                         style={[
-                          styles.indexBadge,
-                          item.hasPr && styles.indexBadgePr,
+                          styles.variationPill,
+                          volumeVariation < 0 && styles.variationPillNegative,
                         ]}
                       >
+                        <TrendingUp
+                          size={12}
+                          color={volumeVariation >= 0 ? colors.success : colors.onSurfaceVariant}
+                          strokeWidth={2.4}
+                        />
                         <Text
                           variant="labelSmall"
                           style={[
-                            styles.indexBadgeText,
-                            item.hasPr && styles.indexBadgeTextPr,
+                            styles.variationPillText,
+                            volumeVariation < 0 && styles.variationPillTextNegative,
                           ]}
                         >
-                          {index + 1}
+                          {volumeVariation >= 0
+                            ? `+${volumeVariation}% vs treino anterior`
+                            : `${volumeVariation}% vs treino anterior`}
                         </Text>
                       </View>
+                    )}
+                  </View>
+                </Card>
 
-                      <View style={styles.loadItemInfoCol}>
-                        <Text
-                          variant="bodyMedium"
-                          style={styles.loadExerciseName}
-                          numberOfLines={1}
-                        >
-                          {item.exerciseName}
-                        </Text>
-                        {item.hasPr ? (
-                          <View style={styles.prRowNotice}>
-                            <View style={styles.prDot} />
-                            <Text variant="labelSmall" style={styles.prNoticeText}>
-                              Novo recorde
-                            </Text>
-                          </View>
-                        ) : (
-                          <Text variant="labelSmall" color="secondary">
-                            {item.setsCount}{' '}
-                            {item.setsCount === 1 ? 'série registrada' : 'séries registradas'}
-                          </Text>
-                        )}
-                      </View>
-                    </View>
+                {/* Card 2: Séries */}
+                <Card
+                  variant="surface"
+                  style={styles.metricCard}
+                  accessibilityLabel={`Séries: ${completedSets} concluídas, ${plannedPercent}% do planejado`}
+                >
+                  <View style={styles.metricCardHeader}>
+                    <Text variant="labelSmall" color="secondary">
+                      Séries
+                    </Text>
+                    <Layers size={18} color={colors.onSurfaceVariant} strokeWidth={2} />
+                  </View>
+                  <View style={styles.metricCardBottom}>
+                    <Text variant="headline" tabular style={styles.metricValue}>
+                      {completedSets}
+                    </Text>
+                    <Text variant="labelSmall" style={styles.metricSubtitleText}>
+                      {plannedPercent}% planejadas
+                    </Text>
+                  </View>
+                </Card>
 
-                    <View style={styles.loadItemRight}>
-                      <Text
-                        variant="headline"
-                        style={[
-                          styles.loadWeightText,
-                          item.hasPr && styles.loadWeightTextPr,
-                        ]}
-                      >
-                        {item.maxWeight} {unit}
-                      </Text>
-                      <Text variant="labelSmall" color="secondary">
-                        pico: {item.peakReps} reps
+                {/* Card 3: Tempo */}
+                <Card
+                  variant="surface"
+                  style={styles.metricCard}
+                  accessibilityLabel={`Tempo de treino: ${formatDuration(durationMin)}, descanso médio de ${avgRestS} segundos`}
+                >
+                  <View style={styles.metricCardHeader}>
+                    <Text variant="labelSmall" color="secondary">
+                      Tempo
+                    </Text>
+                    <Timer size={18} color={colors.onSurfaceVariant} strokeWidth={2} />
+                  </View>
+                  <View style={styles.metricCardBottom}>
+                    <Text variant="headline" tabular style={styles.metricValue}>
+                      {formatDuration(durationMin)}
+                    </Text>
+                    <Text
+                      variant="labelSmall"
+                      style={styles.metricSubtitleText}
+                      numberOfLines={1}
+                    >
+                      Descanso médio {avgRestS} s
+                    </Text>
+                  </View>
+                </Card>
+
+                {/* Card 4: Exercícios */}
+                <Card
+                  variant="surface"
+                  style={styles.metricCard}
+                  accessibilityLabel={`Exercícios: ${exerciseLoads.length} ${
+                    exerciseLoads.length === 1 ? 'exercício concluído' : 'exercícios concluídos'
+                  }`}
+                >
+                  <View style={styles.metricCardHeader}>
+                    <Text variant="labelSmall" color="secondary">
+                      Exercícios
+                    </Text>
+                    <Dumbbell
+                      size={18}
+                      color={colors.onSurfaceVariant}
+                      strokeWidth={2}
+                    />
+                  </View>
+                  <View style={styles.metricCardBottom}>
+                    <Text variant="headline" tabular style={styles.metricValue}>
+                      {exerciseLoads.length}
+                    </Text>
+                    <Text variant="labelSmall" style={styles.metricSubtitleText}>
+                      {exerciseLoads.length === 1 ? '1 concluído' : `${exerciseLoads.length} concluídos`}
+                    </Text>
+                  </View>
+                </Card>
+              </View>
+
+              {/* SEÇÃO RECORDES DA SESSÃO (USO SAGRADO DO ÂMBAR EXCLUSIVO PARA PRs) */}
+              {records.length > 0 && (
+                <View style={styles.sectionContainer}>
+                  <View style={styles.sectionHeader}>
+                    <Text variant="headline" style={styles.sectionTitle}>
+                      Recordes da sessão
+                    </Text>
+                    <View style={styles.recordsBadge}>
+                      <Trophy size={14} color={colors.pr} strokeWidth={2.4} />
+                      <Text variant="labelSmall" style={styles.recordsBadgeText}>
+                        {records.length} {records.length === 1 ? 'novo PR' : 'novos PRs'}
                       </Text>
                     </View>
                   </View>
-                ))}
-              </View>
-            </View>
+
+                  <View style={styles.recordsList}>
+                    {records.map((rec) => (
+                      <Card key={rec.id} variant="surface" style={styles.recordCard}>
+                        <View style={styles.recordLeft}>
+                          <View style={styles.trophyIconBox}>
+                            <Trophy size={20} color={colors.pr} strokeWidth={2.2} />
+                          </View>
+                          <View style={styles.recordInfoCol}>
+                            <Text
+                              variant="bodyMedium"
+                              style={styles.recordExerciseName}
+                              numberOfLines={1}
+                            >
+                              {rec.exerciseName}
+                            </Text>
+                            <Text variant="headline" tabular style={styles.recordWeightText}>
+                              {rec.weight} {unit}{' '}
+                              <Text variant="bodySmall" color="secondary">
+                                × {rec.reps}
+                              </Text>
+                            </Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.prDeltaPill}>
+                          <Text variant="labelSmall" tabular style={styles.prDeltaPillText}>
+                            {rec.diffKg !== null && rec.diffKg > 0
+                              ? `+${rec.diffKg} kg recorde`
+                              : rec.isPrWeight
+                                ? 'Carga recorde'
+                                : 'Volume recorde'}
+                          </Text>
+                        </View>
+                      </Card>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {/* SEÇÃO RESUMO DAS CARGAS */}
+              {exerciseLoads.length > 0 && (
+                <View style={styles.sectionContainer}>
+                  <View style={styles.sectionHeader}>
+                    <Text variant="headline" style={styles.sectionTitle}>
+                      Resumo das cargas
+                    </Text>
+                    <Text variant="labelSmall" color="secondary">
+                      {exerciseLoads.length}{' '}
+                      {exerciseLoads.length === 1 ? 'exercício' : 'exercícios'}
+                    </Text>
+                  </View>
+
+                  <View style={styles.exerciseLoadsList}>
+                    {exerciseLoads.map((item, index) => (
+                      <Card key={item.id} variant="surface" style={styles.loadItemCard}>
+                        <View style={styles.loadItemLeft}>
+                          <View
+                            style={[
+                              styles.indexBadge,
+                              item.hasPr && styles.indexBadgePr,
+                            ]}
+                          >
+                            <Text
+                              variant="labelSmall"
+                              tabular
+                              style={[
+                                styles.indexBadgeText,
+                                item.hasPr && styles.indexBadgeTextPr,
+                              ]}
+                            >
+                              {index + 1}
+                            </Text>
+                          </View>
+
+                          <View style={styles.loadItemInfoCol}>
+                            <Text
+                              variant="bodyMedium"
+                              style={styles.loadExerciseName}
+                              numberOfLines={1}
+                            >
+                              {item.exerciseName}
+                            </Text>
+                            {item.hasPr ? (
+                              <View style={styles.prRowNotice}>
+                                <View style={styles.prDot} />
+                                <Text variant="labelSmall" style={styles.prNoticeText}>
+                                  Novo recorde
+                                </Text>
+                              </View>
+                            ) : (
+                              <Text variant="labelSmall" color="secondary">
+                                {item.setsCount}{' '}
+                                {item.setsCount === 1 ? 'série registrada' : 'séries registradas'}
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+
+                        <View style={styles.loadItemRight}>
+                          <Text
+                            variant="headline"
+                            tabular
+                            style={[
+                              styles.loadWeightText,
+                              item.hasPr && styles.loadWeightTextPr,
+                            ]}
+                          >
+                            {item.maxWeight} {unit}
+                          </Text>
+                          <Text variant="labelSmall" tabular color="secondary">
+                            pico: {item.peakReps} reps
+                          </Text>
+                        </View>
+                      </Card>
+                    ))}
+                  </View>
+                </View>
+              )}
+            </>
           )}
 
-          {/* AÇÕES DE RODAPÉ (INLINE NO SCROLLVIEW PARA RESPEITAR O SAFE-AREA) */}
+          {/* AÇÕES DE RODAPÉ (SEM SOMBRAS ARTIFICIAIS, TOQUE >= 48dp E TEXTO ON-PRIMARY) */}
           <View style={styles.footerActions}>
             {/* Botão Secundário: Ver registros da sessão */}
             <Pressable
@@ -720,8 +843,8 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.outlineVariant,
   },
   closeButton: {
-    width: 40,
-    height: 40,
+    width: 48,
+    height: 48,
     borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
@@ -731,17 +854,12 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.outfitBold,
     color: colors.onSurface,
   },
-  headerRightBox: {
-    width: 40,
-    height: 40,
-    borderRadius: radii.pill,
-    backgroundColor: 'rgba(255, 196, 107, 0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
+  headerSpacer: {
+    width: 48,
+    height: 48,
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 36,
   },
   celebrationSection: {
     alignItems: 'center',
@@ -749,35 +867,21 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   badgeOuter: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 76,
+    height: 76,
+    borderRadius: 38,
     backgroundColor: 'rgba(255, 122, 89, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 6,
-    position: 'relative',
   },
   badgeInner: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  badgeSparkle: {
-    position: 'absolute',
-    bottom: -2,
-    right: -2,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: colors.surfaceContainerLowest,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   congratsTitle: {
     fontSize: 26,
@@ -793,14 +897,13 @@ const styles = StyleSheet.create({
   metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: spacing.gutter,
   },
   metricCard: {
-    width: '48%',
-    padding: 14,
-    borderRadius: 16,
+    flexBasis: '47.5%',
+    flexGrow: 1,
+    minWidth: 140,
     gap: 10,
-    backgroundColor: colors.surfaceContainerLow,
     justifyContent: 'space-between',
   },
   metricCardHeader: {
@@ -815,6 +918,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontFamily: fontFamilies.outfitBold,
     color: colors.onSurface,
+    fontVariant: ['tabular-nums'],
   },
   metricSubtitleText: {
     fontSize: 12,
@@ -823,29 +927,23 @@ const styles = StyleSheet.create({
   variationPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    backgroundColor: 'rgba(74, 222, 128, 0.15)',
+    gap: 4,
+    backgroundColor: 'rgba(123, 201, 143, 0.15)',
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: radii.pill,
     alignSelf: 'flex-start',
   },
   variationPillText: {
     fontSize: 11,
-    fontWeight: '700',
-    color: '#4ADE80',
+    fontFamily: fontFamilies.dmSansMedium,
+    color: colors.success,
   },
-  targetZonePill: {
-    backgroundColor: colors.surfaceContainerHighest,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: radii.pill,
-    alignSelf: 'flex-start',
+  variationPillNegative: {
+    backgroundColor: 'rgba(183, 173, 163, 0.15)',
   },
-  targetZonePillText: {
-    fontSize: 11,
+  variationPillTextNegative: {
     color: colors.onSurfaceVariant,
-    fontWeight: '600',
   },
   sectionContainer: {
     gap: 12,
@@ -874,15 +972,12 @@ const styles = StyleSheet.create({
   recordsBadgeText: {
     color: colors.pr,
     fontSize: 12,
-    fontWeight: '700',
+    fontFamily: fontFamilies.dmSansMedium,
   },
   recordsList: {
     gap: 10,
   },
   recordCard: {
-    padding: 14,
-    borderRadius: 16,
-    backgroundColor: colors.surfaceContainerLow,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -896,9 +991,9 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   trophyIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    width: 44,
+    height: 44,
+    borderRadius: radii.sm,
     backgroundColor: 'rgba(255, 196, 107, 0.15)',
     borderWidth: 1,
     borderColor: 'rgba(255, 196, 107, 0.25)',
@@ -919,6 +1014,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: fontFamilies.outfitBold,
     color: colors.onSurface,
+    fontVariant: ['tabular-nums'],
   },
   prDeltaPill: {
     backgroundColor: 'rgba(255, 196, 107, 0.15)',
@@ -928,16 +1024,14 @@ const styles = StyleSheet.create({
   },
   prDeltaPillText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontFamily: fontFamilies.dmSansMedium,
     color: colors.pr,
+    fontVariant: ['tabular-nums'],
   },
   exerciseLoadsList: {
     gap: 10,
   },
   loadItemCard: {
-    backgroundColor: colors.surfaceContainerLow,
-    borderRadius: 16,
-    padding: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -962,8 +1056,9 @@ const styles = StyleSheet.create({
   },
   indexBadgeText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontFamily: fontFamilies.dmSansMedium,
     color: colors.onSurfaceVariant,
+    fontVariant: ['tabular-nums'],
   },
   indexBadgeTextPr: {
     color: colors.pr,
@@ -991,7 +1086,7 @@ const styles = StyleSheet.create({
   },
   prNoticeText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontFamily: fontFamilies.dmSansMedium,
     color: colors.pr,
   },
   loadItemRight: {
@@ -1003,9 +1098,51 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: fontFamilies.outfitBold,
     color: colors.onSurface,
+    fontVariant: ['tabular-nums'],
   },
   loadWeightTextPr: {
     color: colors.pr,
+  },
+  errorCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    gap: 14,
+  },
+  errorInfo: {
+    alignItems: 'center',
+    gap: 6,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontFamily: fontFamilies.outfitBold,
+    color: colors.onSurface,
+    textAlign: 'center',
+  },
+  errorSubtitle: {
+    fontSize: 13,
+    color: colors.onSurfaceVariant,
+    textAlign: 'center',
+    paddingHorizontal: 8,
+  },
+  retryButton: {
+    height: 48,
+    minHeight: 48,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceContainerHigh,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 20,
+    marginTop: 4,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontFamily: fontFamilies.dmSansMedium,
+    color: colors.onSurface,
   },
   footerActions: {
     marginTop: 10,
@@ -1013,8 +1150,9 @@ const styles = StyleSheet.create({
   },
   secondaryButton: {
     height: 52,
+    minHeight: 48,
     borderRadius: radii.pill,
-    backgroundColor: colors.surfaceContainer,
+    backgroundColor: colors.surfaceContainerHigh,
     borderWidth: 1,
     borderColor: colors.outlineVariant,
     flexDirection: 'row',
@@ -1024,28 +1162,24 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     fontSize: 15,
-    fontFamily: fontFamilies.outfitSemiBold,
+    fontFamily: fontFamilies.dmSansMedium,
     color: colors.onSurface,
   },
   primaryButton: {
-    height: 56,
+    height: spacing.buttonHeight,
+    minHeight: 48,
     borderRadius: radii.pill,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
   },
   primaryButtonText: {
     fontSize: 16,
     fontFamily: fontFamilies.outfitBold,
-    color: colors.background,
+    color: colors.onPrimary,
   },
   buttonPressed: {
-    opacity: 0.85,
-    transform: [{ scale: 0.99 }],
+    opacity: 0.88,
+    transform: [{ scale: 0.995 }],
   },
 });
