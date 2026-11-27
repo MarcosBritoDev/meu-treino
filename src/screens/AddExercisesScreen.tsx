@@ -17,26 +17,18 @@ import {
   Check,
   Plus,
   Dumbbell,
-  Weight,
-  Cable,
-  User,
-  Boxes,
-  Sliders,
-  CircleDot,
-  ShieldCheck,
-  HeartPulse,
-  Ellipsis,
   RotateCcw,
   ChevronDown,
 } from 'lucide-react-native';
 import { RootStackParamList } from '../navigation/types';
-import { colors, radii, spacing, typography, fontFamilies } from '../theme';
+import { colors, radii, spacing, typography } from '../theme';
 import {
   Text,
   Button,
   triggerHaptic,
   MusclePickerSheet,
   EquipmentPickerSheet,
+  MuscleIcon,
 } from '../ui';
 import {
   normalizeSearchText,
@@ -355,40 +347,7 @@ export const AddExercisesScreen: React.FC = () => {
     }
   };
 
-  const renderEquipmentIcon = (equipment: string) => {
-    const norm = normalizeEquipmentName(equipment);
-    switch (norm) {
-      case 'Barra':
-        return <Weight size={20} color={colors.primary} strokeWidth={1.75} />;
-      case 'Halteres':
-        return <Dumbbell size={20} color={colors.primary} strokeWidth={1.75} />;
-      case 'Máquina':
-        return <Boxes size={20} color={colors.primary} strokeWidth={1.75} />;
-      case 'Cabo / Polia':
-        return <Cable size={20} color={colors.primary} strokeWidth={1.75} />;
-      case 'Peso corporal':
-        return <User size={20} color={colors.primary} strokeWidth={1.75} />;
-      case 'Smith':
-        return <Sliders size={20} color={colors.primary} strokeWidth={1.75} />;
-      case 'Kettlebell':
-        return <CircleDot size={20} color={colors.primary} strokeWidth={1.75} />;
-      case 'Barra de segurança':
-        return <ShieldCheck size={20} color={colors.primary} strokeWidth={1.75} />;
-      case 'Cardio':
-        return <HeartPulse size={20} color={colors.primary} strokeWidth={1.75} />;
-      case 'Outro':
-      default:
-        return <Ellipsis size={20} color={colors.primary} strokeWidth={1.75} />;
-    }
-  };
 
-  const getSubtitle = (ex: ExerciseSelectionItem) => {
-    const secondary = parseSecondaryMuscles(ex.secondaryMuscles);
-    if (secondary.length > 0) {
-      return `${ex.muscleGroup} · ${secondary.join(', ')} · ${ex.equipment}`;
-    }
-    return `${ex.muscleGroup} · ${ex.equipment}`;
-  };
 
   const selectedCount = selectedIds.length;
   const showEmptyState = totalResultsCount === 0;
@@ -402,6 +361,7 @@ export const AddExercisesScreen: React.FC = () => {
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel="Voltar"
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
           <ArrowLeft size={22} color={colors.onSurface} strokeWidth={2} />
         </Pressable>
@@ -424,6 +384,7 @@ export const AddExercisesScreen: React.FC = () => {
           ]}
           accessibilityRole="button"
           accessibilityLabel="Cadastrar novo exercício"
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
           <Plus size={16} color={colors.primary} strokeWidth={2.2} />
           <Text variant="bodyMedium" style={styles.newButtonText}>
@@ -455,6 +416,7 @@ export const AddExercisesScreen: React.FC = () => {
               style={styles.clearSearchBtn}
               accessibilityRole="button"
               accessibilityLabel="Limpar busca"
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             >
               <X size={16} color={colors.onSurfaceVariant} strokeWidth={2} />
             </Pressable>
@@ -462,7 +424,7 @@ export const AddExercisesScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* 3. BOTÕES DE FILTRO LADO A LADO */}
+      {/* 3. BOTÕES DE FILTRO SIMÉTRICOS COM RÓTULOS COMPACTOS (SEM TRUNCAMENTO EM 360PX) */}
       <View style={styles.filterBar}>
         <Pressable
           onPress={() => {
@@ -484,13 +446,31 @@ export const AddExercisesScreen: React.FC = () => {
               isMuscleActive ? styles.filterBtnTextActive : styles.filterBtnTextInactive,
             ]}
           >
-            {isMuscleActive ? `Músculo: ${selectedMuscle}` : 'Músculo: Todos'}
+            {isMuscleActive ? selectedMuscle : 'Músculo'}
           </Text>
-          <ChevronDown
-            size={16}
-            color={isMuscleActive ? colors.primary : colors.onSurfaceVariant}
-            strokeWidth={2}
-          />
+
+          {isMuscleActive ? (
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation();
+                triggerHaptic('light');
+                setSelectedMuscle(null);
+              }}
+              hitSlop={{ top: 12, bottom: 12, left: 10, right: 10 }}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel="Remover filtro de músculo"
+              style={styles.filterChipClear}
+            >
+              <X size={15} color={colors.primary} strokeWidth={2.4} />
+            </Pressable>
+          ) : (
+            <ChevronDown
+              size={16}
+              color={colors.onSurfaceVariant}
+              strokeWidth={2}
+            />
+          )}
         </Pressable>
 
         <Pressable
@@ -513,35 +493,41 @@ export const AddExercisesScreen: React.FC = () => {
               isEquipActive ? styles.filterBtnTextActive : styles.filterBtnTextInactive,
             ]}
           >
-            {isEquipActive ? `${selectedEquipment}` : 'Equipamento'}
+            {isEquipActive ? selectedEquipment : 'Equipamento'}
           </Text>
-          <ChevronDown
-            size={16}
-            color={isEquipActive ? colors.primary : colors.onSurfaceVariant}
-            strokeWidth={2}
-          />
-        </Pressable>
 
-        {hasActiveFilters && (
-          <Pressable
-            onPress={handleResetFilters}
-            style={styles.clearFilterBtn}
-            accessible={true}
-            accessibilityRole="button"
-            accessibilityLabel="Limpar filtros e busca"
-          >
-            <Text style={styles.clearFilterText}>Limpar</Text>
-          </Pressable>
-        )}
+          {isEquipActive ? (
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation();
+                triggerHaptic('light');
+                setSelectedEquipment(null);
+              }}
+              hitSlop={{ top: 12, bottom: 12, left: 10, right: 10 }}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel="Remover filtro de equipamento"
+              style={styles.filterChipClear}
+            >
+              <X size={15} color={colors.primary} strokeWidth={2.4} />
+            </Pressable>
+          ) : (
+            <ChevronDown
+              size={16}
+              color={colors.onSurfaceVariant}
+              strokeWidth={2}
+            />
+          )}
+        </Pressable>
       </View>
 
-      {/* STATUS DA LISTA */}
+      {/* STATUS DA LISTA COM NÚMERO TABULAR */}
       {!showEmptyState && (
         <View style={styles.listStatusRow}>
           <View style={styles.statusDot} />
           <Text variant="labelSmall" style={styles.listStatusText}>
             Exercícios disponíveis •{' '}
-            <Text variant="labelSmall" style={styles.listStatusCount}>
+            <Text variant="labelSmall" tabular style={styles.listStatusCount}>
               {totalResultsCount}
             </Text>
           </Text>
@@ -591,12 +577,13 @@ export const AddExercisesScreen: React.FC = () => {
             data={flatListItems}
             keyExtractor={(item) => item.id}
             getItemType={(item) => item.type}
+            keyboardDismissMode="on-drag"
             contentContainerStyle={[
               styles.listContent,
               {
                 paddingBottom:
                   selectedCount > 0
-                    ? insets.bottom + 130
+                    ? insets.bottom + 88
                     : insets.bottom + spacing.xl,
               },
             ]}
@@ -639,24 +626,40 @@ export const AddExercisesScreen: React.FC = () => {
                       : 'Não selecionado'
                   }`}
                 >
-                  {/* Ícone do equipamento */}
-                  <View style={styles.equipmentIconBox}>
-                    {renderEquipmentIcon(ex.equipment)}
+                  {/* Ícone anatômico vetorial neutro */}
+                  <View style={styles.iconBox}>
+                    <MuscleIcon muscle={ex.muscleGroup} size={26} />
                   </View>
 
-                  {/* Detalhes do Exercício: Nome + Subtítulo limpo em 1 linha */}
+                  {/* Detalhes do Exercício: Linha 1 dedicada ao nome, Linha 2 para tags */}
                   <View style={styles.cardDetails}>
-                    <View style={styles.nameRow}>
+                    <Text
+                      variant="bodyLarge"
+                      style={[
+                        styles.exerciseName,
+                        isAlreadyInWorkout && styles.exerciseNameDisabled,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {ex.name}
+                    </Text>
+
+                    <View style={styles.cardMetaRow}>
+                      <View style={styles.equipmentPill}>
+                        <Text style={styles.equipmentPillText} numberOfLines={1}>
+                          {ex.equipment}
+                        </Text>
+                      </View>
+
                       <Text
-                        variant="bodyLarge"
-                        style={[
-                          styles.exerciseName,
-                          isAlreadyInWorkout && styles.exerciseNameDisabled,
-                        ]}
+                        variant="bodySmall"
+                        color="secondary"
                         numberOfLines={1}
+                        style={styles.muscleMetaText}
                       >
-                        {ex.name}
+                        {ex.muscleGroup}
                       </Text>
+
                       {isSecondary && (
                         <View style={styles.secondaryBadge}>
                           <Text style={styles.secondaryBadgeText}>
@@ -665,15 +668,6 @@ export const AddExercisesScreen: React.FC = () => {
                         </View>
                       )}
                     </View>
-
-                    <Text
-                      variant="bodySmall"
-                      color="secondary"
-                      numberOfLines={1}
-                      style={styles.exerciseSubtitle}
-                    >
-                      {getSubtitle(ex)}
-                    </Text>
                   </View>
 
                   {/* Indicador de Check ou Selo "Já no treino" */}
@@ -702,62 +696,57 @@ export const AddExercisesScreen: React.FC = () => {
         </View>
       )}
 
-      {/* 5. BARRA INFERIOR FIXA */}
+      {/* 5. BARRA INFERIOR FIXA CONDENSADA EM LINHA ÚNICA (56dp + insets.bottom) */}
       {selectedCount > 0 && (
         <View
           style={[
             styles.floatingActionBar,
-            { paddingBottom: Math.max(18, insets.bottom + 8) },
+            { paddingBottom: Math.max(spacing.md, insets.bottom + 8) },
           ]}
         >
-          {/* Linha superior da barra */}
-          <View style={styles.actionSummaryRow}>
-            <View style={styles.selectedCountRow}>
-              <View style={styles.pulsingDot} />
-              <Text variant="headline" style={styles.selectedSummaryText}>
-                {selectedCount} {selectedCount === 1 ? 'selecionado' : 'selecionados'}
-              </Text>
-            </View>
-
+          <View style={styles.floatingBarRow}>
+            {/* Botão de limpar seleção com contador em Outfit tabular */}
             <Pressable
               onPress={handleClearSelection}
+              accessible={true}
               accessibilityRole="button"
-              accessibilityLabel="Limpar seleção"
+              accessibilityLabel={`Limpar seleção de ${selectedCount} ${selectedCount === 1 ? 'exercício' : 'exercícios'}`}
+              style={({ pressed }) => [
+                styles.clearSelectionBtn,
+                pressed && styles.clearSelectionBtnPressed,
+              ]}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Text variant="bodySmall" style={styles.clearSelectionText}>
-                Limpar seleção
-              </Text>
-            </Pressable>
-          </View>
-
-          {/* Linha inferior de botões */}
-          <View style={styles.actionButtonsRow}>
-            <Pressable
-              onPress={() => navigation.goBack()}
-              style={styles.cancelButton}
-              accessibilityRole="button"
-              accessibilityLabel="Cancelar"
-            >
-              <Text variant="bodyMedium" style={styles.cancelButtonText}>
-                Cancelar
+              <View style={styles.selectionCountBadge}>
+                <Text variant="labelSmall" tabular style={styles.selectionCountBadgeText}>
+                  {selectedCount}
+                </Text>
+              </View>
+              <Text variant="bodyMedium" style={styles.clearSelectionText}>
+                Limpar
               </Text>
             </Pressable>
 
+            {/* Botão primário coral Adicionar ao treino */}
             <Pressable
               onPress={handleConfirmAdd}
-              style={styles.confirmAddButton}
+              accessible={true}
               accessibilityRole="button"
               accessibilityLabel={
                 replaceTargetWorkoutExerciseId
                   ? 'Substituir exercício selecionado'
-                  : `Adicionar ${selectedCount} exercícios ao treino`
+                  : `Adicionar ${selectedCount} ${selectedCount === 1 ? 'exercício' : 'exercícios'} ao treino`
               }
+              style={({ pressed }) => [
+                styles.confirmAddButton,
+                pressed && styles.confirmAddButtonPressed,
+              ]}
             >
               <Plus size={18} color={colors.onPrimary} strokeWidth={2.4} />
-              <Text variant="bodyMedium" style={styles.confirmAddButtonText}>
+              <Text variant="bodyLarge" style={styles.confirmAddButtonText}>
                 {replaceTargetWorkoutExerciseId
                   ? 'Substituir exercício'
-                  : `Adicionar ao treino (${selectedCount})`}
+                  : `Adicionar (${selectedCount})`}
               </Text>
             </Pressable>
           </View>
@@ -791,13 +780,13 @@ export const AddExercisesScreen: React.FC = () => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.background, // #1A1715
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: colors.outlineVariant,
@@ -811,8 +800,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: {
-    fontFamily: fontFamilies.outfitBold,
+    fontFamily: typography.headline.fontFamily,
     fontSize: 20,
+    fontWeight: '700',
     color: colors.onSurface,
   },
   newButton: {
@@ -822,13 +812,13 @@ const styles = StyleSheet.create({
     minHeight: spacing.touchTargetMin, // 48px
     paddingHorizontal: 16,
     borderRadius: radii.pill,
-    backgroundColor: colors.primaryContainer, // #3A251F
+    backgroundColor: colors.surfaceContainerHigh,
     borderWidth: 1,
-    borderColor: 'rgba(255, 122, 89, 0.4)',
+    borderColor: colors.outlineVariant,
     justifyContent: 'center',
   },
   newButtonPressed: {
-    backgroundColor: 'rgba(255, 122, 89, 0.25)',
+    backgroundColor: colors.surfaceContainerHighest,
   },
   newButtonText: {
     fontFamily: typography.headline.fontFamily,
@@ -837,7 +827,7 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   searchContainer: {
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.md,
     paddingTop: 12,
     paddingBottom: 8,
   },
@@ -854,20 +844,23 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontFamily: fontFamilies.dmSansRegular,
+    fontFamily: typography.bodyMedium.fontFamily,
     fontSize: 15,
     color: colors.onSurface,
   },
   clearSearchBtn: {
-    padding: 4,
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   filterBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.md,
     paddingTop: 4,
     paddingBottom: 10,
-    gap: 8,
+    gap: spacing.sm,
   },
   filterBtn: {
     flex: 1,
@@ -884,9 +877,9 @@ const styles = StyleSheet.create({
     borderColor: colors.outlineVariant,
   },
   filterBtnActive: {
-    backgroundColor: colors.primaryContainer, // #3A251F
+    backgroundColor: colors.primaryContainer,
     borderWidth: 1,
-    borderColor: colors.primary, // #FF7A59
+    borderColor: colors.primary,
   },
   filterBtnText: {
     fontSize: 13,
@@ -896,28 +889,17 @@ const styles = StyleSheet.create({
   filterBtnTextInactive: {
     fontFamily: typography.bodyMedium.fontFamily,
     fontWeight: '500',
-    color: colors.onSurfaceVariant, // #B7ADA3
+    color: colors.onSurfaceVariant,
   },
   filterBtnTextActive: {
     fontFamily: typography.headline.fontFamily,
     fontWeight: '600',
-    color: colors.primary, // #FF7A59
+    color: colors.primary,
   },
-  clearFilterBtn: {
-    minHeight: spacing.touchTargetMin, // 48px
-    paddingHorizontal: 14,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surfaceContainerHigh,
-    borderWidth: 1,
-    borderColor: colors.outlineVariant,
+  filterChipClear: {
+    padding: 4,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  clearFilterText: {
-    fontSize: 13,
-    fontFamily: typography.bodyMedium.fontFamily,
-    fontWeight: '500',
-    color: colors.onSurfaceVariant,
   },
   listStatusRow: {
     flexDirection: 'row',
@@ -944,7 +926,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.md,
   },
   sectionHeaderContainer: {
     paddingTop: spacing.md,
@@ -959,8 +941,8 @@ const styles = StyleSheet.create({
     color: colors.onSurfaceVariant,
   },
   exerciseCard: {
-    minHeight: 68,
-    backgroundColor: colors.surfaceContainer, // #23201D
+    minHeight: 72,
+    backgroundColor: colors.surfaceContainer,
     borderRadius: radii.card,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -971,7 +953,7 @@ const styles = StyleSheet.create({
     borderColor: colors.outlineVariant,
   },
   exerciseCardSelected: {
-    backgroundColor: colors.surfaceContainerHigh, // #2D2925
+    backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.primary,
   },
   exerciseCardPressed: {
@@ -981,16 +963,17 @@ const styles = StyleSheet.create({
   exerciseCardDisabled: {
     opacity: 0.55,
   },
-  equipmentIconBox: {
+  iconBox: {
     width: 44,
     height: 44,
-    borderRadius: 12,
+    borderRadius: radii.sm,
     backgroundColor: colors.surfaceContainerHigh,
     borderWidth: 1,
     borderColor: colors.outlineVariant,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
+    flexShrink: 0,
   },
   cardDetails: {
     flex: 1,
@@ -998,20 +981,42 @@ const styles = StyleSheet.create({
     paddingRight: 8,
     justifyContent: 'center',
   },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
   exerciseName: {
     fontFamily: typography.bodyLarge.fontFamily,
     fontSize: 15,
-    fontWeight: '500',
+    fontWeight: '600',
     color: colors.onSurface,
-    flexShrink: 1,
   },
   exerciseNameDisabled: {
     color: colors.textMuted,
+  },
+  cardMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+    flexWrap: 'nowrap',
+  },
+  equipmentPill: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceContainerHigh,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+    flexShrink: 0,
+  },
+  equipmentPillText: {
+    fontSize: 11,
+    fontFamily: typography.labelSmall.fontFamily,
+    fontWeight: '600',
+    color: colors.onSurfaceVariant,
+  },
+  muscleMetaText: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: colors.onSurfaceVariant,
+    flexShrink: 1,
   },
   secondaryBadge: {
     paddingHorizontal: 6,
@@ -1020,17 +1025,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceContainerHigh,
     borderWidth: 1,
     borderColor: colors.outlineVariant,
+    flexShrink: 0,
   },
   secondaryBadgeText: {
-    fontSize: 10,
+    fontSize: 11,
     fontFamily: typography.labelSmall.fontFamily,
     fontWeight: '500',
     color: colors.onSurfaceVariant,
-  },
-  exerciseSubtitle: {
-    fontSize: 13,
-    lineHeight: 17,
-    marginTop: 2,
   },
   checkboxCircle: {
     width: 28,
@@ -1049,10 +1050,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: radii.pill,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    backgroundColor: colors.surfaceContainerHigh,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
   },
   alreadyInWorkoutText: {
     fontSize: 11,
+    fontFamily: typography.labelSmall.fontFamily,
+    fontWeight: '500',
     color: colors.textMuted,
   },
   emptyStateContainer: {
@@ -1105,67 +1110,62 @@ const styles = StyleSheet.create({
     borderTopRightRadius: radii.card,
     borderTopWidth: 1,
     borderTopColor: colors.outlineVariant,
-    paddingHorizontal: 20,
-    paddingTop: 14,
+    paddingHorizontal: spacing.margin,
+    paddingTop: 12,
   },
-  actionSummaryRow: {
+  floatingBarRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
-    marginBottom: 12,
+    gap: spacing.sm,
   },
-  selectedCountRow: {
+  clearSelectionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  pulsingDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.primary,
-  },
-  selectedSummaryText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.onSurface,
-  },
-  clearSelectionText: {
-    fontSize: 13,
-    color: colors.textMuted,
-  },
-  actionButtonsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  cancelButton: {
-    flex: 1,
-    minHeight: spacing.touchTargetMin,
+    minHeight: 48,
+    paddingHorizontal: 14,
     borderRadius: radii.pill,
     backgroundColor: colors.surfaceContainerHigh,
-    alignItems: 'center',
-    justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.outlineVariant,
   },
-  cancelButtonText: {
-    fontSize: 15,
+  clearSelectionBtnPressed: {
+    backgroundColor: colors.surfaceContainerHighest,
+  },
+  selectionCountBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: radii.pill,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+  },
+  selectionCountBadgeText: {
+    color: colors.onPrimary,
+    fontWeight: '700',
+    fontSize: 11,
+  },
+  clearSelectionText: {
+    fontSize: 13,
+    fontFamily: typography.bodyMedium.fontFamily,
     fontWeight: '600',
-    color: colors.onSurface,
+    color: colors.onSurfaceVariant,
   },
   confirmAddButton: {
-    flex: 1.6,
-    minHeight: spacing.touchTargetMin,
+    flex: 1,
+    minHeight: 52,
     borderRadius: radii.pill,
     backgroundColor: colors.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
+    paddingHorizontal: spacing.md,
+  },
+  confirmAddButtonPressed: {
+    backgroundColor: colors.accentPressed,
+    transform: [{ scale: 0.98 }],
   },
   confirmAddButtonText: {
     fontSize: 15,

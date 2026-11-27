@@ -6,28 +6,22 @@ import {
   Pressable,
   Modal,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
-  ArrowLeft,
   MoreVertical,
   Dumbbell,
   RefreshCw,
   Edit2,
   Plus,
   Play,
-  History,
   Copy,
   Trash2,
   FolderInput,
   ArrowUp,
   ArrowDown,
   Check,
-  List,
-  Repeat,
-  Clock,
-  PlusCircle,
 } from 'lucide-react-native';
 import { RootStackParamList } from '../navigation/types';
 import { colors, radii, spacing, typography } from '../theme';
@@ -66,6 +60,7 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export const GroupDetailScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
+  const insets = useSafeAreaInsets();
   const route = useRoute<RouteProp<RootStackParamList, 'GroupDetail'>>();
   const groupId = route.params?.groupId;
 
@@ -336,10 +331,14 @@ export const GroupDetailScreen: React.FC = () => {
               triggerHaptic('light');
               setGroupMenuVisible(true);
             }}
-            style={styles.iconButton}
+            style={({ pressed }) => [
+              styles.iconButton,
+              pressed && styles.iconButtonPressed,
+            ]}
             accessible={true}
             accessibilityRole="button"
             accessibilityLabel="Opções do grupo"
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 8 }}
           >
             <MoreVertical size={22} color={colors.onSurfaceVariant} strokeWidth={1.75} />
           </Pressable>
@@ -347,7 +346,10 @@ export const GroupDetailScreen: React.FC = () => {
       />
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: insets.bottom + spacing.xl * 1.5 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {/* Bloco de Identidade do Grupo */}
@@ -372,10 +374,10 @@ export const GroupDetailScreen: React.FC = () => {
           {/* Título Principal & Ação Rápida de Edição */}
           <View style={styles.titleRow}>
             <View style={styles.titleTextContainer}>
-              <Text variant="displayLarge" style={styles.groupTitle}>
+              <Text variant="headline" style={styles.groupTitle}>
                 {group.name}
               </Text>
-              <Text variant="bodyLarge" style={styles.groupSubtitle}>
+              <Text variant="bodyMedium" style={styles.groupSubtitle}>
                 {groupSubtitle}
               </Text>
             </View>
@@ -385,10 +387,14 @@ export const GroupDetailScreen: React.FC = () => {
                 triggerHaptic('light');
                 setEditGroupSheetVisible(true);
               }}
-              style={styles.editGroupButton}
+              style={({ pressed }) => [
+                styles.editGroupButton,
+                pressed && styles.editGroupButtonPressed,
+              ]}
               accessible={true}
               accessibilityRole="button"
               accessibilityLabel="Editar grupo"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Edit2 size={16} color={colors.onSurfaceVariant} strokeWidth={1.75} />
               <Text variant="labelSmall" style={styles.editGroupButtonText}>
@@ -419,203 +425,104 @@ export const GroupDetailScreen: React.FC = () => {
               triggerHaptic('light');
               setNewWorkoutModalVisible(true);
             }}
-            style={styles.newWorkoutPill}
+            style={({ pressed }) => [
+              styles.newWorkoutPill,
+              pressed && styles.newWorkoutPillPressed,
+            ]}
             accessible={true}
             accessibilityRole="button"
             accessibilityLabel="Novo treino"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Plus size={16} color={colors.primary} strokeWidth={2.2} />
+            <Plus size={16} color={colors.primary} strokeWidth={2.4} />
             <Text variant="labelSmall" style={styles.newWorkoutPillText}>
               Novo treino
             </Text>
           </Pressable>
         </View>
 
-        {/* Cards de Treino Empilhados */}
+        {/* Cards de Treino Compactos no Padrão WorkoutsScreen */}
         <View style={styles.workoutsStack}>
-          {workouts.map((w, idx) => {
-            const isFirst = idx === 0;
-            const isLast = idx === workouts.length - 1;
-
+          {workouts.map((w) => {
             return (
-              <View
-                key={w.id}
-                style={[
-                  styles.workoutCard,
-                  w.isScheduledForToday && styles.workoutCardScheduled,
-                ]}
-              >
-                {/* Linha superior de destaque quando programado para hoje */}
-                {w.isScheduledForToday && <View style={styles.scheduledAccentBar} />}
-
-                {/* Topo do Card */}
-                <View style={styles.cardTopRow}>
-                  <View style={styles.cardBadgesLeft}>
-                    {/* Rotina em sentence case: ex.: Rotina A-1 */}
-                    <View style={styles.routineBadge}>
-                      <Text variant="labelSmall" style={styles.routineBadgeText}>
-                        {w.code}
+              <View key={w.id} style={styles.workoutItemCard}>
+                {/* Área principal do item: tocar abre Prévia / Edição */}
+                <Pressable
+                  onPress={() => {
+                    triggerHaptic('light');
+                    navigation.navigate('EditWorkout', { workoutId: w.id });
+                  }}
+                  style={({ pressed }) => [
+                    styles.workoutItemContent,
+                    pressed && styles.workoutItemContentPressed,
+                  ]}
+                  accessible={true}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Ficha ${w.name}, ${w.targetMuscles}, ${w.exerciseCount} exercícios, ${w.totalSets} séries`}
+                >
+                  {/* Linha 1: Nome do treino + músculos-alvo */}
+                  <View style={styles.workoutNameRow}>
+                    <Text variant="bodyLarge" style={styles.workoutName} numberOfLines={1}>
+                      {w.name}
+                    </Text>
+                    {w.targetMuscles ? (
+                      <Text variant="bodySmall" color="secondary" style={styles.workoutMuscles} numberOfLines={1}>
+                        {`• ${w.targetMuscles}`}
                       </Text>
-                    </View>
+                    ) : null}
+                  </View>
 
-                    {/* Selo: Programado para hoje ou Último log */}
+                  {/* Linha 2: Resumo métrico tabular + indicador Programado para hoje */}
+                  <View style={styles.workoutMetaRow}>
                     {w.isScheduledForToday ? (
                       <View style={styles.scheduledBadge}>
                         <View style={styles.scheduledPulseDot} />
                         <Text variant="labelSmall" style={styles.scheduledBadgeText}>
-                          Programado para hoje
+                          Hoje
                         </Text>
                       </View>
-                    ) : (
-                      <View style={styles.logBadge}>
-                        <History size={13} color={colors.onSurfaceVariant} strokeWidth={1.75} />
-                        <Text variant="labelSmall" color="secondary">
-                          {w.lastLogText}
-                        </Text>
-                      </View>
-                    )}
+                    ) : null}
+                    <Text variant="bodySmall" color="secondary" tabular style={styles.workoutStatsText} numberOfLines={1}>
+                      {`${w.exerciseCount} ${w.exerciseCount === 1 ? 'exercício' : 'exercícios'} · ${w.totalSets} ${w.totalSets === 1 ? 'série' : 'séries'} · ~${w.estimatedDurationMin} min`}
+                    </Text>
                   </View>
+                </Pressable>
 
-                  {/* Menu (...) da ficha de treino */}
+                {/* Ações à direita: Iniciar + Menu (...) bem separados */}
+                <View style={styles.workoutActionsRight}>
+                  <Pressable
+                    onPress={() => handleStartWorkout(w)}
+                    style={({ pressed }) => [
+                      styles.startWorkoutButton,
+                      pressed && styles.startWorkoutButtonPressed,
+                    ]}
+                    accessible={true}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Iniciar treino ${w.name}`}
+                    hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                  >
+                    <Play size={15} color={colors.onPrimary} fill={colors.onPrimary} strokeWidth={1.75} />
+                    <Text variant="labelSmall" style={styles.startWorkoutText}>
+                      Iniciar
+                    </Text>
+                  </Pressable>
+
                   <Pressable
                     onPress={() => {
                       triggerHaptic('light');
                       setSelectedWorkout(w);
                       setWorkoutMenuVisible(true);
                     }}
-                    style={styles.cardMenuButton}
+                    style={({ pressed }) => [
+                      styles.cardMenuButton,
+                      pressed && styles.cardMenuButtonPressed,
+                    ]}
                     accessible={true}
                     accessibilityRole="button"
                     accessibilityLabel={`Opções de ${w.name}`}
+                    hitSlop={{ top: 8, bottom: 8, left: 6, right: 8 }}
                   >
-                    <MoreVertical size={18} color={colors.onSurfaceVariant} strokeWidth={1.75} />
-                  </Pressable>
-                </View>
-
-                {/* Nome & Músculos Alvo */}
-                <Pressable
-                  onPress={() => {
-                    triggerHaptic('light');
-                    navigation.navigate('EditWorkout', { workoutId: w.id });
-                  }}
-                  style={styles.workoutNameBlock}
-                  accessible={true}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Abrir prévia de ${w.name}`}
-                >
-                  <Text variant="bodyLarge" style={styles.workoutCardTitle}>
-                    {w.name}
-                  </Text>
-                  <Text variant="labelSmall" color="secondary" style={styles.workoutMusclesText}>
-                    {`(${w.targetMuscles})`}
-                  </Text>
-                </Pressable>
-
-                {/* Lista resumida de exercícios (ex: "Supino Reto — A + 5 séries") */}
-                {w.exercises && w.exercises.length > 0 ? (
-                  <Pressable
-                    onPress={() => {
-                      triggerHaptic('light');
-                      navigation.navigate('EditWorkout', { workoutId: w.id });
-                    }}
-                    style={styles.loadSequenceContainer}
-                    accessible={true}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Ver exercícios de ${w.name}`}
-                  >
-                    <View style={styles.exerciseSummaryList}>
-                      {w.exercises.slice(0, 3).map((ex, exIdx) => (
-                        <Text key={`ex-${exIdx}`} variant="bodySmall" color="secondary" style={styles.exerciseSummaryText} numberOfLines={1}>
-                          {ex.itemText}
-                        </Text>
-                      ))}
-                      {w.exercises.length > 3 && (
-                        <Text variant="labelSmall" color="secondary" style={styles.extraExerciseCountText}>
-                          {`+${w.exercises.length - 3} ${w.exercises.length - 3 === 1 ? 'exercício' : 'exercícios'}`}
-                        </Text>
-                      )}
-                    </View>
-                  </Pressable>
-                ) : w.exerciseChips.length > 0 ? (
-                  <Pressable
-                    onPress={() => {
-                      triggerHaptic('light');
-                      navigation.navigate('EditWorkout', { workoutId: w.id });
-                    }}
-                    style={styles.loadSequenceContainer}
-                    accessible={true}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Ver exercícios de ${w.name}`}
-                  >
-                    <View style={styles.loadChipsRow}>
-                      {w.exerciseChips.map((exName, exIdx) => (
-                        <View key={`chip-${exIdx}`} style={styles.exerciseChip}>
-                          <Text variant="labelSmall" style={styles.exerciseChipText}>
-                            {exName}
-                          </Text>
-                        </View>
-                      ))}
-
-                      {w.extraExerciseCount > 0 && (
-                        <View style={styles.extraChip}>
-                          <Text variant="labelSmall" style={styles.extraChipText}>
-                            {`+${w.extraExerciseCount} ${w.extraExerciseCount === 1 ? 'exercício' : 'exercícios'}`}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  </Pressable>
-                ) : null}
-
-                {/* Resumo do treino: "N séries · ~X min" */}
-                <View style={styles.metricsBar}>
-                  <View style={styles.metricItem}>
-                    <Repeat size={14} color={colors.primary} strokeWidth={1.75} />
-                    <Text variant="labelSmall" style={styles.workoutSummaryBold}>
-                      {w.summaryText || `${w.totalSets} ${w.totalSets === 1 ? 'série' : 'séries'} · ~${w.estimatedDurationMin} min`}
-                    </Text>
-                  </View>
-                  {w.exerciseCount > 0 && (
-                    <>
-                      <Text variant="labelSmall" color="secondary">
-                        ·
-                      </Text>
-                      <View style={styles.metricItem}>
-                        <List size={14} color={colors.onSurfaceVariant} strokeWidth={1.75} />
-                        <Text variant="labelSmall" color="secondary">
-                          {`${w.exerciseCount} ${w.exerciseCount === 1 ? 'exercício' : 'exercícios'}`}
-                        </Text>
-                      </View>
-                    </>
-                  )}
-                </View>
-
-                {/* Rodapé do Card com Ações */}
-                <View style={styles.cardActionsRow}>
-                  <Pressable
-                    onPress={() => handleStartWorkout(w)}
-                    style={styles.startWorkoutButton}
-                    accessible={true}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Iniciar treino ${w.name}`}
-                  >
-                    <Play size={18} color={colors.onPrimary} fill={colors.onPrimary} strokeWidth={1.75} />
-                    <Text variant="bodyMedium" style={styles.startWorkoutText}>
-                      Iniciar treino
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => {
-                      triggerHaptic('light');
-                      navigation.navigate('EditWorkout', { workoutId: w.id });
-                    }}
-                    style={styles.editWorkoutPencil}
-                    accessible={true}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Editar ${w.name}`}
-                  >
-                    <Edit2 size={18} color={colors.onSurfaceVariant} strokeWidth={1.75} />
+                    <MoreVertical size={20} color={colors.onSurfaceVariant} strokeWidth={1.75} />
                   </Pressable>
                 </View>
               </View>
@@ -623,20 +530,23 @@ export const GroupDetailScreen: React.FC = () => {
           })}
         </View>
 
-        {/* Botão de Rodapé: Adicionar outro treino a este grupo */}
+        {/* Botão de Rodapé: Adicionar treino */}
         <Pressable
           onPress={() => {
             triggerHaptic('light');
             setNewWorkoutModalVisible(true);
           }}
-          style={styles.footerAddWorkoutButton}
+          style={({ pressed }) => [
+            styles.addWorkoutButton,
+            pressed && styles.addWorkoutButtonPressed,
+          ]}
           accessible={true}
           accessibilityRole="button"
-          accessibilityLabel="Adicionar outro treino a este grupo"
+          accessibilityLabel="Adicionar treino ao grupo"
         >
-          <PlusCircle size={20} color={colors.primary} strokeWidth={2} />
-          <Text variant="bodyMedium" style={styles.footerAddWorkoutText}>
-            {workouts.length === 0 ? 'Adicionar treino ao grupo' : 'Adicionar outro treino a este grupo'}
+          <Plus size={18} color={colors.primary} strokeWidth={2.2} />
+          <Text variant="bodyLarge" style={styles.addWorkoutButtonText}>
+            Adicionar treino
           </Text>
         </Pressable>
       </ScrollView>
@@ -977,11 +887,14 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   iconButton: {
-    width: spacing.touchTargetMin,
-    height: spacing.touchTargetMin,
+    width: 44,
+    height: 44,
     borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  iconButtonPressed: {
+    backgroundColor: colors.surfaceContainerHigh,
   },
 
   // Identidade do Grupo
@@ -1016,26 +929,34 @@ const styles = StyleSheet.create({
   },
   groupTitle: {
     color: colors.onSurface,
-    lineHeight: 52,
+    fontSize: 24,
+    lineHeight: 30,
+    fontWeight: '700',
   },
   groupSubtitle: {
     color: colors.primary,
     fontWeight: '600',
     marginTop: 2,
+    fontSize: 14,
   },
   editGroupButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: radii.card,
+    paddingHorizontal: 14,
+    minHeight: 48,
+    borderRadius: radii.pill,
     backgroundColor: colors.surfaceContainerHigh,
-    marginTop: 4,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+  },
+  editGroupButtonPressed: {
+    backgroundColor: colors.surfaceContainerHighest,
   },
   editGroupButtonText: {
     color: colors.onSurfaceVariant,
     fontWeight: '500',
+    fontSize: 13,
   },
   groupDescription: {
     marginTop: 6,
@@ -1068,72 +989,78 @@ const styles = StyleSheet.create({
   newWorkoutPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    gap: 5,
+    paddingHorizontal: 14,
+    minHeight: 48,
     borderRadius: radii.pill,
     backgroundColor: colors.surfaceContainerHigh,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+  },
+  newWorkoutPillPressed: {
+    backgroundColor: colors.surfaceContainerHighest,
   },
   newWorkoutPillText: {
     color: colors.primary,
     fontWeight: '700',
+    fontSize: 13,
   },
 
-  // Cards de Treino
+  // Cards de Treino Compactos no Padrão WorkoutsScreen
   workoutsStack: {
-    gap: spacing.md,
+    gap: spacing.sm,
   },
-  workoutCard: {
+  workoutItemCard: {
     backgroundColor: colors.surfaceContainer,
     borderRadius: radii.card,
-    padding: spacing.md,
+    paddingVertical: 14,
+    paddingHorizontal: spacing.md,
     borderWidth: 1,
     borderColor: colors.outlineVariant,
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  workoutCardScheduled: {
-    borderColor: 'rgba(255, 122, 89, 0.45)',
-  },
-  scheduledAccentBar: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 3,
-    backgroundColor: colors.primary,
-  },
-  cardTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.xs,
+    minHeight: 76,
   },
-  cardBadgesLeft: {
+  workoutItemContent: {
     flex: 1,
+    paddingRight: spacing.sm,
+    justifyContent: 'center',
+  },
+  workoutItemContentPressed: {
+    opacity: 0.75,
+  },
+  workoutNameRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    flexWrap: 'wrap',
+    alignItems: 'baseline',
+    gap: 6,
   },
-  routineBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    backgroundColor: colors.surfaceContainerHighest,
-  },
-  routineBadgeText: {
+  workoutName: {
     color: colors.onSurface,
     fontWeight: '700',
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  workoutMuscles: {
+    flexShrink: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.onSurfaceVariant,
+  },
+  workoutMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
   },
   scheduledBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 9,
-    paddingVertical: 3,
-    borderRadius: radii.pill,
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
     backgroundColor: 'rgba(255, 122, 89, 0.16)',
+    borderRadius: radii.pill,
   },
   scheduledPulseDot: {
     width: 6,
@@ -1143,150 +1070,70 @@ const styles = StyleSheet.create({
   },
   scheduledBadgeText: {
     color: colors.primary,
+    fontSize: 11,
     fontWeight: '700',
   },
-  logBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  cardMenuButton: {
-    width: 30,
-    height: 30,
-    borderRadius: radii.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  // Nome e Músculos
-  workoutNameBlock: {
-    marginTop: 4,
-    marginBottom: spacing.sm,
-  },
-  workoutCardTitle: {
-    color: colors.onSurface,
-    fontWeight: '700',
-    lineHeight: 22,
-  },
-  workoutMusclesText: {
-    marginTop: 2,
-    fontSize: 12,
-  },
-
-  // Sequência de Carga
-  loadSequenceContainer: {
-    marginBottom: spacing.sm,
-    gap: 6,
-  },
-  loadSequenceLabel: {
-    letterSpacing: 0.5,
-    fontWeight: '500',
-  },
-  exerciseSummaryList: {
-    gap: 4,
-  },
-  exerciseSummaryText: {
+  workoutStatsText: {
     color: colors.onSurfaceVariant,
     fontSize: 13,
     lineHeight: 18,
   },
-  extraExerciseCountText: {
-    color: colors.primary,
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  loadChipsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  exerciseChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: colors.surfaceContainerHighest,
-  },
-  exerciseChipText: {
-    color: colors.onSurface,
-    fontWeight: '500',
-  },
-  extraChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: colors.surfaceContainerHigh,
-  },
-  extraChipText: {
-    color: colors.onSurfaceVariant,
-    fontWeight: '600',
-  },
-
-  // Barra de Métricas
-  metricsBar: {
+  workoutActionsRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: radii.card,
-    backgroundColor: colors.surfaceContainerHigh,
-    marginBottom: spacing.md,
-  },
-  metricItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  workoutSummaryBold: {
-    fontWeight: '700',
-    color: colors.onSurface,
-  },
-
-  // Ações do Card
-  cardActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
+    flexShrink: 0,
   },
   startWorkoutButton: {
-    flex: 1,
-    height: 46,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    borderRadius: radii.pill,
+    gap: 5,
     backgroundColor: colors.primary,
+    height: 40,
+    paddingHorizontal: 14,
+    borderRadius: radii.pill,
+  },
+  startWorkoutButtonPressed: {
+    backgroundColor: colors.accentPressed,
+    transform: [{ scale: 0.98 }],
   },
   startWorkoutText: {
     color: colors.onPrimary,
     fontWeight: '700',
+    fontSize: 13,
   },
-  editWorkoutPencil: {
-    width: 46,
-    height: 46,
+  cardMenuButton: {
+    width: 40,
+    height: 40,
     borderRadius: radii.pill,
-    backgroundColor: colors.surfaceContainerHigh,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  cardMenuButtonPressed: {
+    backgroundColor: colors.surfaceContainerHigh,
+  },
 
   // Rodapé Adicionar Treino
-  footerAddWorkoutButton: {
+  addWorkoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: spacing.md,
-    backgroundColor: colors.surfaceContainerHigh,
-    borderRadius: radii.card,
-    marginTop: spacing.lg,
+    backgroundColor: colors.surfaceContainer,
     borderWidth: 1,
     borderColor: colors.outlineVariant,
+    borderRadius: radii.pill,
+    minHeight: spacing.buttonHeight,
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.md,
   },
-  footerAddWorkoutText: {
-    color: colors.primary,
+  addWorkoutButtonPressed: {
+    backgroundColor: colors.surfaceContainerHigh,
+    borderColor: colors.primary,
+  },
+  addWorkoutButtonText: {
+    color: colors.onSurface,
     fontWeight: '600',
   },
 
