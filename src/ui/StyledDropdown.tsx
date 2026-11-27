@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { ChevronDown, Check } from 'lucide-react-native';
 import { triggerHaptic } from './haptics';
+import { colors, fontFamilies, radii, spacing } from '../theme';
 
 export interface StyledDropdownOption {
   value: string;
@@ -36,7 +37,7 @@ export const StyledDropdown: React.FC<StyledDropdownProps> = ({
 
   return (
     <View style={[styles.container, style]}>
-      {/* Botão Gatilho */}
+      {/* Botão Gatilho com alvo de toque mínimo de 48dp */}
       <Pressable
         onPress={() => {
           triggerHaptic('selection');
@@ -45,13 +46,14 @@ export const StyledDropdown: React.FC<StyledDropdownProps> = ({
         accessibilityRole="combobox"
         accessibilityLabel={selected ? selected.label : placeholder}
         accessibilityState={{ expanded: open }}
-        style={styles.triggerButton}
+        hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+        style={[styles.triggerButton, open && styles.triggerButtonOpen]}
       >
         <Text style={[styles.triggerText, !selected && styles.placeholderText]} numberOfLines={1}>
           {selected ? selected.label : placeholder}
         </Text>
         <View style={[styles.iconWrapper, open && styles.iconRotated]}>
-          <ChevronDown size={16} color="#8E8E93" />
+          <ChevronDown size={18} color={colors.onSurfaceVariant} strokeWidth={1.75} />
         </View>
       </Pressable>
 
@@ -93,7 +95,7 @@ export const StyledDropdown: React.FC<StyledDropdownProps> = ({
                     {opt.label}
                   </Text>
                   {isSelected && (
-                    <Check size={16} color="#1A1715" strokeWidth={2.8} />
+                    <Check size={18} color={colors.onPrimary} strokeWidth={2.5} />
                   )}
                 </Pressable>
               );
@@ -112,31 +114,34 @@ const styles = StyleSheet.create({
   },
   triggerButton: {
     width: '100%',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    minHeight: 44,
-    borderRadius: 12,
-    backgroundColor: '#2D2925',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    minHeight: spacing.touchTargetMin, // 48dp
+    borderRadius: radii.input, // 16px
+    backgroundColor: colors.surfaceContainerHigh, // #2D2925
     borderWidth: 1,
-    borderColor: '#38332F',
+    borderColor: colors.outlineVariant, // #3A3531
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  triggerButtonOpen: {
+    borderColor: colors.primary, // #FF7A59
+  },
   triggerText: {
     flex: 1,
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#F5EFE8',
+    fontSize: 14,
+    fontFamily: fontFamilies.dmSansMedium,
+    color: colors.onSurface,
     marginRight: 8,
   },
   placeholderText: {
-    color: '#B7ADA3',
-    fontWeight: '400',
+    color: colors.textMuted,
+    fontFamily: fontFamilies.dmSansRegular,
   },
   iconWrapper: {
-    width: 20,
-    height: 20,
+    width: 24,
+    height: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -145,15 +150,15 @@ const styles = StyleSheet.create({
   },
   dropdownMenu: {
     marginTop: 6,
-    borderRadius: 16,
-    backgroundColor: '#23201D',
+    borderRadius: radii.input,
+    backgroundColor: colors.surfaceContainer, // #23201D
     borderWidth: 1,
-    borderColor: '#38332F',
-    maxHeight: 220,
+    borderColor: colors.outlineVariant,
+    maxHeight: 230,
     overflow: 'hidden',
   },
   scrollView: {
-    maxHeight: 220,
+    maxHeight: 230,
   },
   scrollContent: {
     flexGrow: 0,
@@ -162,26 +167,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    minHeight: 44,
+    minHeight: spacing.touchTargetMin, // 48dp
   },
   optionItemBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: '#2D2925',
+    borderBottomColor: colors.surfaceContainerHigh,
   },
   optionItemSelected: {
-    backgroundColor: '#FF7A59',
+    backgroundColor: colors.primary,
   },
   optionText: {
     flex: 1,
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#F5EFE8',
+    fontSize: 14,
+    fontFamily: fontFamilies.dmSansRegular,
+    color: colors.onSurface,
     marginRight: 8,
   },
   optionTextSelected: {
-    color: '#1A1715',
-    fontWeight: '700',
+    color: colors.onPrimary,
+    fontFamily: fontFamilies.dmSansMedium,
   },
 });

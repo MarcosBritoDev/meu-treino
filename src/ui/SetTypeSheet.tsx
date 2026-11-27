@@ -6,10 +6,14 @@ import {
   Pressable,
   StyleSheet,
   useWindowDimensions,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
 import { triggerHaptic } from './haptics';
 import { formatWeight, Unit, SetType, canAddDropAtEnd } from '../domain/sessionMath';
+import { colors, fontFamilies, radii, spacing } from '../theme';
 
 export type SetTypeOptionKey = 'warmup' | 'normal' | 'rpe' | 'rir' | 'failure' | 'drop';
 
@@ -33,6 +37,7 @@ export const SetTypeSheet: React.FC<SetTypeSheetProps> = ({
   sets,
 }) => {
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
 
   if (!visible) return null;
 
@@ -60,7 +65,7 @@ export const SetTypeSheet: React.FC<SetTypeSheetProps> = ({
       key: 'warmup',
       badge: 'A',
       badgeBg: 'rgba(255, 122, 89, 0.12)',
-      badgeColor: '#FF7A59',
+      badgeColor: colors.primary, // #FF7A59
       badgeBorder: 'rgba(255, 122, 89, 0.35)',
       title: 'Aquecimento',
       desc: '8–12 reps · Sem esforço',
@@ -68,8 +73,8 @@ export const SetTypeSheet: React.FC<SetTypeSheetProps> = ({
     {
       key: 'normal',
       badge: 'N',
-      badgeBg: '#38332F',
-      badgeColor: '#F5EFE8',
+      badgeBg: colors.surfaceContainerHighest, // #38332F
+      badgeColor: colors.onSurface, // #F5EFE8
       badgeBorder: '#4D463E',
       title: 'Normal',
       desc: 'Faixa padrão do exercício',
@@ -78,7 +83,7 @@ export const SetTypeSheet: React.FC<SetTypeSheetProps> = ({
       key: 'rpe',
       badge: 'RPE',
       badgeBg: 'rgba(255, 122, 89, 0.15)',
-      badgeColor: '#FF7A59',
+      badgeColor: colors.primary, // #FF7A59
       badgeBorder: 'rgba(255, 122, 89, 0.4)',
       title: 'Por RPE',
       desc: 'Série normal · Meta RPE 8',
@@ -86,27 +91,27 @@ export const SetTypeSheet: React.FC<SetTypeSheetProps> = ({
     {
       key: 'rir',
       badge: 'RIR',
-      badgeBg: 'rgba(56, 189, 248, 0.15)',
-      badgeColor: '#38BDF8',
-      badgeBorder: 'rgba(56, 189, 248, 0.4)',
+      badgeBg: 'rgba(123, 201, 143, 0.15)',
+      badgeColor: colors.success, // #7BC98F (Warm mint green do DESIGN.md em substituição ao azul céu proibido)
+      badgeBorder: 'rgba(123, 201, 143, 0.4)',
       title: 'Por RIR',
       desc: 'Série normal · Meta 2 RIR',
     },
     {
       key: 'failure',
       badge: 'F',
-      badgeBg: 'rgba(239, 68, 68, 0.15)',
-      badgeColor: '#FF6B6B',
-      badgeBorder: 'rgba(239, 68, 68, 0.4)',
+      badgeBg: 'rgba(255, 107, 107, 0.15)',
+      badgeColor: colors.error, // #FF6B6B
+      badgeBorder: 'rgba(255, 107, 107, 0.4)',
       title: 'Falha',
       desc: 'Até a falha · Conta p/ PR',
     },
     {
       key: 'drop',
       badge: 'D',
-      badgeBg: canDrop ? 'rgba(192, 132, 252, 0.15)' : 'rgba(192, 132, 252, 0.05)',
-      badgeColor: canDrop ? '#C084FC' : '#7D619B',
-      badgeBorder: canDrop ? 'rgba(192, 132, 252, 0.4)' : 'rgba(192, 132, 252, 0.15)',
+      badgeBg: canDrop ? 'rgba(255, 122, 89, 0.15)' : 'rgba(255, 122, 89, 0.05)',
+      badgeColor: canDrop ? colors.onPrimaryContainer : colors.textMuted, // #FFB4A0 / #7D746B (Tom pêssego coral do DESIGN.md em substituição ao roxo frio)
+      badgeBorder: canDrop ? 'rgba(255, 122, 89, 0.4)' : 'rgba(255, 122, 89, 0.15)',
       title: 'Drop',
       desc: dropDesc,
       disabled: !canDrop,
@@ -125,97 +130,119 @@ export const SetTypeSheet: React.FC<SetTypeSheetProps> = ({
     <Modal
       transparent
       visible={visible}
-      animationType="fade"
+      animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
-        <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Fechar" />
-        <View style={styles.sheetContainer}>
-          {/* Alça do sheet */}
-          <View style={styles.handleArea}>
-            <View style={styles.handle} />
-          </View>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.keyboardContainer}
+      >
+        <View style={styles.overlay}>
+          {/* Fundo preto 65% que fecha ao toque com acessibilidade correta */}
+          <Pressable
+            style={styles.backdrop}
+            onPress={onClose}
+            accessibilityRole="button"
+            accessibilityLabel="Fechar painel"
+          />
 
-          {/* Cabeçalho */}
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>Adicionar série</Text>
-            <Pressable
-              onPress={onClose}
-              style={styles.closeBtn}
-              accessibilityRole="button"
-              accessibilityLabel="Fechar"
-            >
-              <X size={18} color="#A1A1A6" />
-            </Pressable>
-          </View>
+          <View
+            style={[
+              styles.sheetContainer,
+              { paddingBottom: Math.max(spacing.xl, insets.bottom + 16) },
+            ]}
+          >
+            {/* Alça central de arrasto */}
+            <View style={styles.handleArea}>
+              <View style={styles.handle} />
+            </View>
 
-          {/* Grade 2x3 */}
-          <View style={styles.grid}>
-            {options.map((opt) => {
-              const isDisabled = Boolean(opt.disabled);
-              return (
-                <Pressable
-                  key={opt.key}
-                  disabled={isDisabled}
-                  onPress={() => !isDisabled && handleSelect(opt.key)}
-                  style={({ pressed }) => [
-                    styles.optionCard,
-                    { width: cardWidth },
-                    isDisabled && styles.optionCardDisabled,
-                    pressed && !isDisabled && styles.optionCardPressed,
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled: isDisabled }}
-                  accessibilityLabel={`${opt.title}, ${opt.desc}`}
-                >
-                  <View
-                    style={[
-                      styles.badge,
-                      {
-                        backgroundColor: opt.badgeBg,
-                        borderColor: opt.badgeBorder,
-                      },
+            {/* Cabeçalho */}
+            <View style={styles.header}>
+              <Text style={styles.headerTitle}>Adicionar série</Text>
+              <Pressable
+                onPress={onClose}
+                style={styles.closeBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Fechar"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <X size={20} color={colors.onSurfaceVariant} strokeWidth={1.75} />
+              </Pressable>
+            </View>
+
+            {/* Grade 2x3 rápida de 1 toque */}
+            <View style={styles.grid}>
+              {options.map((opt) => {
+                const isDisabled = Boolean(opt.disabled);
+                return (
+                  <Pressable
+                    key={opt.key}
+                    disabled={isDisabled}
+                    onPress={() => !isDisabled && handleSelect(opt.key)}
+                    style={({ pressed }) => [
+                      styles.optionCard,
+                      { width: cardWidth },
+                      isDisabled && styles.optionCardDisabled,
+                      pressed && !isDisabled && styles.optionCardPressed,
                     ]}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: isDisabled }}
+                    accessibilityLabel={`${opt.title}, ${opt.desc}`}
+                    hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
                   >
-                    <Text style={[styles.badgeText, { color: opt.badgeColor }]}>
-                      {opt.badge}
-                    </Text>
-                  </View>
+                    <View
+                      style={[
+                        styles.badge,
+                        {
+                          backgroundColor: opt.badgeBg,
+                          borderColor: opt.badgeBorder,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.badgeText, { color: opt.badgeColor }]}>
+                        {opt.badge}
+                      </Text>
+                    </View>
 
-                  <View style={styles.optionContent}>
-                    <Text
-                      style={[
-                        styles.optionTitle,
-                        isDisabled && styles.optionTitleDisabled,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {opt.title}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.optionDesc,
-                        isDisabled && styles.optionDescDisabled,
-                      ]}
-                      numberOfLines={2}
-                    >
-                      {opt.desc}
-                    </Text>
-                  </View>
-                </Pressable>
-              );
-            })}
+                    <View style={styles.optionContent}>
+                      <Text
+                        style={[
+                          styles.optionTitle,
+                          isDisabled && styles.optionTitleDisabled,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {opt.title}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.optionDesc,
+                          isDisabled && styles.optionDescDisabled,
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {opt.desc}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
+  keyboardContainer: {
+    flex: 1,
+  },
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    backgroundColor: colors.overlay, // rgba(0, 0, 0, 0.65)
     justifyContent: 'flex-end',
   },
   backdrop: {
@@ -226,40 +253,39 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
   sheetContainer: {
-    backgroundColor: '#23201D',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    backgroundColor: colors.surfaceContainer, // #23201D
+    borderTopLeftRadius: radii.sheet, // 28px
+    borderTopRightRadius: radii.sheet,
     borderTopWidth: 1,
-    borderColor: '#2D2925',
-    paddingHorizontal: 16,
-    paddingBottom: 28,
+    borderColor: colors.outlineVariant, // #3A3531
+    paddingHorizontal: spacing.margin, // 20px
   },
   handleArea: {
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: spacing.gutter,
   },
   handle: {
     width: 40,
     height: 4,
-    borderRadius: 2,
-    backgroundColor: '#38332F',
+    borderRadius: radii.pill,
+    backgroundColor: colors.outline, // #7D746B
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: spacing.md,
   },
   headerTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#F5EFE8',
+    fontSize: 18,
+    fontFamily: fontFamilies.outfitBold,
+    color: colors.onSurface,
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#2D2925',
+    width: spacing.touchTargetMin, // 48dp touch target
+    height: spacing.touchTargetMin,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceContainerHigh, // #2D2925
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -268,58 +294,63 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 10,
     justifyContent: 'space-between',
+    paddingBottom: spacing.sm,
   },
   optionCard: {
-    backgroundColor: '#2D2925',
+    backgroundColor: colors.surfaceContainerHigh, // #2D2925
     borderWidth: 1,
-    borderColor: '#38332F',
-    borderRadius: 16,
+    borderColor: colors.outlineVariant, // #3A3531
+    borderRadius: radii.input, // 16px
     padding: 12,
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
-    minHeight: 64,
+    minHeight: 64, // Touch target generoso
   },
   optionCardPressed: {
-    borderColor: '#FF7A59',
-    backgroundColor: '#38332F',
+    borderColor: colors.primary, // #FF7A59
+    backgroundColor: colors.surfaceContainerHighest, // #38332F
   },
   optionCardDisabled: {
     opacity: 0.45,
-    borderColor: '#23201D',
-    backgroundColor: '#1F1B19',
+    borderColor: colors.surfaceContainer,
+    backgroundColor: colors.surfaceContainerLow,
   },
   badge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radii.sm, // 8px
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 2,
+    minWidth: 26,
   },
   badgeText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontFamily: fontFamilies.outfitBold,
+    fontVariant: ['tabular-nums'],
   },
   optionContent: {
     flex: 1,
   },
   optionTitle: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#F5EFE8',
+    fontFamily: fontFamilies.dmSansMedium,
+    color: colors.onSurface,
     marginBottom: 2,
   },
   optionTitleDisabled: {
-    color: '#7D746B',
+    color: colors.textMuted,
   },
   optionDesc: {
     fontSize: 11,
-    color: '#B7ADA3',
-    lineHeight: 14,
+    fontFamily: fontFamilies.dmSansRegular,
+    color: colors.onSurfaceVariant,
+    lineHeight: 15,
+    fontVariant: ['tabular-nums'],
   },
   optionDescDisabled: {
-    color: '#7D746B',
+    color: colors.textMuted,
   },
 });

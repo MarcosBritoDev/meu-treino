@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal,
   View,
@@ -8,7 +8,11 @@ import {
   TextInput,
   StyleSheet,
   useWindowDimensions,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, Flame, Trash2 } from 'lucide-react-native';
 import { triggerHaptic } from './haptics';
 import { StyledDropdown, StyledDropdownOption } from './StyledDropdown';
@@ -19,7 +23,6 @@ import {
   SetType,
   RPE_OPTIONS,
   RIR_OPTIONS,
-  REPS_MODE_OPTIONS,
   formatDecimalBR,
   kgToDisplay,
   displayToKg,
@@ -29,6 +32,7 @@ import {
   canSetBeDrop,
   DROP_PERCENT_PRESETS,
 } from '../domain/sessionMath';
+import { colors, fontFamilies, radii, spacing } from '../theme';
 
 export { DROP_PERCENT_PRESETS };
 
@@ -43,12 +47,12 @@ export const SET_REST_OPTIONS: readonly (number | null)[] = [
 ];
 
 export const REPS_MODE_DROPDOWN_OPTIONS: StyledDropdownOption[] = [
-  { value: 'reps', label: 'Reps' },
-  { value: 'reps_range', label: 'Faixa de Reps (Reps Range)' },
-  { value: 'reps_max', label: 'Reps Max' },
-  { value: 'amrap', label: 'AMRAP' },
-  { value: 'time', label: 'Tempo (Time)' },
-  { value: 'time_range', label: 'Faixa de Tempo (Time Range)' },
+  { value: 'reps', label: 'Repetições' },
+  { value: 'reps_range', label: 'Faixa de repetições' },
+  { value: 'reps_max', label: 'Máximo de repetições' },
+  { value: 'amrap', label: 'AMRAP (máximo de reps)' },
+  { value: 'time', label: 'Tempo (segundos)' },
+  { value: 'time_range', label: 'Faixa de tempo' },
 ];
 
 export function getTypeLabel(type?: string): string {
@@ -76,10 +80,10 @@ export function formatRestShort(seconds?: number | null): string {
 export const getEffortModeOptions = (unit: Unit): StyledDropdownOption[] => [
   { value: 'none', label: 'Nenhum' },
   { value: 'rpe', label: 'RPE' },
-  { value: 'rpe_range', label: 'Faixa de RPE (RPE Range)' },
+  { value: 'rpe_range', label: 'Faixa de RPE' },
   { value: 'rir', label: 'RIR' },
   { value: 'percent_1rm', label: '% de 1RM' },
-  { value: 'percent_1rm_exercise', label: '% de 1RM de X Exercício' },
+  { value: 'percent_1rm_exercise', label: '% de 1RM de outro exercício' },
   { value: 'last_week_plus', label: `Semana passada + X ${unit}` },
   { value: 'last_session_plus', label: `Sessão passada + X ${unit}` },
 ];
@@ -132,6 +136,7 @@ export const SetEditSheet: React.FC<SetEditSheetProps> = ({
   onRemove,
 }) => {
   const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
 
   const [type, setType] = useState<SetType>('normal');
   const [repsMode, setRepsMode] = useState<RepsMode>('reps_range');
@@ -143,11 +148,40 @@ export const SetEditSheet: React.FC<SetEditSheetProps> = ({
   const [effortValMax, setEffortValMax] = useState<number>(9);
   const [effortRefExId, setEffortRefExId] = useState<string>(catalog[0]?.id || 'ex-1');
   const [incrementInput, setIncrementInput] = useState<string>('2,5');
+  const [isIncrementFocused, setIsIncrementFocused] = useState<boolean>(false);
 
   const [dropPercent, setDropPercent] = useState<number>(20);
   const [dropPercentInput, setDropPercentInput] = useState<string>('20');
+  const [isDropFocused, setIsDropFocused] = useState<boolean>(false);
 
   const [rest, setRest] = useState<number | null>(null);
+
+  // Intervalo para suporte a toque contínuo (press-and-hold) nos steppers
+  const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const clearHoldTimer = () => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      clearInterval(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+  };
+
+  const startHoldAction = (action: () => void) => {
+    clearHoldTimer();
+    action();
+    holdTimerRef.current = setTimeout(() => {
+      holdTimerRef.current = setInterval(() => {
+        action();
+      }, 100);
+    }, 350);
+  };
+
+  useEffect(() => {
+    return () => {
+      clearHoldTimer();
+    };
+  }, []);
 
   const effectiveIndex =
     setIndex !== undefined
@@ -257,6 +291,7 @@ export const SetEditSheet: React.FC<SetEditSheetProps> = ({
   };
 
   const handleDropPercentInputBlur = () => {
+    setIsDropFocused(false);
     if (!dropPercentInput || parseInt(dropPercentInput, 10) < 1) {
       setDropPercent(20);
       setDropPercentInput('20');
@@ -265,6 +300,14 @@ export const SetEditSheet: React.FC<SetEditSheetProps> = ({
       setDropPercentInput('90');
     } else {
       setDropPercentInput(String(dropPercent));
+    }
+  };
+
+  const handleIncrementBlur = () => {
+    setIsIncrementFocused(false);
+    const parsed = parseFloat(incrementInput.replace(',', '.'));
+    if (Number.isNaN(parsed) || parsed < 0) {
+      setIncrementInput(formatDecimalBR(kgToDisplay(2.5, unit)));
     }
   };
 
@@ -379,10 +422,29 @@ export const SetEditSheet: React.FC<SetEditSheetProps> = ({
     onClose();
   };
 
+  // Proteção contra exclusão acidental via Alert.alert nativo
   const handleRemove = () => {
     triggerHaptic('medium');
-    onRemove(set.id);
-    onClose();
+    Alert.alert(
+      'Remover série?',
+      `Tem certeza que deseja remover a série ${badgeLabel}? Esta ação não pode ser desfeita.`,
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+        },
+        {
+          text: 'Remover',
+          style: 'destructive',
+          onPress: () => {
+            triggerHaptic('medium');
+            onRemove(set.id);
+            onClose();
+          },
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   const effortDropdownOptions = getEffortModeOptions(unit);
@@ -399,475 +461,621 @@ export const SetEditSheet: React.FC<SetEditSheetProps> = ({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
-        <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Fechar" />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.keyboardContainer}
+      >
+        <View style={styles.overlay}>
+          {/* Fundo preto 65% que fecha ao toque com acessibilidade correta */}
+          <Pressable
+            style={styles.backdrop}
+            onPress={onClose}
+            accessibilityRole="button"
+            accessibilityLabel="Fechar painel"
+          />
 
-        <View style={[styles.sheetContainer, { maxHeight: height * 0.9 }]}>
-          {/* Alça do sheet */}
-          <View style={styles.handleArea}>
-            <View style={styles.handle} />
-          </View>
-
-          {/* Cabeçalho */}
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>
-              Série {badgeLabel} · {getTypeLabel(type)}
-            </Text>
-            <Pressable
-              onPress={onClose}
-              style={styles.closeBtn}
-              accessibilityRole="button"
-              accessibilityLabel="Fechar"
-            >
-              <X size={18} color="#A1A1A6" />
-            </Pressable>
-          </View>
-
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.scrollContent}
+          <View
+            style={[
+              styles.sheetContainer,
+              {
+                maxHeight: height * 0.85,
+                paddingBottom: Math.max(spacing.lg, insets.bottom + 12),
+              },
+            ]}
           >
-            {/* 1. Tipo de série */}
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Tipo de série</Text>
-              <View style={styles.chipsRow}>
-                {(['warmup', 'normal', 'failure', 'drop'] as const).map((t) => {
-                  const isSelected = type === t;
-                  const isDropDisabled = t === 'drop' && !canDrop;
-                  return (
-                    <Pressable
-                      key={t}
-                      disabled={isDropDisabled}
-                      onPress={() => !isDropDisabled && handleTypeChange(t)}
-                      style={[
-                        styles.chipBtn,
-                        isSelected ? styles.chipBtnSelected : styles.chipBtnUnselected,
-                        isDropDisabled && styles.chipBtnDisabled,
-                      ]}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: isSelected, disabled: isDropDisabled }}
-                      accessibilityLabel={getTypeLabel(t)}
-                    >
-                      <Text
-                        style={[
-                          styles.chipBtnText,
-                          isSelected
-                            ? styles.chipBtnTextSelected
-                            : styles.chipBtnTextUnselected,
-                          isDropDisabled && styles.chipBtnTextDisabled,
-                        ]}
-                      >
-                        {getTypeLabel(t)}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-              {!canDrop && (
-                <Text style={styles.discreetNoticeText}>
-                  Drop exige uma série de trabalho antes dele
-                </Text>
-              )}
+            {/* Alça central de arrasto */}
+            <View style={styles.handleArea}>
+              <View style={styles.handle} />
             </View>
 
-            {/* 2. Meta de Reps / Tempo */}
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Meta de Reps / Tempo</Text>
-
-              {isFailureLike ? (
-                <View style={styles.failureNotice}>
-                  <Flame size={16} color="#FF7A59" />
-                  <Text style={styles.failureNoticeText}>
-                    Até a falha (faixa desabilitada para {getTypeLabel(type)})
-                  </Text>
-                </View>
-              ) : (
-                <View style={styles.controlsGroup}>
-                  <StyledDropdown
-                    value={repsMode}
-                    options={REPS_MODE_DROPDOWN_OPTIONS}
-                    onChange={handleRepsModeChange}
-                    placeholder="Selecione o tipo de meta"
-                  />
-
-                  {/* 1 Stepper (Reps, Tempo ou Reps Max) */}
-                  {(repsMode === 'reps' || repsMode === 'time' || repsMode === 'reps_max') && (
-                    <View style={styles.stepperCard}>
-                      <Text style={styles.stepperLabel}>
-                        {isTimeMode
-                          ? 'Duração alvo (seg)'
-                          : repsMode === 'reps_max'
-                          ? 'Máximo de repetições'
-                          : 'Repetições alvo'}
-                      </Text>
-                      <View style={styles.stepperControls}>
-                        <Pressable
-                          onPress={() => {
-                            if (repsMode === 'reps_max') {
-                              setMaxVal(Math.max(1, maxVal - 1));
-                            } else {
-                              setMinVal(Math.max(stepAmount, minVal - stepAmount));
-                            }
-                          }}
-                          style={styles.stepperBtn}
-                          accessibilityRole="button"
-                          accessibilityLabel="Diminuir"
-                        >
-                          <Text style={styles.stepperBtnText}>-</Text>
-                        </Pressable>
-                        <Text style={styles.stepperValue}>
-                          {repsMode === 'reps_max' ? maxVal : minVal}
-                          {isTimeMode ? 's' : ''}
-                        </Text>
-                        <Pressable
-                          onPress={() => {
-                            if (repsMode === 'reps_max') {
-                              setMaxVal(maxVal + 1);
-                            } else {
-                              setMinVal(minVal + stepAmount);
-                            }
-                          }}
-                          style={styles.stepperBtn}
-                          accessibilityRole="button"
-                          accessibilityLabel="Aumentar"
-                        >
-                          <Text style={styles.stepperBtnText}>+</Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  )}
-
-                  {/* 2 Steppers (Faixa de Reps ou Faixa de Tempo) */}
-                  {(repsMode === 'reps_range' || repsMode === 'time_range') && (
-                    <View style={styles.stepperGrid}>
-                      <View style={styles.stepperGridCard}>
-                        <Text style={styles.stepperLabel}>Mín</Text>
-                        <View style={styles.stepperControls}>
-                          <Pressable
-                            onPress={() =>
-                              setMinVal(Math.max(stepAmount, minVal - stepAmount))
-                            }
-                            style={styles.stepperBtn}
-                            accessibilityRole="button"
-                            accessibilityLabel="Diminuir mínimo"
-                          >
-                            <Text style={styles.stepperBtnText}>-</Text>
-                          </Pressable>
-                          <Text style={styles.stepperValueCompact}>
-                            {minVal}
-                            {isTimeMode ? 's' : ''}
-                          </Text>
-                          <Pressable
-                            onPress={() => {
-                              const next = minVal + stepAmount;
-                              setMinVal(next);
-                              if (next > maxVal) setMaxVal(next);
-                            }}
-                            style={styles.stepperBtn}
-                            accessibilityRole="button"
-                            accessibilityLabel="Aumentar mínimo"
-                          >
-                            <Text style={styles.stepperBtnText}>+</Text>
-                          </Pressable>
-                        </View>
-                      </View>
-
-                      <View style={styles.stepperGridCard}>
-                        <Text style={styles.stepperLabel}>Máx</Text>
-                        <View style={styles.stepperControls}>
-                          <Pressable
-                            onPress={() =>
-                              setMaxVal(Math.max(minVal, maxVal - stepAmount))
-                            }
-                            style={styles.stepperBtn}
-                            accessibilityRole="button"
-                            accessibilityLabel="Diminuir máximo"
-                          >
-                            <Text style={styles.stepperBtnText}>-</Text>
-                          </Pressable>
-                          <Text style={styles.stepperValueCompact}>
-                            {maxVal}
-                            {isTimeMode ? 's' : ''}
-                          </Text>
-                          <Pressable
-                            onPress={() => setMaxVal(maxVal + stepAmount)}
-                            style={styles.stepperBtn}
-                            accessibilityRole="button"
-                            accessibilityLabel="Aumentar máximo"
-                          >
-                            <Text style={styles.stepperBtnText}>+</Text>
-                          </Pressable>
-                        </View>
-                      </View>
-                    </View>
-                  )}
-                </View>
-              )}
+            {/* Cabeçalho */}
+            <View style={styles.header}>
+              <Text style={styles.headerTitle}>
+                Série {badgeLabel} · {getTypeLabel(type)}
+              </Text>
+              <Pressable
+                onPress={onClose}
+                style={styles.closeBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Fechar"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <X size={20} color={colors.onSurfaceVariant} strokeWidth={1.75} />
+              </Pressable>
             </View>
 
-            {/* 3. Meta de Esforço / Referência (Apenas série Normal) */}
-            {type === 'normal' && (
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.scrollContent}
+              keyboardShouldPersistTaps="handled"
+            >
+              {/* 1. Tipo de série */}
               <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Meta de Esforço / Carga</Text>
-
-                <View style={styles.controlsGroup}>
-                  <StyledDropdown
-                    value={effortMode}
-                    options={effortDropdownOptions}
-                    onChange={handleEffortModeChange}
-                    placeholder="Selecione o esforço ou referência"
-                  />
-
-                  {/* RPE único */}
-                  {effortMode === 'rpe' && (
-                    <View style={styles.wrapRow}>
-                      {RPE_OPTIONS.map((val) => {
-                        const isSelected = effortVal === val;
-                        return (
-                          <Pressable
-                            key={val}
-                            onPress={() => {
-                              triggerHaptic('selection');
-                              setEffortVal(val);
-                            }}
-                            style={[
-                              styles.smallChip,
-                              isSelected
-                                ? styles.smallChipSelected
-                                : styles.smallChipUnselected,
-                            ]}
-                            accessibilityRole="button"
-                            accessibilityState={{ selected: isSelected }}
-                            accessibilityLabel={`RPE ${formatDecimalBR(val)}`}
-                          >
-                            <Text
-                              style={[
-                                styles.smallChipText,
-                                isSelected
-                                  ? styles.smallChipTextSelected
-                                  : styles.smallChipTextUnselected,
-                              ]}
-                            >
-                              {formatDecimalBR(val)}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  )}
-
-                  {/* Faixa de RPE (2 Steppers) */}
-                  {effortMode === 'rpe_range' && (
-                    <View style={styles.stepperGrid}>
-                      <View style={styles.stepperGridCard}>
-                        <Text style={styles.stepperLabel}>RPE Mín</Text>
-                        <View style={styles.stepperControls}>
-                          <Pressable
-                            onPress={() =>
-                              setEffortVal(
-                                Math.max(6, Number((effortVal - 0.5).toFixed(1)))
-                              )
-                            }
-                            style={styles.stepperBtn}
-                            accessibilityRole="button"
-                            accessibilityLabel="Diminuir RPE mínimo"
-                          >
-                            <Text style={styles.stepperBtnText}>-</Text>
-                          </Pressable>
-                          <Text style={styles.stepperValueCompact}>
-                            {formatDecimalBR(effortVal)}
-                          </Text>
-                          <Pressable
-                            onPress={() => {
-                              const next = Math.min(
-                                10,
-                                Number((effortVal + 0.5).toFixed(1))
-                              );
-                              setEffortVal(next);
-                              if (next > effortValMax) setEffortValMax(next);
-                            }}
-                            style={styles.stepperBtn}
-                            accessibilityRole="button"
-                            accessibilityLabel="Aumentar RPE mínimo"
-                          >
-                            <Text style={styles.stepperBtnText}>+</Text>
-                          </Pressable>
-                        </View>
-                      </View>
-
-                      <View style={styles.stepperGridCard}>
-                        <Text style={styles.stepperLabel}>RPE Máx</Text>
-                        <View style={styles.stepperControls}>
-                          <Pressable
-                            onPress={() =>
-                              setEffortValMax(
-                                Math.max(
-                                  effortVal,
-                                  Number((effortValMax - 0.5).toFixed(1))
-                                )
-                              )
-                            }
-                            style={styles.stepperBtn}
-                            accessibilityRole="button"
-                            accessibilityLabel="Diminuir RPE máximo"
-                          >
-                            <Text style={styles.stepperBtnText}>-</Text>
-                          </Pressable>
-                          <Text style={styles.stepperValueCompact}>
-                            {formatDecimalBR(effortValMax)}
-                          </Text>
-                          <Pressable
-                            onPress={() =>
-                              setEffortValMax(
-                                Math.min(
-                                  10,
-                                  Number((effortValMax + 0.5).toFixed(1))
-                                )
-                              )
-                            }
-                            style={styles.stepperBtn}
-                            accessibilityRole="button"
-                            accessibilityLabel="Aumentar RPE máximo"
-                          >
-                            <Text style={styles.stepperBtnText}>+</Text>
-                          </Pressable>
-                        </View>
-                      </View>
-                    </View>
-                  )}
-
-                  {/* RIR */}
-                  {effortMode === 'rir' && (
-                    <View style={styles.wrapRow}>
-                      {RIR_OPTIONS.map((val) => {
-                        const isSelected = effortVal === val;
-                        return (
-                          <Pressable
-                            key={val}
-                            onPress={() => {
-                              triggerHaptic('selection');
-                              setEffortVal(val);
-                            }}
-                            style={[
-                              styles.smallChip,
-                              isSelected
-                                ? styles.smallChipSelected
-                                : styles.smallChipUnselected,
-                            ]}
-                            accessibilityRole="button"
-                            accessibilityState={{ selected: isSelected }}
-                            accessibilityLabel={`${val} RIR`}
-                          >
-                            <Text
-                              style={[
-                                styles.smallChipText,
-                                isSelected
-                                  ? styles.smallChipTextSelected
-                                  : styles.smallChipTextUnselected,
-                              ]}
-                            >
-                              {val} RIR
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  )}
-
-                  {/* % de 1RM */}
-                  {(effortMode === 'percent_1rm' ||
-                    effortMode === 'percent_1rm_exercise') && (
-                    <View style={styles.controlsGroup}>
-                      {effortMode === 'percent_1rm_exercise' && (
-                        <StyledDropdown
-                          value={effortRefExId}
-                          options={catalogDropdownOptions}
-                          onChange={(newRefId) => setEffortRefExId(newRefId)}
-                          placeholder="Escolha o exercício de referência"
-                        />
-                      )}
-
-                      <View style={styles.stepperCard}>
-                        <View style={styles.stepperTextWrap}>
-                          <Text style={styles.stepperLabel}>Porcentagem do 1RM</Text>
-                          {estimated1RmKg !== null && (
-                            <Text style={styles.stepperSubtext}>
-                              No treino: ~{formatWeight(estimated1RmKg, unit)} {unit}
-                            </Text>
-                          )}
-                        </View>
-                        <View style={styles.stepperControls}>
-                          <Pressable
-                            onPress={() =>
-                              setEffortVal(Math.max(30, effortVal - 2.5))
-                            }
-                            style={styles.stepperBtn}
-                            accessibilityRole="button"
-                            accessibilityLabel="Diminuir porcentagem"
-                          >
-                            <Text style={styles.stepperBtnText}>-</Text>
-                          </Pressable>
-                          <Text
-                            style={[
-                              styles.stepperValueCompact,
-                              { color: '#FF7A59', minWidth: 50 },
-                            ]}
-                          >
-                            {formatDecimalBR(effortVal)}%
-                          </Text>
-                          <Pressable
-                            onPress={() =>
-                              setEffortVal(Math.min(100, effortVal + 2.5))
-                            }
-                            style={styles.stepperBtn}
-                            accessibilityRole="button"
-                            accessibilityLabel="Aumentar porcentagem"
-                          >
-                            <Text style={styles.stepperBtnText}>+</Text>
-                          </Pressable>
-                        </View>
-                      </View>
-                    </View>
-                  )}
-
-                  {/* Incremento sobre última semana / sessão */}
-                  {(effortMode === 'last_week_plus' ||
-                    effortMode === 'last_session_plus') && (
-                    <View style={styles.stepperCard}>
-                      <Text style={styles.stepperLabel}>Incremento ({unit})</Text>
-                      <View style={styles.incrementRow}>
-                        <Text style={styles.plusSymbol}>+</Text>
-                        <TextInput
-                          value={incrementInput}
-                          onChangeText={setIncrementInput}
-                          keyboardType="decimal-pad"
-                          style={styles.incrementTextInput}
-                          accessibilityLabel={`Incremento em ${unit}`}
-                        />
-                        <Text style={styles.unitSuffix}>{unit}</Text>
-                      </View>
-                    </View>
-                  )}
-                </View>
-              </View>
-            )}
-
-            {/* Seção Drop Set: Redução automática da carga (%) */}
-            {type === 'drop' && (
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Redução automática da carga (%)</Text>
-
-                {/* Chips de atalho rápido */}
-                <View style={styles.wrapRow}>
-                  {DROP_PERCENT_PRESETS.map((pct) => {
-                    const isSelected = dropPercent === pct;
+                <Text style={styles.sectionLabel}>Tipo de série</Text>
+                <View style={styles.chipsRow}>
+                  {(['warmup', 'normal', 'failure', 'drop'] as const).map((t) => {
+                    const isSelected = type === t;
+                    const isDropDisabled = t === 'drop' && !canDrop;
                     return (
                       <Pressable
-                        key={pct}
+                        key={t}
+                        disabled={isDropDisabled}
+                        onPress={() => !isDropDisabled && handleTypeChange(t)}
+                        style={[
+                          styles.chipBtn,
+                          isSelected ? styles.chipBtnSelected : styles.chipBtnUnselected,
+                          isDropDisabled && styles.chipBtnDisabled,
+                        ]}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isSelected, disabled: isDropDisabled }}
+                        accessibilityLabel={getTypeLabel(t)}
+                        hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                      >
+                        <Text
+                          style={[
+                            styles.chipBtnText,
+                            isSelected
+                              ? styles.chipBtnTextSelected
+                              : styles.chipBtnTextUnselected,
+                            isDropDisabled && styles.chipBtnTextDisabled,
+                          ]}
+                        >
+                          {getTypeLabel(t)}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                {!canDrop && (
+                  <Text style={styles.discreetNoticeText}>
+                    Drop exige uma série de trabalho antes dele
+                  </Text>
+                )}
+              </View>
+
+              {/* 2. Meta de Reps / Tempo */}
+              <View style={styles.section}>
+                <Text style={styles.sectionLabel}>Meta de repetições / tempo</Text>
+
+                {isFailureLike ? (
+                  <View style={styles.failureNotice}>
+                    <Flame size={18} color={colors.primary} />
+                    <Text style={styles.failureNoticeText}>
+                      Até a falha (faixa desabilitada para {getTypeLabel(type)})
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.controlsGroup}>
+                    <StyledDropdown
+                      value={repsMode}
+                      options={REPS_MODE_DROPDOWN_OPTIONS}
+                      onChange={handleRepsModeChange}
+                      placeholder="Selecione o tipo de meta"
+                    />
+
+                    {/* 1 Stepper Circular 48x48 (Repetições, Tempo ou Máximo de Reps) */}
+                    {(repsMode === 'reps' || repsMode === 'time' || repsMode === 'reps_max') && (
+                      <View style={styles.stepperCard}>
+                        <Text style={styles.stepperLabel}>
+                          {isTimeMode
+                            ? 'Duração alvo (segundos)'
+                            : repsMode === 'reps_max'
+                            ? 'Máximo de repetições'
+                            : 'Repetições alvo'}
+                        </Text>
+                        <View style={styles.stepperControls}>
+                          <Pressable
+                            onPressIn={() =>
+                              startHoldAction(() => {
+                                triggerHaptic('selection');
+                                if (repsMode === 'reps_max') {
+                                  setMaxVal((prev) => Math.max(1, prev - 1));
+                                } else {
+                                  setMinVal((prev) => Math.max(stepAmount, prev - stepAmount));
+                                }
+                              })
+                            }
+                            onPressOut={clearHoldTimer}
+                            style={styles.stepperBtn}
+                            accessibilityRole="button"
+                            accessibilityLabel="Diminuir"
+                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                          >
+                            <Text style={styles.stepperBtnText}>−</Text>
+                          </Pressable>
+                          <Text style={styles.stepperValue}>
+                            {repsMode === 'reps_max' ? maxVal : minVal}
+                            {isTimeMode ? 's' : ''}
+                          </Text>
+                          <Pressable
+                            onPressIn={() =>
+                              startHoldAction(() => {
+                                triggerHaptic('selection');
+                                if (repsMode === 'reps_max') {
+                                  setMaxVal((prev) => prev + 1);
+                                } else {
+                                  setMinVal((prev) => prev + stepAmount);
+                                }
+                              })
+                            }
+                            onPressOut={clearHoldTimer}
+                            style={styles.stepperBtn}
+                            accessibilityRole="button"
+                            accessibilityLabel="Aumentar"
+                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                          >
+                            <Text style={styles.stepperBtnText}>+</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    )}
+
+                    {/* 2 Steppers em Grade (Faixa de Repetições ou Faixa de Tempo) */}
+                    {(repsMode === 'reps_range' || repsMode === 'time_range') && (
+                      <View style={styles.stepperGrid}>
+                        <View style={styles.stepperGridCard}>
+                          <Text style={styles.stepperGridLabel}>Mínimo</Text>
+                          <View style={styles.stepperGridControls}>
+                            <Pressable
+                              onPressIn={() =>
+                                startHoldAction(() => {
+                                  triggerHaptic('selection');
+                                  setMinVal((prev) => Math.max(stepAmount, prev - stepAmount));
+                                })
+                              }
+                              onPressOut={clearHoldTimer}
+                              style={styles.stepperGridBtn}
+                              accessibilityRole="button"
+                              accessibilityLabel="Diminuir mínimo"
+                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                            >
+                              <Text style={styles.stepperBtnText}>−</Text>
+                            </Pressable>
+                            <Text style={styles.stepperValueCompact}>
+                              {minVal}
+                              {isTimeMode ? 's' : ''}
+                            </Text>
+                            <Pressable
+                              onPressIn={() =>
+                                startHoldAction(() => {
+                                  triggerHaptic('selection');
+                                  setMinVal((prev) => {
+                                    const next = prev + stepAmount;
+                                    setMaxVal((currMax) => (next > currMax ? next : currMax));
+                                    return next;
+                                  });
+                                })
+                              }
+                              onPressOut={clearHoldTimer}
+                              style={styles.stepperGridBtn}
+                              accessibilityRole="button"
+                              accessibilityLabel="Aumentar mínimo"
+                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                            >
+                              <Text style={styles.stepperBtnText}>+</Text>
+                            </Pressable>
+                          </View>
+                        </View>
+
+                        <View style={styles.stepperGridCard}>
+                          <Text style={styles.stepperGridLabel}>Máximo</Text>
+                          <View style={styles.stepperGridControls}>
+                            <Pressable
+                              onPressIn={() =>
+                                startHoldAction(() => {
+                                  triggerHaptic('selection');
+                                  setMaxVal((prev) => Math.max(minVal, prev - stepAmount));
+                                })
+                              }
+                              onPressOut={clearHoldTimer}
+                              style={styles.stepperGridBtn}
+                              accessibilityRole="button"
+                              accessibilityLabel="Diminuir máximo"
+                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                            >
+                              <Text style={styles.stepperBtnText}>−</Text>
+                            </Pressable>
+                            <Text style={styles.stepperValueCompact}>
+                              {maxVal}
+                              {isTimeMode ? 's' : ''}
+                            </Text>
+                            <Pressable
+                              onPressIn={() =>
+                                startHoldAction(() => {
+                                  triggerHaptic('selection');
+                                  setMaxVal((prev) => prev + stepAmount);
+                                })
+                              }
+                              onPressOut={clearHoldTimer}
+                              style={styles.stepperGridBtn}
+                              accessibilityRole="button"
+                              accessibilityLabel="Aumentar máximo"
+                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                            >
+                              <Text style={styles.stepperBtnText}>+</Text>
+                            </Pressable>
+                          </View>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
+
+              {/* 3. Meta de Esforço / Referência (Apenas série Normal) */}
+              {type === 'normal' && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionLabel}>Meta de esforço</Text>
+
+                  <View style={styles.controlsGroup}>
+                    <StyledDropdown
+                      value={effortMode}
+                      options={effortDropdownOptions}
+                      onChange={handleEffortModeChange}
+                      placeholder="Selecione o esforço ou referência"
+                    />
+
+                    {/* RPE único */}
+                    {effortMode === 'rpe' && (
+                      <View style={styles.wrapRow}>
+                        {RPE_OPTIONS.map((val) => {
+                          const isSelected = effortVal === val;
+                          return (
+                            <Pressable
+                              key={val}
+                              onPress={() => {
+                                triggerHaptic('selection');
+                                setEffortVal(val);
+                              }}
+                              style={[
+                                styles.smallChip,
+                                isSelected
+                                  ? styles.smallChipSelected
+                                  : styles.smallChipUnselected,
+                              ]}
+                              accessibilityRole="button"
+                              accessibilityState={{ selected: isSelected }}
+                              accessibilityLabel={`RPE ${formatDecimalBR(val)}`}
+                              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                            >
+                              <Text
+                                style={[
+                                  styles.smallChipText,
+                                  isSelected
+                                    ? styles.smallChipTextSelected
+                                    : styles.smallChipTextUnselected,
+                                ]}
+                              >
+                                {formatDecimalBR(val)}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    )}
+
+                    {/* Faixa de RPE (2 Steppers) */}
+                    {effortMode === 'rpe_range' && (
+                      <View style={styles.stepperGrid}>
+                        <View style={styles.stepperGridCard}>
+                          <Text style={styles.stepperGridLabel}>RPE mínimo</Text>
+                          <View style={styles.stepperGridControls}>
+                            <Pressable
+                              onPressIn={() =>
+                                startHoldAction(() => {
+                                  triggerHaptic('selection');
+                                  setEffortVal((prev) =>
+                                    Math.max(6, Number((prev - 0.5).toFixed(1)))
+                                  );
+                                })
+                              }
+                              onPressOut={clearHoldTimer}
+                              style={styles.stepperGridBtn}
+                              accessibilityRole="button"
+                              accessibilityLabel="Diminuir RPE mínimo"
+                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                            >
+                              <Text style={styles.stepperBtnText}>−</Text>
+                            </Pressable>
+                            <Text style={styles.stepperValueCompact}>
+                              {formatDecimalBR(effortVal)}
+                            </Text>
+                            <Pressable
+                              onPressIn={() =>
+                                startHoldAction(() => {
+                                  triggerHaptic('selection');
+                                  setEffortVal((prev) => {
+                                    const next = Math.min(10, Number((prev + 0.5).toFixed(1)));
+                                    setEffortValMax((currMax) => (next > currMax ? next : currMax));
+                                    return next;
+                                  });
+                                })
+                              }
+                              onPressOut={clearHoldTimer}
+                              style={styles.stepperGridBtn}
+                              accessibilityRole="button"
+                              accessibilityLabel="Aumentar RPE mínimo"
+                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                            >
+                              <Text style={styles.stepperBtnText}>+</Text>
+                            </Pressable>
+                          </View>
+                        </View>
+
+                        <View style={styles.stepperGridCard}>
+                          <Text style={styles.stepperGridLabel}>RPE máximo</Text>
+                          <View style={styles.stepperGridControls}>
+                            <Pressable
+                              onPressIn={() =>
+                                startHoldAction(() => {
+                                  triggerHaptic('selection');
+                                  setEffortValMax((prev) =>
+                                    Math.max(effortVal, Number((prev - 0.5).toFixed(1)))
+                                  );
+                                })
+                              }
+                              onPressOut={clearHoldTimer}
+                              style={styles.stepperGridBtn}
+                              accessibilityRole="button"
+                              accessibilityLabel="Diminuir RPE máximo"
+                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                            >
+                              <Text style={styles.stepperBtnText}>−</Text>
+                            </Pressable>
+                            <Text style={styles.stepperValueCompact}>
+                              {formatDecimalBR(effortValMax)}
+                            </Text>
+                            <Pressable
+                              onPressIn={() =>
+                                startHoldAction(() => {
+                                  triggerHaptic('selection');
+                                  setEffortValMax((prev) =>
+                                    Math.min(10, Number((prev + 0.5).toFixed(1)))
+                                  );
+                                })
+                              }
+                              onPressOut={clearHoldTimer}
+                              style={styles.stepperGridBtn}
+                              accessibilityRole="button"
+                              accessibilityLabel="Aumentar RPE máximo"
+                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                            >
+                              <Text style={styles.stepperBtnText}>+</Text>
+                            </Pressable>
+                          </View>
+                        </View>
+                      </View>
+                    )}
+
+                    {/* RIR */}
+                    {effortMode === 'rir' && (
+                      <View style={styles.wrapRow}>
+                        {RIR_OPTIONS.map((val) => {
+                          const isSelected = effortVal === val;
+                          return (
+                            <Pressable
+                              key={val}
+                              onPress={() => {
+                                triggerHaptic('selection');
+                                setEffortVal(val);
+                              }}
+                              style={[
+                                styles.smallChip,
+                                isSelected
+                                  ? styles.smallChipSelected
+                                  : styles.smallChipUnselected,
+                              ]}
+                              accessibilityRole="button"
+                              accessibilityState={{ selected: isSelected }}
+                              accessibilityLabel={`${val} RIR`}
+                              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                            >
+                              <Text
+                                style={[
+                                  styles.smallChipText,
+                                  isSelected
+                                    ? styles.smallChipTextSelected
+                                    : styles.smallChipTextUnselected,
+                                ]}
+                              >
+                                {val} RIR
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    )}
+
+                    {/* % de 1RM */}
+                    {(effortMode === 'percent_1rm' ||
+                      effortMode === 'percent_1rm_exercise') && (
+                      <View style={styles.controlsGroup}>
+                        {effortMode === 'percent_1rm_exercise' && (
+                          <StyledDropdown
+                            value={effortRefExId}
+                            options={catalogDropdownOptions}
+                            onChange={(newRefId) => setEffortRefExId(newRefId)}
+                            placeholder="Escolha o exercício de referência"
+                          />
+                        )}
+
+                        <View style={styles.stepperCard}>
+                          <View style={styles.stepperTextWrap}>
+                            <Text style={styles.stepperLabel}>Porcentagem do 1RM</Text>
+                            {estimated1RmKg !== null && (
+                              <Text style={styles.stepperSubtext}>
+                                Estimativa no treino: ~{formatWeight(estimated1RmKg, unit)} {unit}
+                              </Text>
+                            )}
+                          </View>
+                          <View style={styles.stepperControls}>
+                            <Pressable
+                              onPressIn={() =>
+                                startHoldAction(() => {
+                                  triggerHaptic('selection');
+                                  setEffortVal((prev) => Math.max(30, prev - 2.5));
+                                })
+                              }
+                              onPressOut={clearHoldTimer}
+                              style={styles.stepperBtn}
+                              accessibilityRole="button"
+                              accessibilityLabel="Diminuir porcentagem"
+                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                            >
+                              <Text style={styles.stepperBtnText}>−</Text>
+                            </Pressable>
+                            <Text style={styles.stepperValuePercent}>
+                              {formatDecimalBR(effortVal)}%
+                            </Text>
+                            <Pressable
+                              onPressIn={() =>
+                                startHoldAction(() => {
+                                  triggerHaptic('selection');
+                                  setEffortVal((prev) => Math.min(100, prev + 2.5));
+                                })
+                              }
+                              onPressOut={clearHoldTimer}
+                              style={styles.stepperBtn}
+                              accessibilityRole="button"
+                              accessibilityLabel="Aumentar porcentagem"
+                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                            >
+                              <Text style={styles.stepperBtnText}>+</Text>
+                            </Pressable>
+                          </View>
+                        </View>
+                      </View>
+                    )}
+
+                    {/* Incremento sobre última semana / sessão */}
+                    {(effortMode === 'last_week_plus' ||
+                      effortMode === 'last_session_plus') && (
+                      <View style={styles.stepperCard}>
+                        <Text style={styles.stepperLabel}>Incremento ({unit})</Text>
+                        <View style={styles.incrementRow}>
+                          <Text style={styles.plusSymbol}>+</Text>
+                          <TextInput
+                            value={incrementInput}
+                            onChangeText={setIncrementInput}
+                            onFocus={() => setIsIncrementFocused(true)}
+                            onBlur={handleIncrementBlur}
+                            keyboardType="decimal-pad"
+                            style={[
+                              styles.incrementTextInput,
+                              isIncrementFocused && styles.inputFocused,
+                            ]}
+                            accessibilityLabel={`Incremento em ${unit}`}
+                          />
+                          <Text style={styles.unitSuffix}>{unit}</Text>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              )}
+
+              {/* 4. Redução automática de carga do Drop Set (%) */}
+              {type === 'drop' && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionLabel}>Redução automática da carga (%)</Text>
+
+                  {/* Chips de atalhos rápidos com alvo >= 48dp */}
+                  <View style={styles.wrapRow}>
+                    {DROP_PERCENT_PRESETS.map((pct) => {
+                      const isSelected = dropPercent === pct;
+                      return (
+                        <Pressable
+                          key={pct}
+                          onPress={() => {
+                            triggerHaptic('selection');
+                            setDropPercent(pct);
+                            setDropPercentInput(String(pct));
+                          }}
+                          style={[
+                            styles.smallChip,
+                            isSelected
+                              ? styles.smallChipSelected
+                              : styles.smallChipUnselected,
+                          ]}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: isSelected }}
+                          accessibilityLabel={`Redução de ${pct}%`}
+                          hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                        >
+                          <Text
+                            style={[
+                              styles.smallChipText,
+                              isSelected
+                                ? styles.smallChipTextSelected
+                                : styles.smallChipTextUnselected,
+                            ]}
+                          >
+                            −{pct}%
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+
+                  {/* Campo numérico livre (1 a 90%) */}
+                  <View style={styles.dropCustomInputRow}>
+                    <Text style={styles.dropCustomInputLabel}>Personalizado (1 a 90%):</Text>
+                    <View
+                      style={[
+                        styles.dropCustomInputWrap,
+                        isDropFocused && styles.inputFocused,
+                      ]}
+                    >
+                      <TextInput
+                        value={dropPercentInput}
+                        onChangeText={handleDropPercentInputChange}
+                        onFocus={() => setIsDropFocused(true)}
+                        onBlur={handleDropPercentInputBlur}
+                        keyboardType="numeric"
+                        maxLength={3}
+                        style={styles.dropCustomTextInput}
+                        accessibilityLabel="Porcentagem personalizada de redução de carga"
+                        placeholder="20"
+                        placeholderTextColor={colors.textMuted}
+                      />
+                      <Text style={styles.dropCustomInputSuffix}>%</Text>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {/* 5. Descanso individual desta série */}
+              <View style={styles.section}>
+                <Text style={styles.sectionLabel}>Descanso desta série</Text>
+                <View style={styles.wrapRow}>
+                  {SET_REST_OPTIONS.map((sec) => {
+                    const isSelected = rest === sec;
+                    return (
+                      <Pressable
+                        key={String(sec)}
                         onPress={() => {
                           triggerHaptic('selection');
-                          setDropPercent(pct);
-                          setDropPercentInput(String(pct));
+                          setRest(sec);
                         }}
                         style={[
                           styles.smallChip,
@@ -877,7 +1085,8 @@ export const SetEditSheet: React.FC<SetEditSheetProps> = ({
                         ]}
                         accessibilityRole="button"
                         accessibilityState={{ selected: isSelected }}
-                        accessibilityLabel={`-${pct}%`}
+                        accessibilityLabel={formatRestShort(sec)}
+                        hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
                       >
                         <Text
                           style={[
@@ -887,116 +1096,61 @@ export const SetEditSheet: React.FC<SetEditSheetProps> = ({
                               : styles.smallChipTextUnselected,
                           ]}
                         >
-                          -{pct}%
+                          {formatRestShort(sec)}
                         </Text>
                       </Pressable>
                     );
                   })}
                 </View>
-
-                {/* Campo numérico livre (1 a 90%) */}
-                <View style={styles.dropCustomInputRow}>
-                  <Text style={styles.dropCustomInputLabel}>Personalizado (1 a 90%):</Text>
-                  <View style={styles.dropCustomInputWrap}>
-                    <TextInput
-                      value={dropPercentInput}
-                      onChangeText={handleDropPercentInputChange}
-                      onBlur={handleDropPercentInputBlur}
-                      keyboardType="numeric"
-                      maxLength={3}
-                      style={styles.dropCustomTextInput}
-                      accessibilityLabel="Porcentagem personalizada de redução de carga"
-                      placeholder="20"
-                      placeholderTextColor="#636366"
-                    />
-                    <Text style={styles.dropCustomInputSuffix}>%</Text>
-                  </View>
-                </View>
+                {type === 'drop' && (
+                  <Text style={styles.discreetNoticeText}>
+                    Pausa zero se houver outro Drop abaixo; o descanso só inicia após o último Drop.
+                  </Text>
+                )}
               </View>
-            )}
+            </ScrollView>
 
-            {/* 4. Descanso individual desta série */}
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Descanso desta série</Text>
-              <View style={styles.wrapRow}>
-                {SET_REST_OPTIONS.map((sec) => {
-                  const isSelected = rest === sec;
-                  return (
-                    <Pressable
-                      key={String(sec)}
-                      onPress={() => {
-                        triggerHaptic('selection');
-                        setRest(sec);
-                      }}
-                      style={[
-                        styles.smallChip,
-                        isSelected
-                          ? styles.smallChipSelected
-                          : styles.smallChipUnselected,
-                      ]}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: isSelected }}
-                      accessibilityLabel={formatRestShort(sec)}
-                    >
-                      <Text
-                        style={[
-                          styles.smallChipText,
-                          isSelected
-                            ? styles.smallChipTextSelected
-                            : styles.smallChipTextUnselected,
-                        ]}
-                      >
-                        {formatRestShort(sec)}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-              {type === 'drop' && (
-                <Text style={styles.discreetNoticeText}>
-                  Pausa zero se houver outro Drop abaixo; o descanso só inicia após o último Drop.
-                </Text>
-              )}
+            {/* Ações (Aplicar e Remover série com segurança) */}
+            <View style={styles.actionsFooter}>
+              <Pressable
+                onPress={handleSave}
+                style={({ pressed }) => [
+                  styles.applyBtn,
+                  pressed && styles.applyBtnPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Aplicar alterações na série"
+              >
+                <Text style={styles.applyBtnText}>Aplicar alterações</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={handleRemove}
+                style={({ pressed }) => [
+                  styles.removeBtn,
+                  pressed && styles.removeBtnPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Remover série do exercício"
+              >
+                <Trash2 size={16} color={colors.error} strokeWidth={1.75} />
+                <Text style={styles.removeBtnText}>Remover série</Text>
+              </Pressable>
             </View>
-          </ScrollView>
-
-          {/* 5. Ações (Aplicar e Remover) */}
-          <View style={styles.actionsFooter}>
-            <Pressable
-              onPress={handleSave}
-              style={({ pressed }) => [
-                styles.applyBtn,
-                pressed && { opacity: 0.88, transform: [{ scale: 0.99 }] },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Aplicar alterações na série"
-            >
-              <Text style={styles.applyBtnText}>Aplicar</Text>
-            </Pressable>
-
-            <Pressable
-              onPress={handleRemove}
-              style={({ pressed }) => [
-                styles.removeBtn,
-                pressed && { opacity: 0.88 },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Remover série"
-            >
-              <Trash2 size={15} color="#FF6B6B" />
-              <Text style={styles.removeBtnText}>Remover série</Text>
-            </Pressable>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
+  keyboardContainer: {
+    flex: 1,
+  },
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    backgroundColor: colors.overlay, // rgba(0, 0, 0, 0.65)
     justifyContent: 'flex-end',
   },
   backdrop: {
@@ -1008,162 +1162,184 @@ const styles = StyleSheet.create({
   },
   sheetContainer: {
     width: '100%',
-    backgroundColor: '#23201D',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    backgroundColor: colors.surfaceContainer, // #23201D
+    borderTopLeftRadius: radii.sheet, // 28px
+    borderTopRightRadius: radii.sheet,
     borderTopWidth: 1,
-    borderTopColor: '#2D2925',
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 24,
+    borderTopColor: colors.outlineVariant, // #3A3531
+    paddingHorizontal: spacing.margin, // 20px
+    paddingTop: spacing.xs,
   },
   handleArea: {
     alignItems: 'center',
-    paddingVertical: 6,
+    paddingVertical: spacing.gutter,
   },
   handle: {
     width: 40,
     height: 4,
-    borderRadius: 2,
-    backgroundColor: '#38332F',
+    borderRadius: radii.pill,
+    backgroundColor: colors.outline, // #7D746B
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
-    paddingTop: 4,
+    marginBottom: spacing.md,
   },
   headerTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#F5EFE8',
+    fontSize: 18,
+    fontFamily: fontFamilies.outfitBold,
+    color: colors.onSurface,
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#2D2925',
+    width: spacing.touchTargetMin, // 48dp
+    height: spacing.touchTargetMin,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceContainerHigh, // #2D2925
     alignItems: 'center',
     justifyContent: 'center',
   },
   scrollContent: {
-    paddingBottom: 16,
+    paddingBottom: spacing.md,
   },
   section: {
-    marginBottom: 18,
+    marginBottom: spacing.lg,
   },
   sectionLabel: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#B7ADA3',
-    marginBottom: 8,
+    fontFamily: fontFamilies.dmSansMedium,
+    color: colors.onSurfaceVariant,
+    marginBottom: spacing.sm,
   },
   chipsRow: {
     flexDirection: 'row',
-    gap: 6,
+    gap: 8,
   },
   chipBtn: {
     flex: 1,
-    paddingVertical: 9,
-    borderRadius: 12,
+    height: spacing.touchTargetMin, // 48dp
+    borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
   },
   chipBtnSelected: {
-    backgroundColor: '#FF7A59',
-    borderColor: '#FF7A59',
+    backgroundColor: colors.primary, // #FF7A59
+    borderColor: colors.primary,
   },
   chipBtnUnselected: {
-    backgroundColor: '#2D2925',
-    borderColor: '#38332F',
+    backgroundColor: colors.surfaceContainerHigh, // #2D2925
+    borderColor: colors.outlineVariant, // #3A3531
   },
   chipBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 13,
+    fontFamily: fontFamilies.dmSansMedium,
   },
   chipBtnTextSelected: {
-    color: '#1A1715',
+    color: colors.onPrimary, // #1A1715
+    fontFamily: fontFamilies.outfitBold,
   },
   chipBtnTextUnselected: {
-    color: '#B7ADA3',
+    color: colors.onSurfaceVariant,
+  },
+  chipBtnDisabled: {
+    opacity: 0.4,
+    borderColor: colors.surfaceContainer,
+    backgroundColor: colors.surfaceContainerLow,
+  },
+  chipBtnTextDisabled: {
+    color: colors.textMuted,
+  },
+  discreetNoticeText: {
+    fontSize: 12,
+    fontFamily: fontFamilies.dmSansRegular,
+    color: colors.onSurfaceVariant,
+    marginTop: 8,
+    lineHeight: 16,
   },
   failureNotice: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#2D2925',
+    gap: 10,
+    backgroundColor: colors.surfaceContainerHigh,
     borderWidth: 1,
-    borderColor: '#38332F',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderColor: colors.outlineVariant,
+    borderRadius: radii.input,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minHeight: spacing.touchTargetMin,
   },
   failureNoticeText: {
-    fontSize: 12,
-    color: '#F5EFE8',
+    fontSize: 13,
+    fontFamily: fontFamilies.dmSansRegular,
+    color: colors.onSurface,
     flex: 1,
   },
   controlsGroup: {
-    gap: 10,
+    gap: 12,
   },
   stepperCard: {
-    backgroundColor: '#2D2925',
+    backgroundColor: colors.surfaceContainerHigh, // #2D2925
     borderWidth: 1,
-    borderColor: '#38332F',
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    borderColor: colors.outlineVariant, // #3A3531
+    borderRadius: radii.input, // 16px
+    paddingHorizontal: 16,
     paddingVertical: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    minHeight: 64,
   },
   stepperTextWrap: {
     flex: 1,
+    marginRight: 8,
   },
   stepperLabel: {
-    fontSize: 12,
-    color: '#B7ADA3',
-    fontWeight: '500',
+    fontSize: 13,
+    fontFamily: fontFamilies.dmSansMedium,
+    color: colors.onSurfaceVariant,
   },
   stepperSubtext: {
-    fontSize: 11,
-    color: '#7D746B',
+    fontSize: 12,
+    fontFamily: fontFamilies.dmSansRegular,
+    color: colors.textMuted,
     marginTop: 2,
+    fontVariant: ['tabular-nums'],
   },
   stepperControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
   stepperBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    backgroundColor: '#38332F',
+    width: spacing.touchTargetMin, // 48x48dp circular stepper button
+    height: spacing.touchTargetMin,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceContainerHighest, // #38332F
     alignItems: 'center',
     justifyContent: 'center',
   },
   stepperBtnText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#F5EFE8',
-    lineHeight: 18,
+    fontSize: 22,
+    fontFamily: fontFamilies.outfitBold,
+    color: colors.onSurface,
+    lineHeight: 24,
   },
   stepperValue: {
-    minWidth: 42,
+    minWidth: 46,
     textAlign: 'center',
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#F5EFE8',
+    fontSize: 20,
+    fontFamily: fontFamilies.outfitBold,
+    fontVariant: ['tabular-nums'],
+    color: colors.onSurface,
   },
-  stepperValueCompact: {
-    minWidth: 34,
+  stepperValuePercent: {
+    minWidth: 64,
     textAlign: 'center',
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#F5EFE8',
+    fontSize: 18,
+    fontFamily: fontFamilies.outfitBold,
+    fontVariant: ['tabular-nums'],
+    color: colors.primary,
   },
   stepperGrid: {
     flexDirection: 'row',
@@ -1171,155 +1347,182 @@ const styles = StyleSheet.create({
   },
   stepperGridCard: {
     flex: 1,
-    backgroundColor: '#2D2925',
+    backgroundColor: colors.surfaceContainerHigh,
     borderWidth: 1,
-    borderColor: '#38332F',
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
+    borderColor: colors.outlineVariant,
+    borderRadius: radii.input,
+    padding: 12,
+  },
+  stepperGridLabel: {
+    fontSize: 12,
+    fontFamily: fontFamilies.dmSansMedium,
+    color: colors.onSurfaceVariant,
+    marginBottom: 8,
+  },
+  stepperGridControls: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  stepperGridBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceContainerHighest,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperValueCompact: {
+    minWidth: 36,
+    textAlign: 'center',
+    fontSize: 18,
+    fontFamily: fontFamilies.outfitBold,
+    fontVariant: ['tabular-nums'],
+    color: colors.onSurface,
+  },
   wrapRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 8,
   },
   smallChip: {
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-    borderRadius: 9,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    minHeight: 44,
+    borderRadius: radii.input,
     borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   smallChipSelected: {
-    backgroundColor: '#FF7A59',
-    borderColor: '#FF7A59',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   smallChipUnselected: {
-    backgroundColor: '#2D2925',
-    borderColor: '#38332F',
+    backgroundColor: colors.surfaceContainerHigh,
+    borderColor: colors.outlineVariant,
   },
   smallChipText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 13,
+    fontFamily: fontFamilies.dmSansMedium,
+    fontVariant: ['tabular-nums'],
   },
   smallChipTextSelected: {
-    color: '#1A1715',
-    fontWeight: '700',
+    color: colors.onPrimary,
+    fontFamily: fontFamilies.outfitBold,
   },
   smallChipTextUnselected: {
-    color: '#B7ADA3',
+    color: colors.onSurfaceVariant,
   },
   incrementRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   plusSymbol: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#FF7A59',
+    fontSize: 16,
+    fontFamily: fontFamilies.outfitBold,
+    color: colors.primary,
   },
   incrementTextInput: {
-    width: 68,
-    height: 32,
+    width: 80,
+    height: spacing.touchTargetMin, // 48dp
     textAlign: 'center',
-    borderRadius: 8,
-    backgroundColor: '#38332F',
+    borderRadius: radii.input,
+    backgroundColor: colors.surfaceContainerHighest,
     borderWidth: 1,
-    borderColor: '#2D2925',
-    color: '#F5EFE8',
-    fontSize: 13,
-    fontWeight: '700',
+    borderColor: colors.outlineVariant,
+    color: colors.onSurface,
+    fontSize: 16,
+    fontFamily: fontFamilies.outfitBold,
+    fontVariant: ['tabular-nums'],
     paddingVertical: 0,
-    paddingHorizontal: 6,
+    paddingHorizontal: 8,
   },
   unitSuffix: {
-    fontSize: 12,
-    color: '#B7ADA3',
+    fontSize: 13,
+    fontFamily: fontFamilies.dmSansRegular,
+    color: colors.onSurfaceVariant,
+  },
+  dropCustomInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.sm,
+  },
+  dropCustomInputLabel: {
+    fontSize: 13,
+    fontFamily: fontFamilies.dmSansRegular,
+    color: colors.onSurfaceVariant,
+  },
+  dropCustomInputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surfaceContainerHighest,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+    borderRadius: radii.input,
+    paddingHorizontal: 10,
+    height: spacing.touchTargetMin, // 48dp
+  },
+  inputFocused: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryContainer,
+  },
+  dropCustomTextInput: {
+    width: 48,
+    textAlign: 'center',
+    color: colors.onSurface,
+    fontSize: 16,
+    fontFamily: fontFamilies.outfitBold,
+    fontVariant: ['tabular-nums'],
+    paddingVertical: 0,
+    paddingHorizontal: 2,
+  },
+  dropCustomInputSuffix: {
+    fontSize: 14,
+    fontFamily: fontFamilies.dmSansMedium,
+    color: colors.onSurfaceVariant,
   },
   actionsFooter: {
-    gap: 8,
-    paddingTop: 6,
+    paddingTop: spacing.sm,
+    gap: 10,
   },
   applyBtn: {
     width: '100%',
-    paddingVertical: 13,
-    borderRadius: 14,
-    backgroundColor: '#FF7A59',
+    height: spacing.buttonHeight, // 56px
+    borderRadius: radii.pill,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  applyBtnPressed: {
+    backgroundColor: colors.accentPressed,
+    transform: [{ scale: 0.995 }],
+  },
   applyBtnText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1A1715',
+    fontSize: 16,
+    fontFamily: fontFamilies.outfitBold,
+    color: colors.onPrimary,
   },
   removeBtn: {
     width: '100%',
-    paddingVertical: 10,
-    borderRadius: 14,
+    height: spacing.touchTargetMin, // 48dp
+    borderRadius: radii.pill,
     backgroundColor: 'rgba(255, 107, 107, 0.12)',
     borderWidth: 1,
     borderColor: 'rgba(255, 107, 107, 0.3)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 8,
+  },
+  removeBtnPressed: {
+    backgroundColor: 'rgba(255, 107, 107, 0.22)',
   },
   removeBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#FF6B6B',
-  },
-  chipBtnDisabled: {
-    opacity: 0.4,
-    borderColor: '#23201D',
-    backgroundColor: '#1F1B19',
-  },
-  chipBtnTextDisabled: {
-    color: '#7D746B',
-  },
-  discreetNoticeText: {
-    fontSize: 12,
-    color: '#B7ADA3',
-    marginTop: 8,
-    lineHeight: 16,
-  },
-  dropCustomInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginTop: 12,
-  },
-  dropCustomInputLabel: {
-    fontSize: 13,
-    color: '#B7ADA3',
-    fontWeight: '500',
-  },
-  dropCustomInputWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#38332F',
-    borderWidth: 1,
-    borderColor: '#2D2925',
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    height: 34,
-  },
-  dropCustomTextInput: {
-    width: 48,
-    textAlign: 'center',
-    color: '#F5EFE8',
     fontSize: 14,
-    fontWeight: '700',
-    paddingVertical: 0,
-    paddingHorizontal: 2,
-  },
-  dropCustomInputSuffix: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#B7ADA3',
+    fontFamily: fontFamilies.dmSansMedium,
+    color: colors.error,
   },
 });
