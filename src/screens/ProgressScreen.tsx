@@ -22,6 +22,8 @@ import {
   SegmentedControl,
   SegmentOption,
   MuscleIcon,
+  DateRangePickerSheet,
+  DateRangeResult,
   triggerHaptic,
 } from '../ui';
 import {
@@ -33,6 +35,7 @@ import {
   AlertCircle,
   RotateCcw,
   Flame,
+  X,
 } from 'lucide-react-native';
 import {
   getProgressScreenData,
@@ -40,6 +43,9 @@ import {
   SessionHistoryItem,
   WeightUnit,
   PeriodFilter,
+  QuickPeriod,
+  CustomDateRange,
+  isCustomDateRange,
 } from '../db/progress';
 import { formatarPeso, KG_TO_LB } from '../domain/weight';
 import { formatMuscleSeriesCount } from '../domain/progressMath';
@@ -114,8 +120,10 @@ export const ProgressScreen: React.FC = () => {
 
   const [selectedTab, setSelectedTab] = useState<TabView>('resumo');
   const [period, setPeriod] = useState<PeriodFilter>('7d');
+  const [isDateRangeSheetOpen, setIsDateRangeSheetOpen] = useState(false);
   const [data, setData] = useState<ProgressScreenData | null>(null);
   const [showAllMuscles, setShowAllMuscles] = useState(false);
+  const [showAllExercises, setShowAllExercises] = useState(false);
   const [selectedRoutineFilter, setSelectedRoutineFilter] = useState<string>('Todos');
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -147,14 +155,27 @@ export const ProgressScreen: React.FC = () => {
     loadProgressData(period);
   }, [loadProgressData, period]);
 
-  const handlePeriodChange = useCallback(
-    (newPeriod: PeriodFilter) => {
-      if (newPeriod === period) return;
+  const handleQuickPeriodChange = useCallback(
+    (quick: QuickPeriod) => {
+      if (period === quick) return;
       triggerHaptic('selection');
-      setPeriod(newPeriod);
-      loadProgressData(newPeriod);
+      setPeriod(quick);
+      loadProgressData(quick);
     },
     [period, loadProgressData]
+  );
+
+  const handleApplyDateRange = useCallback(
+    (range: DateRangeResult) => {
+      const customFilter: CustomDateRange = {
+        startTs: range.startTs,
+        endTs: range.endTs,
+        label: range.label,
+      };
+      setPeriod(customFilter);
+      loadProgressData(customFilter);
+    },
+    [loadProgressData]
   );
 
   const tabOptions: SegmentOption<TabView>[] = [
@@ -164,6 +185,21 @@ export const ProgressScreen: React.FC = () => {
   ];
 
   const unit: WeightUnit = data?.unit || 'kg';
+
+  // Identificação do filtro customizado ativo
+  const isCustomRange = useMemo(() => isCustomDateRange(period), [period]);
+  const customRangeLabel = useMemo(() => (isCustomDateRange(period) ? period.label : ''), [period]);
+
+  // Rótulo descritivo do período para o card de Volume Acumulado
+  const periodLabel = useMemo(() => {
+    if (isCustomDateRange(period)) {
+      return period.label;
+    }
+    if (period === '7d') return '7 dias';
+    if (period === '30d') return '30 dias';
+    if (period === '90d') return '90 dias';
+    return 'todo o período';
+  }, [period]);
 
   // Volume máximo da semana para calibração das barras
   const maxWeeklyVol = useMemo(() => {
@@ -191,6 +227,13 @@ export const ProgressScreen: React.FC = () => {
     return data.muscleDistribution.slice(0, 4);
   }, [data, showAllMuscles]);
 
+  // Exercícios visíveis na evolução de força: 3 principais por padrão ou todos se expandido
+  const visibleStrengthProgression = useMemo(() => {
+    if (!data) return [];
+    if (showAllExercises) return data.strengthProgression;
+    return data.strengthProgression.slice(0, 3);
+  }, [data, showAllExercises]);
+
   // Lista de rotinas únicas para filtro no histórico
   const routineOptions = useMemo(() => {
     if (!data || data.sessions.length === 0) return ['Todos'];
@@ -198,12 +241,20 @@ export const ProgressScreen: React.FC = () => {
     return ['Todos', ...names];
   }, [data]);
 
-  // Sessões filtradas por rotina
+  // Sessões filtradas por rotina e pelo período personalizado (quando ativo)
   const filteredSessions = useMemo(() => {
     if (!data) return [];
-    if (selectedRoutineFilter === 'Todos') return data.sessions;
-    return data.sessions.filter((s) => s.name === selectedRoutineFilter);
-  }, [data, selectedRoutineFilter]);
+    let list = data.sessions;
+
+    if (isCustomDateRange(period)) {
+      list = list.filter(
+        (s) => s.endedAt >= period.startTs && s.endedAt <= period.endTs
+      );
+    }
+
+    if (selectedRoutineFilter === 'Todos') return list;
+    return list.filter((s) => s.name === selectedRoutineFilter);
+  }, [data, selectedRoutineFilter, period]);
 
   // Sessões agrupadas por mês e ano para hierarquia escaneável
   const groupedSessions = useMemo(() => {
@@ -428,53 +479,92 @@ export const ProgressScreen: React.FC = () => {
                   </Text>
                 </View>
 
-                {/* 1.3 FILTRO DE PERÍODO: Controla o bloco analítico abaixo */}
-                <View style={styles.periodRow}>
-                  {(['7d', '30d', 'tudo'] as const).map((p) => {
-                    const isSelected = period === p;
-                    const label = p === '7d' ? '7 dias' : p === '30d' ? '30 dias' : 'Tudo';
-                    return (
-                      <Pressable
-                        key={p}
-                        onPress={() => handlePeriodChange(p)}
-                        accessible={true}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: isSelected }}
-                        accessibilityLabel={`Filtrar resumo por ${label}`}
-                        style={[
-                          styles.periodButton,
-                          isSelected ? styles.periodButtonActive : styles.periodButtonInactive,
-                        ]}
-                      >
-                        <Text
-                          variant="bodySmall"
+                {/* 1.3 NOVA BARRA DE FILTRO: Atalhos rápidos 7d, 30d, 90d, Tudo + Botão Datas */}
+                <View style={styles.periodRowWrapper}>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.periodRowContent}
+                  >
+                    {(['7d', '30d', '90d', 'tudo'] as const).map((p) => {
+                      const isSelected = !isCustomRange && period === p;
+                      const label = p === '7d' ? '7d' : p === '30d' ? '30d' : p === '90d' ? '90d' : 'Tudo';
+                      return (
+                        <Pressable
+                          key={p}
+                          onPress={() => handleQuickPeriodChange(p)}
+                          accessible={true}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: isSelected }}
+                          accessibilityLabel={`Filtrar por ${p === 'tudo' ? 'todo o período' : `${p.replace('d', '')} dias`}`}
+                          hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
                           style={[
-                            styles.periodButtonText,
-                            isSelected ? styles.periodTextActive : styles.periodTextInactive,
+                            styles.periodButton,
+                            isSelected ? styles.periodButtonActive : styles.periodButtonInactive,
                           ]}
                         >
-                          {label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
+                          <Text
+                            variant="bodySmall"
+                            style={[
+                              styles.periodButtonText,
+                              isSelected ? styles.periodTextActive : styles.periodTextInactive,
+                            ]}
+                          >
+                            {label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+
+                    {/* Botão de data personalizada (ícone Calendar + "Datas" ou intervalo compacto) */}
+                    <Pressable
+                      onPress={() => {
+                        triggerHaptic('light');
+                        setIsDateRangeSheetOpen(true);
+                      }}
+                      accessible={true}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isCustomRange }}
+                      accessibilityLabel={
+                        isCustomRange
+                          ? `Período personalizado: ${customRangeLabel}. Toque para alterar.`
+                          : 'Selecionar período personalizado por data'
+                      }
+                      hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                      style={[
+                        styles.periodButton,
+                        styles.customDateButton,
+                        isCustomRange ? styles.periodButtonActive : styles.periodButtonInactive,
+                      ]}
+                    >
+                      <Calendar
+                        size={14}
+                        color={isCustomRange ? colors.primary : colors.onSurfaceVariant}
+                        strokeWidth={1.75}
+                      />
+                      <Text
+                        variant="bodySmall"
+                        numberOfLines={1}
+                        style={[
+                          styles.periodButtonText,
+                          isCustomRange ? styles.periodTextActive : styles.periodTextInactive,
+                        ]}
+                      >
+                        {isCustomRange ? customRangeLabel : 'Datas'}
+                      </Text>
+                    </Pressable>
+                  </ScrollView>
                 </View>
 
                 {/* 1.4 CARD: Volume acumulado e consistência */}
                 <Card variant="surface" style={styles.metricsCard}>
                   <View style={styles.metricsHeader}>
-                    <Text variant="bodySmall" color="secondary">
-                      Volume acumulado (
-                      {period === '7d'
-                        ? '7 dias'
-                        : period === '30d'
-                        ? '30 dias'
-                        : 'todo o período'}
-                      )
+                    <Text variant="bodySmall" color="secondary" numberOfLines={1} style={styles.metricsSubtitle}>
+                      {`Volume acumulado (${periodLabel})`}
                     </Text>
 
                     {/* Badge de tendência Δ% com suporte a positivo (+ verde), negativo (- suave) e neutro */}
-                    {data.volumeDeltaPercent !== null && (
+                    {data.volumeDeltaPercent !== null && data.periodComparisonLabel && (
                       <View
                         style={[
                           styles.deltaBadge,
@@ -500,7 +590,7 @@ export const ProgressScreen: React.FC = () => {
                           {data.volumeDeltaPercent > 0
                             ? `+${data.volumeDeltaPercent}%`
                             : `${data.volumeDeltaPercent}%`}{' '}
-                          vs {period === '7d' ? '7d ant.' : '30d ant.'}
+                          vs {data.periodComparisonLabel}
                         </Text>
                       </View>
                     )}
@@ -644,7 +734,7 @@ export const ProgressScreen: React.FC = () => {
                   )}
                 </Card>
 
-                {/* 1.6 BLOCO: Evolução de força (1RM estimado Epley) */}
+                {/* 1.6 BLOCO: Evolução de força (e1RM - limpo sem repetição de texto) */}
                 {data.strengthProgression.length > 0 && (
                   <View style={styles.strengthSection}>
                     <View style={styles.sectionHeaderCol}>
@@ -655,20 +745,26 @@ export const ProgressScreen: React.FC = () => {
                     </View>
 
                     <Card variant="surface" style={styles.strengthCard}>
-                      {data.strengthProgression.map((item, idx) => {
-                        const isLast = idx === data.strengthProgression.length - 1;
-                        const e1rmDisplay =
-                          unit === 'lb'
-                            ? `${Math.round(item.currentE1rmKg * KG_TO_LB * 10) / 10} lb`
-                            : `${item.currentE1rmKg} kg`;
+                      {visibleStrengthProgression.map((item, idx) => {
+                        const isLast = idx === visibleStrengthProgression.length - 1;
+                        const e1rmFormatted = formatarPeso(item.currentE1rmKg, unit);
 
                         const deltaVal =
                           unit === 'lb'
                             ? Math.round(item.deltaKg * KG_TO_LB * 10) / 10
                             : item.deltaKg;
 
+                        const deltaNum = Math.abs(deltaVal);
+                        const deltaFormatted = String(deltaNum.toFixed(1))
+                          .replace('.0', '')
+                          .replace('.', ',');
+
                         const deltaText =
-                          deltaVal > 0 ? `+${deltaVal} ${unit}` : `${deltaVal} ${unit}`;
+                          deltaVal > 0
+                            ? `+${deltaFormatted} ${unit}`
+                            : deltaVal < 0
+                            ? `-${deltaFormatted} ${unit}`
+                            : `0 ${unit}`;
 
                         const bestSetText = `${formatarPeso(item.bestWeightKg, unit)} × ${
                           item.bestReps
@@ -685,7 +781,7 @@ export const ProgressScreen: React.FC = () => {
                               }}
                               accessible={true}
                               accessibilityRole="button"
-                              accessibilityLabel={`Evolução em ${item.name}: 1RM estimado ${e1rmDisplay}, variação ${deltaText}`}
+                              accessibilityLabel={`Evolução em ${item.name}: ${e1rmFormatted}, variação ${deltaText}`}
                               style={({ pressed }) => [
                                 styles.strengthRow,
                                 pressed && styles.strengthRowPressed,
@@ -714,12 +810,13 @@ export const ProgressScreen: React.FC = () => {
                               </View>
 
                               <View style={styles.strengthRightCol}>
+                                {/* Carga limpa com vírgula pt-BR sem poluição visual de "1RM est." */}
                                 <Text
-                                  variant="bodyMedium"
+                                  variant="headline"
                                   tabular
                                   style={styles.strength1RmText}
                                 >
-                                  1RM est. {e1rmDisplay}
+                                  {e1rmFormatted}
                                 </Text>
                                 <View style={styles.strengthDeltaRow}>
                                   <Text
@@ -749,6 +846,30 @@ export const ProgressScreen: React.FC = () => {
                           </React.Fragment>
                         );
                       })}
+
+                      {/* Botão Ver todos / Mostrar menos exercícios na evolução de força */}
+                      {data.strengthProgression.length > 3 && (
+                        <Pressable
+                          onPress={() => {
+                            triggerHaptic('light');
+                            setShowAllExercises((prev) => !prev);
+                          }}
+                          accessible={true}
+                          accessibilityRole="button"
+                          accessibilityLabel={
+                            showAllExercises
+                              ? 'Mostrar menos exercícios'
+                              : `Ver todos os ${data.strengthProgression.length} exercícios na evolução de força`
+                          }
+                          style={styles.showMoreMusclesButton}
+                        >
+                          <Text variant="bodySmall" color="coral" style={styles.showMoreMusclesText}>
+                            {showAllExercises
+                              ? 'Mostrar menos'
+                              : `Ver todos os exercícios (${data.strengthProgression.length})`}
+                          </Text>
+                        </Pressable>
+                      )}
                     </Card>
                   </View>
                 )}
@@ -849,7 +970,31 @@ export const ProgressScreen: React.FC = () => {
                ======================================================== */}
             {selectedTab === 'historico' && data && (
               <View style={styles.tabContent}>
-                {/* 2.1 Faixa horizontal de filtros por rotina */}
+                {/* 2.1 Chip de período personalizado ativo no histórico (com botão de remoção) */}
+                {isCustomDateRange(period) && (
+                  <View style={styles.activeDateFilterBadge}>
+                    <Calendar size={14} color={colors.primary} strokeWidth={1.75} />
+                    <Text variant="labelSmall" color="coral" tabular style={styles.activeDateFilterText}>
+                      {`Período: ${period.label}`}
+                    </Text>
+                    <Pressable
+                      onPress={() => {
+                        triggerHaptic('light');
+                        setPeriod('tudo');
+                        loadProgressData('tudo');
+                      }}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      accessible={true}
+                      accessibilityRole="button"
+                      accessibilityLabel="Remover filtro de data"
+                      style={styles.clearDateFilterButton}
+                    >
+                      <X size={14} color={colors.primary} strokeWidth={2} />
+                    </Pressable>
+                  </View>
+                )}
+
+                {/* 2.2 Faixa horizontal de filtros por rotina */}
                 {routineOptions.length > 2 && (
                   <View style={styles.routineFilterWrapper}>
                     <ScrollView
@@ -892,11 +1037,13 @@ export const ProgressScreen: React.FC = () => {
                   </View>
                 )}
 
-                {/* 2.2 Lista agrupada por mês e ano */}
+                {/* 2.3 Lista agrupada por mês e ano */}
                 {groupedSessions.length === 0 ? (
                   <View style={styles.emptyFilteredContainer}>
                     <Text variant="bodySmall" color="secondary" style={styles.emptyFilteredText}>
-                      Nenhum treino encontrado para "{selectedRoutineFilter}"
+                      {isCustomDateRange(period)
+                        ? `Nenhum treino encontrado para "${selectedRoutineFilter}" no período selecionado`
+                        : `Nenhum treino encontrado para "${selectedRoutineFilter}"`}
                     </Text>
                   </View>
                 ) : (
@@ -1047,6 +1194,15 @@ export const ProgressScreen: React.FC = () => {
           </>
         )}
       </ScrollView>
+
+      {/* Modal / Bottom Sheet de seleção de período personalizado */}
+      <DateRangePickerSheet
+        visible={isDateRangeSheetOpen}
+        onClose={() => setIsDateRangeSheetOpen(false)}
+        onApply={handleApplyDateRange}
+        initialStartTs={isCustomDateRange(period) ? period.startTs : null}
+        initialEndTs={isCustomDateRange(period) ? period.endTs : null}
+      />
     </SafeAreaView>
   );
 };
@@ -1077,19 +1233,28 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
-  // Filtro de período com estilo tonal subordinado
-  periodRow: {
+  // Nova barra rolável de filtro de período
+  periodRowWrapper: {
+    marginBottom: spacing.xs,
+  },
+  periodRowContent: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing.sm,
+    paddingVertical: 2,
   },
   periodButton: {
-    flex: 1,
-    minHeight: 46,
+    minHeight: 42,
+    paddingHorizontal: spacing.md,
     borderRadius: radii.pill,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: spacing.sm,
     borderWidth: 1,
+  },
+  customDateButton: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: spacing.md,
   },
   periodButtonActive: {
     backgroundColor: colors.primaryContainer, // #3A251F
@@ -1102,6 +1267,7 @@ const styles = StyleSheet.create({
   periodButtonText: {
     fontFamily: fontFamilies.dmSansMedium,
     textAlign: 'center',
+    fontSize: 13,
   },
   periodTextActive: {
     color: colors.primary, // #FF7A59
@@ -1227,11 +1393,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: spacing.sm,
+  },
+  metricsSubtitle: {
+    flex: 1,
   },
   deltaBadge: {
     borderRadius: radii.pill,
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
+    flexShrink: 0,
   },
   deltaBadgePositive: {
     backgroundColor: 'rgba(123, 201, 143, 0.14)',
@@ -1425,9 +1596,9 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   strength1RmText: {
+    fontSize: 16,
     fontFamily: fontFamilies.outfitBold,
     color: colors.onSurface,
-    fontSize: 14,
   },
   strengthDeltaRow: {
     flexDirection: 'row',
@@ -1510,6 +1681,28 @@ const styles = StyleSheet.create({
   prE1rmText: {
     fontSize: 12,
     fontFamily: fontFamilies.outfitSemiBold,
+  },
+
+  // Tag de data personalizada ativa no Histórico
+  activeDateFilterBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.primaryContainer, // #3A251F
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    alignSelf: 'flex-start',
+    marginBottom: spacing.xs,
+  },
+  activeDateFilterText: {
+    fontFamily: fontFamilies.dmSansMedium,
+  },
+  clearDateFilterButton: {
+    marginLeft: 4,
+    padding: 2,
   },
 
   // Filtros de rotina na aba Histórico

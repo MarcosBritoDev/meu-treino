@@ -10,7 +10,19 @@ import {
 } from '../domain/progressMath';
 
 export type WeightUnit = 'kg' | 'lb';
-export type PeriodFilter = '7d' | '30d' | 'tudo';
+export type QuickPeriod = '7d' | '30d' | '90d' | 'tudo';
+
+export interface CustomDateRange {
+  startTs: number;
+  endTs: number;
+  label: string;
+}
+
+export type PeriodFilter = QuickPeriod | CustomDateRange;
+
+export function isCustomDateRange(filter: PeriodFilter): filter is CustomDateRange {
+  return typeof filter === 'object' && filter !== null && 'startTs' in filter && 'endTs' in filter;
+}
 
 export interface SessionHistoryItem {
   id: string;
@@ -67,6 +79,7 @@ export interface ProgressScreenData {
   periodVolumeKg: number;
   previousPeriodVolumeKg: number | null;
   volumeDeltaPercent: number | null;
+  periodComparisonLabel: string | null;
   periodValidSetsCount: number;
   periodDurationMin: number;
   periodWorkoutCount: number;
@@ -202,31 +215,54 @@ export function getProgressScreenData(
     };
   });
 
-  // 5. Filtros de período (7d | 30d | tudo)
+  // 5. Filtros de período (7d | 30d | 90d | tudo | intervalo personalizado)
   const MS_DAY = 24 * 60 * 60 * 1000;
-  const cutoff7d = now - 7 * MS_DAY;
-  const cutoff14d = now - 14 * MS_DAY;
-  const cutoff30d = now - 30 * MS_DAY;
-  const cutoff60d = now - 60 * MS_DAY;
+  let startTs: number | null = null;
+  let endTs: number | null = null;
+  let prevStartTs: number | null = null;
+  let prevEndTs: number | null = null;
+  let periodComparisonLabel: string | null = null;
 
-  let currentCutoff = 0;
-  let prevStart = 0;
-  let prevEnd = 0;
-  let hasPrev = false;
-
-  if (period === '7d') {
-    currentCutoff = cutoff7d;
-    prevStart = cutoff14d;
-    prevEnd = cutoff7d;
-    hasPrev = true;
+  if (isCustomDateRange(period)) {
+    startTs = period.startTs;
+    endTs = period.endTs;
+    const diffDays = Math.max(1, Math.round((endTs - startTs) / MS_DAY));
+    prevStartTs = startTs - diffDays * MS_DAY;
+    prevEndTs = startTs;
+    periodComparisonLabel = `${diffDays}d ant.`;
+  } else if (period === '7d') {
+    startTs = now - 7 * MS_DAY;
+    endTs = now;
+    prevStartTs = now - 14 * MS_DAY;
+    prevEndTs = now - 7 * MS_DAY;
+    periodComparisonLabel = '7d ant.';
   } else if (period === '30d') {
-    currentCutoff = cutoff30d;
-    prevStart = cutoff60d;
-    prevEnd = cutoff30d;
-    hasPrev = true;
+    startTs = now - 30 * MS_DAY;
+    endTs = now;
+    prevStartTs = now - 60 * MS_DAY;
+    prevEndTs = now - 30 * MS_DAY;
+    periodComparisonLabel = '30d ant.';
+  } else if (period === '90d') {
+    startTs = now - 90 * MS_DAY;
+    endTs = now;
+    prevStartTs = now - 180 * MS_DAY;
+    prevEndTs = now - 90 * MS_DAY;
+    periodComparisonLabel = '90d ant.';
+  } else {
+    // 'tudo'
+    startTs = null;
+    endTs = null;
+    prevStartTs = null;
+    prevEndTs = null;
+    periodComparisonLabel = null;
   }
 
-  const periodSessions = sessionList.filter((s) => s.endedAt >= currentCutoff);
+  const periodSessions = sessionList.filter((s) => {
+    if (startTs !== null && s.endedAt < startTs) return false;
+    if (endTs !== null && s.endedAt > endTs) return false;
+    return true;
+  });
+
   const periodVolumeKg = periodSessions.reduce((acc, curr) => acc + curr.volumeKg, 0);
   const periodDurationMin = periodSessions.reduce((acc, curr) => acc + curr.durationMin, 0);
   const periodWorkoutCount = periodSessions.length;
@@ -239,8 +275,10 @@ export function getProgressScreenData(
   let previousPeriodVolumeKg: number | null = null;
   let volumeDeltaPercent: number | null = null;
 
-  if (hasPrev) {
-    const prevSessions = sessionList.filter((s) => s.endedAt >= prevStart && s.endedAt < prevEnd);
+  if (prevStartTs !== null && prevEndTs !== null) {
+    const prevSessions = sessionList.filter(
+      (s) => s.endedAt >= prevStartTs! && s.endedAt < prevEndTs!
+    );
     previousPeriodVolumeKg = prevSessions.reduce((acc, curr) => acc + curr.volumeKg, 0);
     volumeDeltaPercent = calcVolumeDeltaPercent(periodVolumeKg, previousPeriodVolumeKg);
   }
@@ -301,10 +339,14 @@ export function getProgressScreenData(
        AND (st.type IS NULL OR st.type != 'warmup')`
   );
 
-  const filteredMuscleSets = muscleSetRows.filter((r) => r.session_time >= currentCutoff);
+  const filteredMuscleSets = muscleSetRows.filter((r) => {
+    if (startTs !== null && r.session_time < startTs) return false;
+    if (endTs !== null && r.session_time > endTs) return false;
+    return true;
+  });
   const muscleDistribution = calcMuscleSetsDistribution(filteredMuscleSets);
 
-  // 8. Evolução de força (1RM estimado nos 3 exercícios mais frequentes com >= 2 sessões)
+  // 8. Evolução de força (1RM estimado nos exercícios com >= 2 sessões)
   const e1rmSetRows = rawDb.getAllSync<{
     exercise_id: string;
     exercise_name: string;
@@ -393,7 +435,11 @@ export function getProgressScreenData(
     );
 
     // Se o filtro de período estiver ativo, tenta usar sessões do período ou compara com a primeira
-    const periodSessionsForEx = chronoSessions.filter((s) => s.sessionTime >= currentCutoff);
+    const periodSessionsForEx = chronoSessions.filter((s) => {
+      if (startTs !== null && s.sessionTime < startTs) return false;
+      if (endTs !== null && s.sessionTime > endTs) return false;
+      return true;
+    });
 
     let firstSession: ExerciseSessionBest;
     let recentSession: ExerciseSessionBest;
@@ -401,8 +447,10 @@ export function getProgressScreenData(
     if (periodSessionsForEx.length >= 2) {
       firstSession = periodSessionsForEx[0];
       recentSession = periodSessionsForEx[periodSessionsForEx.length - 1];
+    } else if (periodSessionsForEx.length === 1) {
+      firstSession = chronoSessions[0];
+      recentSession = periodSessionsForEx[0];
     } else {
-      // Usa histórico geral para comparação de força
       firstSession = chronoSessions[0];
       recentSession = chronoSessions[chronoSessions.length - 1];
     }
@@ -425,7 +473,7 @@ export function getProgressScreenData(
 
   // Ordenar pelos exercícios mais frequentes (maior número de sessões com o exercício)
   eligibleProgression.sort((a, b) => b.sessionCount - a.sessionCount);
-  const strengthProgression = eligibleProgression.slice(0, 3);
+  const strengthProgression = eligibleProgression;
 
   // 9. Recordes pessoais (PRs) com e1rmKg
   const prRows = rawDb.getAllSync<{
@@ -493,6 +541,7 @@ export function getProgressScreenData(
         ? Math.round(previousPeriodVolumeKg * 100) / 100
         : null,
     volumeDeltaPercent,
+    periodComparisonLabel,
     periodValidSetsCount,
     periodDurationMin,
     periodWorkoutCount,

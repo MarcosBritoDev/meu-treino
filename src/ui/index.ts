@@ -20,6 +20,7 @@ export * from './SetEditSheet';
 export * from './MuscleIcon';
 export * from './EquipmentPickerSheet';
 export * from './MusclePickerSheet';
+export * from './DateRangePickerSheet';
 export * from './ExerciseCard';
 export * from './session/SetTable';
 export * from './illustrations/EmptySearchIllustration';
