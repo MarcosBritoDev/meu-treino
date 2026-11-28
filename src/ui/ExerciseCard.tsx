@@ -58,6 +58,7 @@ export interface ExerciseCardProps {
   onOpenPlateCalculator?: (exerciseId: string) => void;
   // Callbacks para modo ativo (Etapa 5)
   onToggleComplete?: (exerciseId: string, set: SetVM) => void;
+  onToggleAllComplete?: (exerciseId: string) => void;
   onActiveChange?: (exerciseId: string, setId: string, field: string, value: any) => void;
 }
 
@@ -84,6 +85,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
   onOpenExerciseOptions,
   onOpenPlateCalculator,
   onToggleComplete,
+  onToggleAllComplete,
   onActiveChange,
 }) => {
   const [exerciseMenuVisible, setExerciseMenuVisible] = useState(false);
@@ -239,12 +241,13 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
               const targetSet = (exercise.sets || []).find((s) => s.id === setId);
               if (targetSet) onToggleComplete?.(exercise.id, targetSet);
             }}
+            onToggleAllComplete={() => onToggleAllComplete?.(exercise.id)}
             onEditWeight={(setId) => onActiveChange?.(exercise.id, setId, 'weight', null)}
             onEditReps={(setId) => onActiveChange?.(exercise.id, setId, 'reps', null)}
             onActiveChange={(setId, field, val) => onActiveChange?.(exercise.id, setId, field, val)}
           />
 
-          {/* RODAPÉ DO CARD: + Adicionar série, Substituir, ••• */}
+          {/* RODAPÉ DO CARD: + Adicionar série, Substituir, Anilhas */}
           <View style={styles.footerRow}>
             <View style={styles.footerActionsLeft}>
               <Pressable
@@ -300,19 +303,6 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
                 </Pressable>
               )}
             </View>
-
-            <Pressable
-              onPress={handleOpenOptions}
-              style={({ pressed }) => [
-                styles.moreBtn,
-                pressed && { opacity: 0.7 },
-              ]}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              accessibilityRole="button"
-              accessibilityLabel={`Mais opções para ${exercise.name}`}
-            >
-              <MoreHorizontal size={18} color="#8E8E93" />
-            </Pressable>
           </View>
         </>
       )}
@@ -480,6 +470,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headerMoreBtn: {
+    minWidth: 32,
+    minHeight: 32,
     padding: 4,
     alignItems: 'center',
     justifyContent: 'center',

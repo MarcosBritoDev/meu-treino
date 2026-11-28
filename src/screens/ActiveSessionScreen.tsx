@@ -683,6 +683,160 @@ export const ActiveSessionScreen: React.FC = () => {
     }
   };
 
+  // Alternar em lote todas as séries de um exercício (Modo Ativo)
+  const handleToggleAllComplete = (exerciseId: string) => {
+    const rawDb = getExpoDb();
+    const exercise = exercises.find((e) => e.id === exerciseId);
+    if (!exercise || exercise.sets.length === 0) return;
+
+    const pendingSets = exercise.sets.filter((s) => s.completedAt === null);
+    const allAlreadyCompleted = pendingSets.length === 0;
+
+    if (allAlreadyCompleted) {
+      // Desmarcar todas as séries
+      triggerHaptic('light');
+      for (const s of exercise.sets) {
+        rawDb.runSync(
+          `UPDATE sets SET completed_at = NULL, is_pr_weight = 0, is_pr_volume = 0 WHERE id = ?`,
+          [s.id]
+        );
+      }
+
+      setExercises((prev) =>
+        prev.map((ex) =>
+          ex.id === exerciseId
+            ? {
+                ...ex,
+                sets: ex.sets.map((s) => ({
+                  ...s,
+                  completedAt: null,
+                  isPrWeight: false,
+                  isPrVolume: false,
+                })),
+              }
+            : ex
+        )
+      );
+
+      setToastMessage('Séries desmarcadas');
+      setToastVisible(true);
+    } else {
+      // Marcar todas as séries pendentes
+      const completedTime = Date.now();
+      const updatedSetsMap = new Map<
+        string,
+        { completedAt: number; isPrWeight: boolean; isPrVolume: boolean }
+      >();
+
+      // Carrega histórico para detecção de PR ignorando warmup e drop
+      const baseHistoryRows = rawDb.getAllSync<{
+        weight: number;
+        reps: number;
+        is_warmup: number;
+        type?: string;
+      }>(
+        `SELECT st.weight, st.reps, st.is_warmup, st.type
+         FROM sets st
+         JOIN session_exercises se ON st.session_exercise_id = se.id
+         WHERE se.exercise_id = ? AND st.completed_at IS NOT NULL AND st.is_warmup = 0`,
+        [exercise.exerciseId]
+      );
+
+      const dynamicHistory = baseHistoryRows.map((h) => ({
+        weight: h.weight,
+        reps: h.reps,
+        isWarmup: Boolean(h.is_warmup),
+        type: h.type,
+      }));
+
+      for (const setItem of pendingSets) {
+        let isPrW = false;
+        let isPrV = false;
+
+        if (canGeneratePR(setItem)) {
+          const pr = detectarPR(dynamicHistory, {
+            weight: setItem.weight,
+            reps: setItem.reps,
+            type: setItem.type,
+            isWarmup: setItem.isWarmup,
+          });
+          isPrW = pr.isPrWeight;
+          isPrV = pr.isPrVolume;
+
+          if (setItem.weight > 0 && setItem.reps > 0) {
+            dynamicHistory.push({
+              weight: setItem.weight,
+              reps: setItem.reps,
+              isWarmup: Boolean(setItem.isWarmup),
+              type: setItem.type,
+            });
+          }
+        }
+
+        rawDb.runSync(
+          `UPDATE sets 
+           SET completed_at = ?, is_pr_weight = ?, is_pr_volume = ?
+           WHERE id = ?`,
+          [completedTime, isPrW ? 1 : 0, isPrV ? 1 : 0, setItem.id]
+        );
+
+        updatedSetsMap.set(setItem.id, {
+          completedAt: completedTime,
+          isPrWeight: isPrW,
+          isPrVolume: isPrV,
+        });
+      }
+
+      triggerHaptic('light');
+
+      setExercises((prev) =>
+        prev.map((ex) =>
+          ex.id === exerciseId
+            ? {
+                ...ex,
+                sets: ex.sets.map((s) => {
+                  const updated = updatedSetsMap.get(s.id);
+                  if (updated) {
+                    return {
+                      ...s,
+                      completedAt: updated.completedAt,
+                      isPrWeight: updated.isPrWeight,
+                      isPrVolume: updated.isPrVolume,
+                    };
+                  }
+                  return s;
+                }),
+              }
+            : ex
+        )
+      );
+
+      const count = pendingSets.length;
+      const countLabel = count === 1 ? '1 série concluída' : `${count} séries concluídas`;
+      setToastMessage(countLabel);
+      setToastVisible(true);
+
+      // Descanso sem spam: apenas após o lote, se autoRestTimer ligado e descanso da última série > 0
+      const lastSet = exercise.sets[exercise.sets.length - 1];
+      const restTime =
+        lastSet?.restS ?? exercise.restS ?? (lastSet ? defaultRestFor(lastSet.type) : 0);
+      if (autoRestTimer && restTime > 0) {
+        startRestTimer(restTime);
+      }
+
+      // Expande o próximo exercício se houver
+      const currentIdx = exercises.findIndex((e) => e.id === exercise.id);
+      if (currentIdx >= 0 && currentIdx < exercises.length - 1) {
+        const nextExId = exercises[currentIdx + 1].id;
+        setExpandedExerciseId(nextExId);
+        setExpandedMap((prev) => ({
+          ...prev,
+          [nextExId]: true,
+        }));
+      }
+    }
+  };
+
   // Atualiza carga de série com suporte a cascata de Drop Sets e trava manual
   const updateExerciseSetWeight = (
     exerciseId: string,
@@ -1603,6 +1757,9 @@ export const ActiveSessionScreen: React.FC = () => {
                   onToggleComplete={(exId, setVm) => {
                     const found = exercise.sets.find((s) => s.id === setVm.id);
                     if (found) handleToggleSetCheck(exercise, found);
+                  }}
+                  onToggleAllComplete={(exId) => {
+                    handleToggleAllComplete(exId);
                   }}
                   onActiveChange={(exId, setId, field, val) => {
                     handleActiveChange(exId, setId, field, val);

@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import {
   Check,
+  CheckCheck,
   MoreVertical,
   Trophy,
   Copy,
@@ -16,6 +17,7 @@ import {
   ArrowDown,
   Trash2,
 } from 'lucide-react-native';
+import { colors } from '../../theme/colors';
 import { F } from './tokens';
 import {
   Unit,
@@ -102,6 +104,7 @@ export interface SetTableProps {
   previous?: (PreviousVM | null)[];
   targets?: (TargetVM | null)[];
   onToggle?: (setId: string) => void;
+  onToggleAllComplete?: () => void;
   onEditWeight?: (setId: string) => void;
   onEditReps?: (setId: string) => void;
   onActiveChange?: (setId: string, field: 'weight' | 'reps', value: any) => void;
@@ -376,23 +379,70 @@ export function SetTable(p: SetTableProps) {
     p.sets.map((s) => ({ completedAt: s.completedAt ?? null }))
   );
   const previousList = p.previous ?? [];
+  const allCompleted =
+    p.sets.length > 0 &&
+    p.sets.every(
+      (s) => Boolean(s.completed || (s.completedAt !== null && s.completedAt !== undefined))
+    );
 
   return (
     <View style={s.tableContainer}>
       {/* CABEÇALHO DE 5 COLUNAS FOLGADAS */}
-      <View
-        style={s.activeHeader}
-        accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants"
-      >
-        <Text style={[s.headText, s.activeColSerie]}>Série</Text>
-        <Text style={[s.headText, s.activeColMeta, { textAlign: 'left' }]} numberOfLines={1}>
+      <View style={s.activeHeader}>
+        <Text
+          style={[s.headText, s.activeColSerie]}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+        >
+          Série
+        </Text>
+        <Text
+          style={[s.headText, s.activeColMeta, { textAlign: 'left' }]}
+          numberOfLines={1}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+        >
           Meta e anterior
         </Text>
-        <Text style={[s.headText, s.activeColWeight]}>{p.unit}</Text>
-        <Text style={[s.headText, s.activeColReps]}>Reps</Text>
+        <Text
+          style={[s.headText, s.activeColWeight]}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+        >
+          {p.unit}
+        </Text>
+        <Text
+          style={[s.headText, s.activeColReps]}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+        >
+          Reps
+        </Text>
         <View style={s.activeColCheck}>
-          <Check size={14} color="#B7ADA3" strokeWidth={2.4} />
+          <Pressable
+            disabled={p.sets.length === 0}
+            onPress={() => {
+              triggerHaptic('light');
+              p.onToggleAllComplete?.();
+            }}
+            hitSlop={{ top: 12, bottom: 12, left: 10, right: 10 }}
+            accessibilityRole="button"
+            accessibilityLabel={
+              allCompleted ? 'Desmarcar todas as séries' : 'Concluir todas as séries'
+            }
+            accessibilityState={{ disabled: p.sets.length === 0 }}
+            style={({ pressed }) => [
+              s.checkAllHeaderBtn,
+              pressed && p.sets.length > 0 && { opacity: 0.7 },
+              p.sets.length === 0 && { opacity: 0.4 },
+            ]}
+          >
+            <CheckCheck
+              size={16}
+              color={allCompleted && p.sets.length > 0 ? colors.primary : colors.onSurfaceVariant}
+              strokeWidth={2.4}
+            />
+          </Pressable>
         </View>
       </View>
 
@@ -840,6 +890,12 @@ const s = StyleSheet.create({
   },
   activeColCheck: {
     width: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkAllHeaderBtn: {
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
