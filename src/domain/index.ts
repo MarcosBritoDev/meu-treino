@@ -6,6 +6,7 @@ export * from './duration';
 export * from './search';
 export * from './workouts';
 export * from './progressMath';
+export * from './exerciseCatalog';
 export {
   RPE_OPTIONS,
   RIR_OPTIONS,
